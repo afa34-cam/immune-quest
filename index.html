@@ -1,11 +1,1257 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Immune Quest</title>
-  </head>
-  <body>
-    <h1>Immune Quest — coming soon</h1>
-  </body>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Immune Quest</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #070c18;
+      --panel:    #0d1525;
+      --border:   #1a2d48;
+      --accent:   #00e5ff;
+      --accent2:  #ff4d6d;
+      --accent3:  #39ff14;
+      --text:     #ddeeff;
+      --muted:    #4a6580;
+      --virus:    #00e5ff;
+      --bacteria: #ff9f1c;
+      --parasite: #a855f7;
+      --cancer:   #ff4d6d;
+      --stealth:  #39ff14;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body {
+      background:var(--bg); color:var(--text);
+      font-family:'Nunito',sans-serif;
+      min-height:100vh; overflow-x:hidden;
+      display:flex; flex-direction:column;
+    }
+
+    /* Blueprint grid */
+    body::before {
+      content:''; position:fixed; inset:0;
+      background-image:
+        linear-gradient(rgba(0,180,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,180,255,0.04) 1px, transparent 1px);
+      background-size:44px 44px;
+      pointer-events:none; z-index:0;
+    }
+
+    /* Background icon layer */
+    .icon-layer { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+    .heart-icon { position:absolute; opacity:0.07; color:#ff4d6d; animation:heartbeat 1.3s ease-in-out infinite; }
+    @keyframes heartbeat {
+      0%,100%{transform:scale(1)} 15%{transform:scale(1.28)} 30%{transform:scale(1)} 45%{transform:scale(1.14)}
+    }
+    .virus-spin { position:absolute; opacity:0.055; color:#00e5ff; animation:vspin linear infinite; }
+    @keyframes vspin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .dna-wrap   { position:absolute; opacity:0.07; }
+    @keyframes dna-spin-y { from{transform:rotateY(0deg)} to{transform:rotateY(360deg)} }
+    .dna-moving { animation:dna-spin-y 3s linear infinite; transform-style:preserve-3d; }
+
+    /* Particles */
+    .particles { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+    .particle  { position:absolute; border-radius:50%; opacity:0; animation:float-up linear infinite; }
+    @keyframes float-up {
+      0%{transform:translateY(100vh);opacity:0} 10%{opacity:0.45} 90%{opacity:0.18} 100%{transform:translateY(-10vh);opacity:0}
+    }
+
+    /* Header */
+    .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(10px); }
+    header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 20px;
+      max-width:1400px; margin:0 auto;
+      position:relative;
+    }
+    /* Logo width matches left column (185px) so it aligns precisely with the games panel */
+    .logo { font-family:'Orbitron',monospace; font-size:21px; font-weight:900; color:var(--accent); letter-spacing:2px; text-shadow:0 0 18px rgba(0,229,255,0.45);}
+    .logo span { color:var(--accent2); }
+    .header-tagline { font-family:'Orbitron',monospace; font-size:12px; color:var(--text); letter-spacing:3px; text-transform:uppercase; text-shadow:0 0 10px rgba(0,229,255,0.3); }
+
+    /* ══════════════════════════════════════════════════════════════
+       3-COLUMN LAYOUT
+       ══════════════════════════════════════════════════════════════
+       To adjust column widths, change the three values in
+       grid-template-columns below:
+         - First value  = LEFT column width  (games panel)
+         - Second value = CENTRE column      (patient body) — keep as 1fr
+         - Third value  = RIGHT column width (patient chart)
+
+       To make columns equal, set left and right to the same px value.
+       The centre column (1fr) automatically takes the remaining space.
+
+       To change the gap between columns, adjust: gap: 0 GAP_SIZE
+       To change outer padding, adjust: padding: TOP H_PADDING BOTTOM
+
+       Current setup:
+         Left  = 185px  ← change this to resize games panel
+         Centre = 1fr   ← do not change; always fills remaining space
+         Right  = 185px ← change this to resize patient chart
+         Gap    = 20px  ← space between each column
+         Max width = 1400px ← overall page width cap
+    ══════════════════════════════════════════════════════════════ */
+    .main {
+      position:relative; z-index:1;
+      display:grid;
+      grid-template-columns: 185px 1fr 185px; /* ← LEFT | CENTRE | RIGHT */
+      max-width:1400px;  /* ← overall page width cap */
+      margin:0 auto;
+      padding:24px 20px 20px; /* ← TOP | HORIZONTAL | BOTTOM */
+      gap:0px 150px;  /* ← column gap */
+      align-items:start;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       LEFT COLUMN — games panel
+       ══════════════════════════════════════════════════════════════
+       padding-top: pushes content down from the top of the column.
+         Increase to move games panel lower; decrease to move it up.
+       gap: vertical spacing between health bar and game cards.
+    ══════════════════════════════════════════════════════════════ */
+    .left-col {
+      display:flex; flex-direction:column;
+      gap:18px;        /* ← vertical spacing between items */
+      padding-top:40px; /* ← top offset within column */
+    }
+
+    .panel-label {
+      font-family:'Orbitron',monospace; font-size:9px;
+      letter-spacing:2px; color:var(--muted);
+      text-transform:uppercase; margin-bottom:6px;
+    }
+
+    /* Health status */
+    .health-status-wrap { display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; }
+    .health-bar-label   { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+    .health-pct         { font-family:'Orbitron',monospace; font-size:22px; font-weight:700; color:var(--accent3); text-shadow:0 0 10px rgba(57,255,20,0.5); line-height:1; }
+    .power-track        { width:100%; height:15px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:4px; overflow:hidden; position:relative; }
+    .power-fill         { height:100%; width:25%; background:linear-gradient(90deg,#39ff14,#00e5ff); border-radius:3px; transition:width 1.2s ease; animation:scanline 2s linear infinite; }
+    @keyframes scanline { 0%,100%{box-shadow:inset 0 0 8px rgba(255,255,255,0.2)} 50%{box-shadow:inset 0 0 18px rgba(255,255,255,0.5)} }
+    .power-segs { position:absolute; inset:0; display:flex; }
+    .seg { flex:1; border-right:1px solid rgba(0,0,0,0.22); }
+    .seg:last-child { border-right:none; }
+    .status-text { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; animation:blink 1.6s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* Game cards */
+    .game-card {
+      border:1px solid var(--border); border-radius:10px;
+      padding:9px 11px; background:var(--panel);
+      cursor:pointer; transition:border-color 0.2s,transform 0.15s,box-shadow 0.2s;
+      position:relative; overflow:hidden;
+    }
+    .game-card::before { content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:2px 2px 0 0; }
+    .game-card.virus::before    { background:var(--virus); }
+    .game-card.bacteria::before { background:var(--bacteria); }
+    .game-card.parasite::before { background:var(--parasite); }
+    .game-card.cancer::before   { background:var(--cancer); }
+    .game-card.stealth::before  { background:var(--stealth); }
+    .game-card:not(.locked):hover { transform:translateX(3px); }
+    .game-card.virus:hover    { border-color:var(--virus);    box-shadow:-3px 0 14px rgba(0,229,255,0.15); }
+    .game-card.bacteria:hover { border-color:var(--bacteria); box-shadow:-3px 0 14px rgba(255,159,28,0.15); }
+    .game-card.parasite:hover { border-color:var(--parasite); box-shadow:-3px 0 14px rgba(168,85,247,0.15); }
+    .game-card.cancer:hover   { border-color:var(--cancer);   box-shadow:-3px 0 14px rgba(255,77,109,0.15); }
+    .game-card.stealth:hover  { border-color:var(--stealth);  box-shadow:-3px 0 14px rgba(57,255,20,0.15); }
+    .game-card.locked { opacity:0.35; cursor:default; filter:grayscale(0.7); }
+    .card-top    { display:flex; justify-content:space-between; align-items:flex-start; }
+    .card-icon   { font-size:17px; }
+    .card-score  { font-family:'Orbitron',monospace; font-size:8px; color:var(--accent); text-align:right; line-height:1.4; }
+    .card-score .score-num { font-size:11px; color:var(--accent3); display:block; }
+    .card-name   { font-family:'Orbitron',monospace; font-size:9px; font-weight:700; letter-spacing:1px; margin:3px 0 1px; }
+    .card-name.virus    { color:var(--virus); }
+    .card-name.bacteria { color:var(--bacteria); }
+    .card-name.parasite { color:var(--parasite); }
+    .card-name.cancer   { color:var(--cancer); }
+    .card-name.stealth  { color:var(--stealth); }
+    .card-sub    { font-size:10px; color:var(--muted); }
+    .card-status { font-size:9px; margin-top:4px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+    .card-status.available  { color:var(--accent3); }
+    .card-status.locked-txt { color:var(--muted); }
+    .card-status.complete   { color:var(--accent); }
+    .card-status.relapse    { color:var(--accent2); animation:blink 1.2s step-end infinite; }
+    .padlock { position:absolute; bottom:8px; right:9px; font-size:14px; opacity:0.4; }
+
+    /* ══════════════════════════════════════════════════════════════
+       CENTRE COLUMN — patient body
+       ══════════════════════════════════════════════════════════════
+       The centre column contains:
+         1. The "Select a condition" title
+         2. patient-row: [patient image]
+
+       The patient image fills the available centre space.
+
+       To adjust patient image max size:
+         max-width  on .patient-wrap-outer → controls how wide the image can get
+         max-height on .patient-img-inner img → controls how tall it can get
+
+       The patient is centred in the column because patient-row
+       uses justify-content:center.
+    ══════════════════════════════════════════════════════════════ */
+    .centre-col {
+      display:flex; flex-direction:column; align-items:center; gap:0;
+      justify-content:flex-start; width:100%;
+    }
+    .centre-title {
+      font-family:'Orbitron',monospace; font-size:10px; letter-spacing:3px;
+      color:var(--muted); text-transform:uppercase; text-align:center;
+    }
+
+    /* patient-row: holds the patient image, centred in the column. */
+    .patient-row {
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      width:100%;
+    }
+
+    /* patient-wrap-outer: wraps the title + image together.
+       max-width limits how wide the patient image can grow. */
+    .patient-wrap-outer {
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+      width:100%; /* fills the centre column */
+    }
+    .patient-condition-title {
+      font-family:'Orbitron',monospace; font-size:10px; letter-spacing:3px;
+      color:var(--muted); text-transform:uppercase; text-align:center;
+    }
+    .patient-img-wrap {
+      position:relative;
+      width:100%; max-width:600px; margin: 0 auto;
+      display:flex; flex-direction:column; align-items:center;
+      padding-top: 30px;
+    }
+    .patient-img-inner { position:relative; width:100%; max-width:300px; margin:0 auto; }
+    .patient-img-inner img {
+      width:100%;
+      max-height:720px; /* ← maximum image height; JS also sets this to match left col */
+      display:block; object-fit:contain; mix-blend-mode:screen;
+    }
+
+
+
+    /* Tooltip */
+    .tooltip {
+      position:absolute; background:var(--panel);
+      border:1px solid var(--accent); border-radius:8px;
+      padding:9px 12px; pointer-events:none;
+      opacity:0; transition:opacity 0.2s;
+      z-index:200; min-width:155px; max-width:185px;
+      box-shadow:0 0 18px rgba(0,229,255,0.18);
+    }
+    .tooltip.visible { opacity:1; }
+    .tooltip-title  { font-family:'Orbitron',monospace; font-size:10px; margin-bottom:3px; }
+    .tooltip-desc   { font-size:10px; color:var(--muted); line-height:1.5; }
+    .tooltip-action { font-size:9px; margin-top:5px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+
+    /* Hotspot blobs — positioned outside the image with connector lines */
+    .hotspot-blob {
+      position:absolute;
+      cursor:pointer;
+      z-index:20;
+    }
+    .hotspot-blob.locked { cursor:default; opacity:0; pointer-events:none; }
+    .hotspot-blob.locked.show-locked { opacity:0.25; pointer-events:none; }
+
+    .blob-dot {
+      width:10px; height:10px; border-radius:50%;
+      border:1.5px solid currentColor;
+      background:rgba(0,0,0,0.8);
+      position:relative;
+      transition:transform 0.15s;
+      box-shadow:0 0 6px currentColor;
+    }
+    .hotspot-blob:not(.locked):hover .blob-dot { transform:scale(1.3); }
+    /* Pulse rings are drawn via SVG on the body image in positionBlobs() */
+    @keyframes hpulse {
+      0%   { opacity:0.85; r:8px; }
+      100% { opacity:0;    r:40px; }
+    }
+
+    .blob-label {
+      position:absolute; 
+      display: flex; 
+      align-items:center;
+      white-space:nowrap;
+      font-family:'Orbitron',monospace; font-size:9px;
+      letter-spacing:1px; color:currentColor;
+      opacity:0.95; cursor:pointer;
+      text-shadow:0 0 8px currentColor;
+      
+    }
+    /* Connector line drawn via SVG overlay */
+    .connector-svg { position:absolute; inset:0; pointer-events:none; z-index:15; overflow:visible; }
+
+
+
+
+    .centre-hint { font-size:11px; color:var(--muted); text-align:center; max-width:280px; line-height:1.6; }
+
+    /* ══════════════════════════════════════════════════════════════
+       RIGHT COLUMN — patient chart
+       ══════════════════════════════════════════════════════════════
+       padding-top matches the left column so both panels
+       start at the same vertical position.
+       To move the chart down, increase padding-top.
+    ══════════════════════════════════════════════════════════════ */
+    .right-col { padding-top:40px; /* ← matches left col top offset */ }
+    .chart-card { border:1px solid var(--border); border-radius:10px; background:var(--panel); overflow:hidden; }
+    .chart-header { background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
+    .chart-header-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--accent); text-transform:uppercase; }
+    .chart-id { font-family:'Share Tech Mono',monospace; font-size:8px; color:var(--muted); }
+    .chart-body { padding:12px 14px; display:flex; flex-direction:column; }
+    .chart-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(26,45,72,0.7); gap:8px; }
+    .chart-row:last-child { border-bottom:none; }
+    .chart-key { font-size:10px; color:var(--muted); white-space:nowrap; font-family:'Share Tech Mono',monospace; }
+    .chart-val { font-family:'Orbitron',monospace; font-size:10px; color:var(--text); text-align:right; }
+    .chart-val.danger  { color:var(--accent2); }
+    .chart-val.warning { color:var(--bacteria); }
+    .chart-val.ok      { color:var(--accent3); }
+    .chart-val.accent  { color:var(--accent); }
+    .mini-bar-wrap { display:flex; flex-direction:column; gap:2px; align-items:flex-end; }
+    .mini-bar-track { width:76px; height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
+    .mini-bar-fill  { height:100%; border-radius:3px; background:linear-gradient(90deg,#39ff14,#00e5ff); transition:width 1.2s ease; }
+
+    /* Condition log (replaces infection log) */
+    .cond-row { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid rgba(26,45,72,0.5); font-size:10px; }
+    .cond-row:last-child { border-bottom:none; }
+    .cond-dot  { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .cond-name { flex:1; color:var(--muted); font-family:'Share Tech Mono',monospace; }
+    .cond-status { font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px; }
+    .cond-status.active   { color:var(--accent2); animation:blink 1.6s step-end infinite; }
+    .cond-status.locked   { color:var(--muted); }
+    .cond-status.cleared  { color:var(--accent3); }
+    .cond-status.relapse  { color:var(--accent2); animation:blink 0.8s step-end infinite; }
+
+    /* Relapse notification banner */
+    .relapse-banner {
+      display:none; margin-bottom:12px;
+      background:rgba(255,77,109,0.1); border:1px solid var(--accent2);
+      border-radius:8px; padding:8px 12px;
+      font-size:10px; color:var(--accent2);
+      font-family:'Share Tech Mono',monospace; line-height:1.5;
+      animation:blink-border 2s ease-in-out infinite;
+    }
+    @keyframes blink-border { 0%,100%{border-color:var(--accent2)} 50%{border-color:transparent} }
+    .relapse-banner.visible { display:block; }
+    .relapse-banner strong { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px; display:block; margin-bottom:3px; }
+
+
+    /* ── Menu button & modal ── */
+    /* Menu button width matches right column (185px), content right-aligned */
+    .menu-btn {
+      background:none; border:1px solid var(--border); border-radius:8px;
+      color:var(--muted); cursor:pointer; padding:7px 12px;
+      font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+      transition:border-color 0.2s, color 0.2s;
+      display:flex; align-items:center; gap:6px;
+      justify-content:flex-end;
+    }
+    .menu-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .menu-btn-icon { font-size:14px; }
+
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(7,12,24,0.88); z-index:1000;
+      align-items:center; justify-content:center;
+      backdrop-filter:blur(6px);
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:16px; width:100%; max-width:400px; margin:20px;
+      overflow:hidden;
+      box-shadow:0 0 40px rgba(0,229,255,0.12);
+    }
+    .modal-header {
+      background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border);
+      padding:14px 18px; display:flex; justify-content:space-between; align-items:center;
+    }
+    .modal-title { font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--accent); }
+    .modal-close { background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:0 4px; }
+    .modal-close:hover { color:var(--text); }
+    .modal-body { padding:18px; display:flex; flex-direction:column; gap:16px; }
+
+    .modal-section { display:flex; flex-direction:column; gap:8px; }
+    .modal-section-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+
+    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+    .toggle-row:last-child { border-bottom:none; }
+    .toggle-label { font-size:12px; color:var(--text); }
+    .toggle-sub   { font-size:10px; color:var(--muted); margin-top:2px; }
+    .toggle-switch {
+      position:relative; width:40px; height:22px; flex-shrink:0;
+    }
+    .toggle-switch input { opacity:0; width:0; height:0; }
+    .toggle-slider {
+      position:absolute; inset:0; background:var(--border);
+      border-radius:11px; cursor:pointer; transition:background 0.2s;
+    }
+    .toggle-slider::before {
+      content:''; position:absolute;
+      width:16px; height:16px; left:3px; top:3px;
+      background:#fff; border-radius:50%;
+      transition:transform 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background:var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform:translateX(18px); }
+
+    .modal-btn {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px; border-radius:8px;
+      background:rgba(255,255,255,0.04); border:1px solid var(--border);
+      color:var(--text); cursor:pointer; font-size:12px;
+      transition:border-color 0.2s, background 0.2s;
+      text-decoration:none; font-family:'Nunito',sans-serif;
+    }
+    .modal-btn:hover { border-color:var(--accent); background:rgba(0,229,255,0.06); }
+    .modal-btn-icon { font-size:16px; width:20px; text-align:center; }
+
+    .share-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+    .about-text { font-size:11px; color:var(--muted); line-height:1.7; }
+    .about-text a { color:var(--accent); text-decoration:none; }
+
+    .modal-tabs { display:flex; border-bottom:1px solid var(--border); }
+    .modal-tab {
+      flex:1; padding:10px; text-align:center; cursor:pointer;
+      font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px;
+      color:var(--muted); border-bottom:2px solid transparent;
+      transition:color 0.2s, border-color 0.2s;
+    }
+    .modal-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .modal-tab-content { display:none; }
+    .modal-tab-content.active { display:flex; flex-direction:column; gap:12px; }
+
+    .feedback-area {
+      width:100%; background:rgba(255,255,255,0.03); border:1px solid var(--border);
+      border-radius:8px; padding:10px; color:var(--text); font-family:'Nunito',sans-serif;
+      font-size:12px; resize:vertical; min-height:80px; outline:none;
+    }
+    .feedback-area:focus { border-color:var(--accent); }
+    .feedback-submit {
+      padding:9px 18px; background:rgba(0,229,255,0.1); border:1px solid var(--accent);
+      border-radius:8px; color:var(--accent); font-family:'Orbitron',monospace;
+      font-size:9px; letter-spacing:2px; cursor:pointer; align-self:flex-end;
+      transition:background 0.2s;
+    }
+    .feedback-submit:hover { background:rgba(0,229,255,0.2); }
+
+    footer { position:relative; z-index:1; text-align:center; padding:14px; font-size:11px; color:var(--muted); border-top:1px solid var(--border); letter-spacing:1px; margin-top:auto; }
+    .main { flex:1; }
+    footer a { color:var(--accent); text-decoration:none; }
+
+    /* Responsive */
+    @media (max-width:860px) {
+      header { padding:14px 20px; }
+      .logo { font-size:16px; }
+      .header-tagline { font-size:9px; letter-spacing:2px; }
+      .main { grid-template-columns:1fr; padding:14px; gap:16px; }
+      .left-col { padding-top:0; flex-direction:row; flex-wrap:wrap; gap:10px; }
+      .health-status-wrap { min-width:160px; }
+      .right-col { order:-1; }
+      .patient-row { gap:8px; }
+      .thermo-outer { width:18px; height:110px; } /* tablet: narrower tube */
+      .patient-img-wrap { width:100%; max-width:320px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="icon-layer" id="icon-layer"></div>
+<div class="particles" id="particles"></div>
+
+<div class="header-outer"><header>
+  <div class="logo">IMMUNE<span>QUEST</span></div>
+  <div class="header-tagline" style="position:absolute;left:50%;transform:translateX(-50%);">Can you stop the spread?</div>
+  <button class="menu-btn" onclick="openMenu()" aria-label="Menu">
+    <span class="menu-btn-icon">☰</span> MENU
+  </button>
+</header></div>
+
+<div class="main">
+
+  <!-- ══ LEFT COL ══ -->
+  <div class="left-col">
+
+    <div style="width:100%">
+      <div class="panel-label">Games</div>
+      <div style="display:flex;flex-direction:column;gap:7px;" id="game-cards">
+
+        <div class="game-card virus" id="card-virus"
+             onclick="launchGame('virus')"
+             onmouseenter="highlightBlob('virus')"
+             onmouseleave="unhighlightBlob('virus')">
+          <div class="card-top">
+            <div class="card-icon">🦠</div>
+            <div class="card-score" id="score-virus"><span class="score-num" id="scorenum-virus">—</span>Best</div>
+          </div>
+          <div class="card-name virus">Virus</div>
+          <div class="card-sub">Lungs</div>
+          <div class="card-status available" id="vstatus">▶ Play</div>
+        </div>
+
+        <!-- Stealth mode — unlocked after first virus completion -->
+        <div class="game-card stealth locked" id="card-stealth">
+          <div class="card-top">
+            <div class="card-icon">🥷</div>
+            <div class="card-score" id="score-stealth"><span class="score-num" id="scorenum-stealth">—</span>Best</div>
+          </div>
+          <div class="card-name stealth">Stealth mission</div>
+          <div class="card-sub">Play as the virus</div>
+          <div class="card-status locked-txt" id="stealth-status">🔒 Complete virus game</div>
+        </div>
+
+        <div class="game-card bacteria locked" id="card-bacteria">
+          <div class="card-top"><div class="card-icon">🧫</div></div>
+          <div class="card-name bacteria">Bacteria</div>
+          <div class="card-sub">Gut · MRSA, TB</div>
+          <div class="card-status locked-txt">⬛ Coming soon</div>
+        </div>
+
+        <div class="game-card parasite locked" id="card-parasite">
+          <div class="card-top"><div class="card-icon">🦟</div></div>
+          <div class="card-name parasite">Parasite</div>
+          <div class="card-sub">Liver/Blood · Malaria</div>
+          <div class="card-status locked-txt">⬛ Coming soon</div>
+        </div>
+
+        <div class="game-card cancer locked" id="card-cancer">
+          <div class="card-top"><div class="card-icon">🔬</div></div>
+          <div class="card-name cancer">Cancer</div>
+          <div class="card-sub">Multiple tissues</div>
+          <div class="card-status locked-txt">⬛ Coming soon</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CENTRE COL ══ -->
+  <div class="centre-col">
+    <!-- Relapse banner -->
+    <div class="relapse-banner" id="relapse-banner">
+      <strong>⚠ New condition detected</strong>
+      The patient has relapsed. A condition requires treatment.
+    </div>
+
+    <div class="patient-row">
+
+      <div class="patient-wrap-outer">
+      <div class="patient-condition-title">Select a condition to treat</div>
+      <!-- Patient image + blobs + connectors -->
+      <div class="patient-img-wrap">
+
+        <div class="patient-img-inner" id="patient-inner">
+
+          <!-- Connector SVG overlay -->
+          <svg class="connector-svg" id="connectors" viewBox="0 0 340 680" preserveAspectRatio="none"></svg>
+
+          <!-- Tooltip -->
+          <div class="tooltip" id="tooltip">
+            <div class="tooltip-title"  id="tt-title"></div>
+            <div class="tooltip-desc"   id="tt-desc"></div>
+            <div class="tooltip-action" id="tt-action"></div>
+          </div>
+
+          <!--
+          ╔════════════════════════════════════════╗
+          ║  Patient image                         ║
+          ║  Save your PNG to:                     ║
+          ║  assets/images/patient/patient.png     ║
+          ║                                        ║
+          ║  Hotspot positions (top/left %) are    ║
+          ║  set in JS below — adjust the          ║
+          ║  HOTSPOT_CONFIG object to match        ║
+          ║  your artwork exactly.                 ║
+          ╚════════════════════════════════════════╝
+          -->
+          <img src="assets/images/patient/patient.png"
+               alt="Patient body"
+               id="patient-img"
+               style="width:100%;height:100%;object-fit:contain;display:block;mix-blend-mode:screen;"
+               onerror="this.style.display='none';document.getElementById('patient-fallback').style.display='flex'">
+
+          <!-- Fallback if image not found -->
+          <div id="patient-fallback" style="display:none;width:100%;aspect-ratio:9/19;background:linear-gradient(180deg,#111e36,#0a1220);border:1px dashed #1e3050;border-radius:12px;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+            <svg viewBox="0 0 100 200" style="width:50%;opacity:0.2;" fill="#4a6580">
+              <ellipse cx="50" cy="18" rx="16" ry="17"/>
+              <rect x="39" y="33" width="22" height="10" rx="3"/>
+              <path d="M28 43 Q18 48 17 80 L17 125 Q17 135 28 137 L72 137 Q83 135 83 125 L83 80 Q82 48 72 43 Z"/>
+              <path d="M28 50 Q12 55 10 90 Q8 112 14 124 Q22 134 28 128 L30 80 Z"/>
+              <path d="M72 50 Q88 55 90 90 Q92 112 86 124 Q78 134 72 128 L70 80 Z"/>
+              <path d="M38 136 Q34 150 33 175 Q32 190 36 197 L50 197 L50 137 Z"/>
+              <path d="M62 136 Q66 150 67 175 Q68 190 64 197 L50 197 L50 137 Z"/>
+            </svg>
+            <div style="font-size:9px;color:var(--muted);text-align:center;padding:0 12px;">assets/images/patient/patient.png</div>
+          </div>
+
+
+          <!-- Hotspot blobs — positioned via JS -->
+          <!--
+            Blob positions: anchor point on the IMAGE (orgX/orgY as % of image dimensions)
+            Blob label position: side ('left' or 'right') and offset from dot
+            These are calibrated to the uploaded patient.png
+          -->
+          <div class="hotspot-blob" id="blob-virus" style="color:var(--virus)"
+               onmouseenter="showTooltip(event,'virus')" onmouseleave="hideTooltip()"
+               onclick="launchGame('virus')" title="The Infection Game (original)">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-virus" style="display:none;">VIRUS</div>
+          </div>
+
+          <div class="hotspot-blob locked" id="blob-bacteria" style="color:var(--bacteria)"
+               onmouseenter="showTooltip(event,'bacteria')" onmouseleave="hideTooltip()">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-bacteria" style="display:none;">BACTERIA</div>
+          </div>
+
+          <div class="hotspot-blob locked" id="blob-parasite" style="color:var(--parasite)"
+               onmouseenter="showTooltip(event,'parasite')" onmouseleave="hideTooltip()">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-parasite" style="display:none;">PARASITE</div>
+          </div>
+
+          <div class="hotspot-blob locked" id="blob-cancer" style="color:var(--cancer)"
+               onmouseenter="showTooltip(event,'cancer')" onmouseleave="hideTooltip()">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-cancer" style="display:none;">CANCER</div>
+          </div>
+
+        </div><!-- /patient-img-inner -->
+
+      </div><!-- /patient-img-wrap -->
+      </div><!-- /patient-wrap-outer -->
+
+    </div><!-- /patient-row -->
+
+  </div>
+
+  <!-- ══ RIGHT COL — patient chart ══ -->
+  <div class="right-col">
+
+    <!-- Health status — moved from left col -->
+    <div class="health-status-wrap" style="margin-bottom:16px;">
+      <div class="health-bar-label">Health status</div>
+      <div class="health-pct" id="power-pct">25%</div>
+      <div class="power-track">
+        <div class="power-fill" id="power-fill">
+          <div class="power-segs">
+            <div class="seg"></div><div class="seg"></div><div class="seg"></div>
+            <div class="seg"></div><div class="seg"></div><div class="seg"></div>
+            <div class="seg"></div><div class="seg"></div><div class="seg"></div>
+            <div class="seg"></div>
+          </div>
+        </div>
+      </div>
+      <div class="status-text" id="status-text" style="color:var(--accent2)">⚠ Critical condition</div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-header-title">Patient chart</div>
+          <div class="chart-id" style="margin-top:3px;">ID #IQ-001</div>
+        </div>
+      </div>
+      <div class="chart-body">
+
+        
+        <div class="chart-row" style="align-items:flex-start;flex-direction:column;gap:4px;">
+          <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+            <div class="chart-key">Temperature</div>
+            <div class="chart-val danger" id="c-temp">39.2 °C</div>
+          </div>
+          <!-- Mini thermometer bar: yellow=low/healthy (left), red=high/fever (right) -->
+          <div style="width:100%;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;position:relative;">
+            <div id="c-temp-bar" style="position:absolute;top:0;left:0;bottom:0;width:72%;background:linear-gradient(to right,#ffdb58,#ff9f1c,#ff4d6d);border-radius:3px;transition:width 1.2s ease;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;width:100%;padding-bottom:15px;">
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">37°C</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">39°C</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">41°C</span>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Status</div>
+          <div class="chart-val danger" id="c-status">Critical</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Conditions</div>
+          <div class="chart-val danger" id="c-active">4 active</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Treated</div>
+          <div class="chart-val ok" id="c-cleared">0 / 4</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Sessions</div>
+          <div class="chart-val accent" id="c-played">0</div>
+        </div>
+
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);text-align:right;min-height:12px;" id="c-timestamp">—</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /main -->
+
+<footer>
+  © 2026
+</footer>
+
+<script>
+// ════════════════════════════════════════════════
+//  HOTSPOT CONFIG
+//  orgX/orgY = % position on the patient image
+//             where the connector line should point
+//  blobSide  = which side of the image the blob dot sits ('left' or 'right')
+//  blobY     = % down the image where blob dot appears
+//  labelSide = which side of dot the label appears
+//  Calibrated to patient.png (1300×930 original, displayed at 240px wide)
+// ════════════════════════════════════════════════
+const HOTSPOT_CONFIG = {
+  virus:    { orgX:60, orgY:24, blobX:107, blobY:20, labelSide:'right' },  // lungs
+  bacteria: { orgX:78, orgY:38, blobX:107, blobY:41, labelSide:'right' },  // left arm bloodstream
+  parasite: { orgX:42, orgY:30, blobX:-7, blobY:35, labelSide:'left' },  // liver (right side)
+  cancer:   { orgX:49, orgY:17, blobX:20,  blobY:12, labelSide:'left'  },  // neck
+};
+
+// ════════════════════════════════════════════════
+//  POSITION BLOBS & DRAW CONNECTOR LINES
+// ════════════════════════════════════════════════
+function positionBlobs() {
+  const inner = document.getElementById('patient-inner');
+  const W = inner.offsetWidth;
+  const H = inner.offsetHeight;
+  if (!W || !H) { setTimeout(positionBlobs, 100); return; }
+
+  const svg = document.getElementById('connectors');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+
+  const colours = { virus:'#00e5ff', bacteria:'#ff9f1c', parasite:'#a855f7', cancer:'#ff4d6d' };
+
+  Object.entries(HOTSPOT_CONFIG).forEach(([type, cfg]) => {
+    const blob  = document.getElementById('blob-' + type);
+    const label = document.getElementById('blabel-' + type);
+    if (!blob) return;
+
+    const isLocked = blob.classList.contains('locked');
+
+    // blobX: >100 = % beyond right edge; negative = % before left edge; else straight %
+    let bx;
+    if (cfg.blobX > 100)    bx = W + (cfg.blobX - 100) / 100 * W * 0.12;
+    else if (cfg.blobX < 0) bx = (cfg.blobX / 100) * W * 0.12;
+    else                     bx = (cfg.blobX / 100) * W;
+    const by = (cfg.blobY / 100) * H;
+    
+    blob.style.display = 'none';
+
+    // Position the dot label
+//   // blob.style.position  = 'absolute';
+// //   blob.style.left      = bx + 'px';
+// //   blob.style.top       = by + 'px';
+// //   blob.style.transform = 'translate(-50%,-50%)';
+
+    // Label is drawn as SVG text at the line endpoint — guaranteed alignment.
+    // (The HTML .blob-label is hidden; SVG text is added below after the line.)
+
+    // ── LOCKED games: no line, no organ dot, no pulse — skip SVG entirely ──
+    if (isLocked) return;
+
+    const ox = (cfg.orgX / 100) * W;
+    const oy = (cfg.orgY / 100) * H;
+    const col = colours[type];
+
+    // Dashed connector line from label dot to organ
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', bx);  line.setAttribute('y1', by);
+    line.setAttribute('x2', ox);  line.setAttribute('y2', oy);
+    line.setAttribute('stroke', col);
+    line.setAttribute('stroke-width','1');
+    line.setAttribute('stroke-dasharray','3 3');
+    line.setAttribute('opacity','0.5');
+    svg.appendChild(line);
+    
+    // 2. Draw the "Label Dot" (The one that was floating)
+    const labelDot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    labelDot.setAttribute('cx', bx);
+    labelDot.setAttribute('cy', by);
+    labelDot.setAttribute('r', '4');
+    labelDot.setAttribute('fill', 'black');
+    labelDot.setAttribute('stroke', col);
+    labelDot.setAttribute('stroke-width', '1.5');
+    labelDot.style.cursor = 'pointer';
+    // Add click event to SVG dot
+    labelDot.onclick = () => launchGame(type);
+    svg.appendChild(labelDot);
+
+    // Static dot at organ location (pulse origin)
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', ox); dot.setAttribute('cy', oy);
+    dot.setAttribute('r','3');
+    dot.setAttribute('fill', col);
+    dot.setAttribute('opacity','0.65');
+    svg.appendChild(dot);
+
+    // SVG text label at blob dot (bx,by) — aligned exactly with line endpoint
+    // dot sits between line and label; label reads outward from dot
+    const dotR = 10; // half of 10px CSS dot + small gap
+    const svgText = document.createElementNS('http://www.w3.org/2000/svg','text');
+    svgText.setAttribute('y', by);
+    svgText.setAttribute('dominant-baseline', 'central');
+    svgText.setAttribute('fill', col);
+    svgText.setAttribute('font-family', 'Orbitron, monospace');
+    svgText.setAttribute('font-size', '9');
+    svgText.setAttribute('letter-spacing', '1');
+    svgText.setAttribute('opacity', '0.95');
+    if (cfg.labelSide === 'right') {
+      svgText.setAttribute('x', bx + dotR);
+      svgText.setAttribute('text-anchor', 'start');
+    } else {
+      svgText.setAttribute('x', bx - dotR);
+      svgText.setAttribute('text-anchor', 'end');
+    }
+    svgText.textContent = type.toUpperCase();
+    svg.appendChild(svgText);
+
+    // Three staggered pulse rings expanding from organ location
+    [0, 0.65, 1.3].forEach(delay => {
+      const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ring.setAttribute('cx', ox); ring.setAttribute('cy', oy);
+      ring.setAttribute('r','4');
+      ring.setAttribute('fill','none');
+      ring.setAttribute('stroke', col);
+      ring.setAttribute('stroke-width','1.8');
+      ring.setAttribute('opacity','0');
+      ring.innerHTML = `
+        <animate attributeName="r"       from="4"   to="36"  dur="1.8s" begin="${delay}s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" from="0.75" to="0"  dur="1.8s" begin="${delay}s" repeatCount="indefinite"/>
+      `;
+      svg.appendChild(ring);
+    });
+  });
+}
+
+function syncPatientHeight() {
+  const leftCol = document.querySelector('.left-col');
+  const img = document.getElementById('patient-img');
+  if (!leftCol || !img) return;
+  const leftH = leftCol.offsetHeight;
+  if (leftH > 200) {
+    img.style.maxHeight = leftH + 'px';
+  }
+}
+
+window.addEventListener('load', () => { positionBlobs(); syncPatientHeight(); });
+window.addEventListener('resize', () => { positionBlobs(); syncPatientHeight(); });
+
+// ════════════════════════════════════════════════
+//  BACKGROUND ICONS
+// ════════════════════════════════════════════════
+(function() {
+  const layer = document.getElementById('icon-layer');
+  const placed = []; // track placed positions to avoid overlap
+
+  function noOverlap(x, y, r, minDist) {
+    return placed.every(p => Math.hypot(p.x - x, p.y - y) > (minDist + p.r));
+  }
+  function placeRandom(attempts, minDist, r, fn) {
+    for (let a = 0; a < attempts; a++) {
+      const x = 5 + Math.random() * 90;
+      const y = 5 + Math.random() * 90;
+      if (noOverlap(x, y, r, minDist)) {
+        placed.push({x, y, r});
+        fn(x, y);
+        return;
+      }
+    }
+  }
+
+  // Hearts
+  for (let i = 0; i < 6; i++) {
+    placeRandom(20, 12, 3, (x, y) => {
+      const el = document.createElement('div');
+      el.className = 'heart-icon';
+      el.textContent = '♥';
+      el.style.cssText = `left:${x}%;top:${y}%;font-size:${18+Math.random()*14}px;animation-delay:${Math.random()*1.3}s`;
+      layer.appendChild(el);
+    });
+  }
+
+  // Virus shapes
+  for (let i = 0; i < 7; i++) {
+    placeRandom(20, 10, 2, (x, y) => {
+      const el = document.createElement('div');
+      el.className = 'virus-spin';
+      el.textContent = ['⬡','✦','⬢','✧'][Math.floor(Math.random()*4)];
+      el.style.cssText = `left:${x}%;top:${y}%;font-size:${14+Math.random()*18}px;animation-duration:${5+Math.random()*9}s;animation-delay:${Math.random()*6}s`;
+      layer.appendChild(el);
+    });
+  }
+
+  // DNA helices — spin on own axis (rotateY)
+  for (let i = 0; i < 5; i++) {
+    placeRandom(20, 14, 4, (x, y) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'dna-wrap';
+      wrap.style.cssText = `left:${x}%;top:${y}%;perspective:200px;`;
+      const dh=70, dw=18, steps=8; let p1='', p2='';
+      for (let s=0;s<=steps;s++) {
+        const sy=(s/steps)*dh, x1=dw/2+(dw/2)*Math.sin((s/steps)*Math.PI*2), x2=dw/2-(dw/2)*Math.sin((s/steps)*Math.PI*2);
+        p1+=(s===0?'M':'L')+x1.toFixed(1)+','+sy.toFixed(1)+' ';
+        p2+=(s===0?'M':'L')+x2.toFixed(1)+','+sy.toFixed(1)+' ';
+      }
+      const dur = (2.5+Math.random()*3).toFixed(1);
+      wrap.innerHTML = `<svg width="${dw}" height="${dh}" viewBox="0 0 ${dw} ${dh}" class="dna-moving" style="animation-duration:${dur}s"><path d="${p1}" stroke="#00bfff" stroke-width="1.2" fill="none"/><path d="${p2}" stroke="#00bfff" stroke-width="1.2" fill="none" stroke-dasharray="3,3"/></svg>`;
+      layer.appendChild(wrap);
+    });
+  }
+})();
+
+// Particles
+(function() {
+  const c=document.getElementById('particles');
+  const cols=['#00e5ff','#ff4d6d','#39ff14','#a855f7','#ff9f1c'];
+  for(let i=0;i<22;i++){
+    const p=document.createElement('div'); p.className='particle';
+    const sz=Math.random()*3+1.5;
+    p.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;background:${cols[Math.floor(Math.random()*cols.length)]};animation-duration:${9+Math.random()*13}s;animation-delay:${Math.random()*12}s`;
+    c.appendChild(p);
+  }
+})();
+
+// ════════════════════════════════════════════════
+//  TOOLTIP
+// ════════════════════════════════════════════════
+const tooltipEl = document.getElementById('tooltip');
+const zoneInfo = {
+  virus:    { title:'Virus · Lungs',   desc:'Can you stop a rapidly spreading virus with the power of the immune system?', action:'Play →', color:'var(--virus)',    available:true  },
+  bacteria: { title:'Bacteria · Gut', desc:'Antibiotic-resistant bacteria are spreading through the gut. Treatment in development.',           action:'Coming soon',   color:'var(--bacteria)', available:false },
+  parasite: { title:'Parasite · Blood',desc:'Malaria parasites are circulating in the bloodstream. Treatment in development.',                 action:'Coming soon',   color:'var(--parasite)', available:false },
+  cancer:   { title:'Cancer · Tissues',          desc:'Abnormal cells are dividing uncontrolled. Treatment in development.',      action:'Coming soon',   color:'var(--cancer)',   available:false },
+};
+function showTooltip(e, type) {
+  const info = zoneInfo[type];
+  document.getElementById('tt-title').textContent = info.title;
+  document.getElementById('tt-title').style.color = info.color;
+  document.getElementById('tt-desc').textContent  = info.desc;
+  const act = document.getElementById('tt-action');
+  act.textContent = info.action;
+  act.style.color = info.available ? '#39ff14' : '#4a6580';
+  tooltipEl.classList.add('visible');
+  const wrap = document.getElementById('patient-inner');
+  const rect = wrap.getBoundingClientRect();
+  let x = e.clientX - rect.left + 14;
+  let y = e.clientY - rect.top  - 22;
+  if (x + 185 > rect.width) x = e.clientX - rect.left - 192;
+  if (y < 0) y = 4;
+  tooltipEl.style.left = x + 'px';
+  tooltipEl.style.top  = y + 'px';
+}
+function hideTooltip() { tooltipEl.classList.remove('visible'); }
+
+// ════════════════════════════════════════════════
+//  BLOB HIGHLIGHT FROM CARD HOVER
+// ════════════════════════════════════════════════
+function highlightBlob(type) {
+  const b = document.getElementById('blob-'+type);
+  if (b) b.querySelector('.blob-dot').style.boxShadow = '0 0 18px currentColor';
+}
+function unhighlightBlob(type) {
+  const b = document.getElementById('blob-'+type);
+  if (b) b.querySelector('.blob-dot').style.boxShadow = '0 0 8px currentColor';
+}
+
+// ════════════════════════════════════════════════
+//  LAUNCH GAME
+// ════════════════════════════════════════════════
+async function trackPlay(game) {
+  // Analytics: only track if user has not opted out
+  if (localStorage.getItem('iq_no_track') === '1') return;
+  try {
+    // Uses goatcounter.com free self-hosted pixel or countapi.xyz
+    // Replace 'immune-quest' with your actual namespace after signing up at countapi.xyz
+    await fetch(`https://api.countapi.xyz/hit/immune-quest-game/${game}`, { mode:'cors' }).catch(()=>{});
+  } catch(e) {}
+}
+
+function launchGame(type) {
+  trackPlay(type);
+  if (type === 'virus')   window.location.href = 'games/virus/index.html';
+  if (type === 'stealth') window.location.href = 'games/virus/index.html?mode=stealth';
+}
+
+// Track page view
+trackPlay('pageview');
+
+// ════════════════════════════════════════════════
+//  RELAPSE SYSTEM
+//  Once all available games cleared, 30% chance
+//  on page load that 1 condition has relapsed.
+// ════════════════════════════════════════════════
+const AVAILABLE_GAMES = ['virus']; // extend as games are built
+
+function checkRelapse(cleared) {
+  const allCleared = AVAILABLE_GAMES.every(g => localStorage.getItem('iq_cleared_'+g) === '1');
+  if (!allCleared) return null;
+  // Check if a relapse was already set this session
+  const existing = sessionStorage.getItem('iq_relapse');
+  if (existing) return existing;
+  if (Math.random() < 0.30) {
+    const pick = AVAILABLE_GAMES[Math.floor(Math.random()*AVAILABLE_GAMES.length)];
+    sessionStorage.setItem('iq_relapse', pick);
+    return pick;
+  }
+  return null;
+}
+
+// ════════════════════════════════════════════════
+//  LOAD PROGRESS & UPDATE UI
+// ════════════════════════════════════════════════
+function loadProgress() {
+  // Per-game scores
+  const scores = {
+    virus:    localStorage.getItem('iq_score_virus')    || null,
+    stealth:  localStorage.getItem('iq_score_stealth')  || null,
+    bacteria: null, parasite: null, cancer: null,
+  };
+  // Per-game cleared flags
+  const clearedVirus   = localStorage.getItem('iq_cleared_virus')   === '1';
+  const stealthUnlocked = clearedVirus;
+  const totalCleared = [clearedVirus].filter(Boolean).length; // expand as games added
+
+  // Played count
+  const played = parseInt(localStorage.getItem('iq_played') || '0');
+
+  // ── Health bar ──
+  const hp = Math.min(25 + totalCleared * 75, 100); // 25% base, 100% when all cleared
+  document.getElementById('power-fill').style.width = hp + '%';
+  document.getElementById('power-pct').textContent  = hp + '%';
+
+
+  // ── Temperature (inverted: high temp = high fill, yellow at bottom, red gradient going up) ──
+  const temp = (39.8 - totalCleared * 2.6).toFixed(1);
+  const thermoH = Math.max(10, 72 - totalCleared * 62);
+  document.getElementById('c-temp').textContent = temp + ' °C';
+  // Mini temp bar: width% maps 37°C (0%) to 41°C (100%)
+  const tempBarW = Math.min(100, Math.max(0, (parseFloat(temp) - 37) / 4 * 100));
+  const tempBarEl = document.getElementById('c-temp-bar');
+  if (tempBarEl) tempBarEl.style.width = tempBarW + '%';
+  const tempEl = document.getElementById('c-temp');
+  tempEl.className = 'chart-val ' + (parseFloat(temp) > 38.5 ? 'danger' : parseFloat(temp) > 37.5 ? 'warning' : 'ok');
+
+  // ── Status text ──
+  const statuses = [
+    { text:'⚠ Critical condition', col:'var(--accent2)', cs:'Critical',     cc:'danger'  },
+    { text:'✓ Full health!',        col:'var(--accent)',  cs:'Healthy',      cc:'ok'      },
+  ];
+  const si = totalCleared >= AVAILABLE_GAMES.length ? 1 : 0;
+  const s = statuses[si];
+  const stEl = document.getElementById('status-text');
+  stEl.textContent = s.text; stEl.style.color = s.col;
+  const csEl = document.getElementById('c-status');
+  csEl.textContent = s.cs; csEl.className = 'chart-val ' + s.cc;
+
+  // ── Chart values ──
+  document.getElementById('c-cleared').textContent = totalCleared + ' / ' + AVAILABLE_GAMES.length;
+  document.getElementById('c-played').textContent  = played;
+  document.getElementById('c-active').textContent  = (AVAILABLE_GAMES.length - totalCleared) + ' active';
+
+
+
+  // ── Score on cards ──
+  if (scores.virus) {
+    document.getElementById('scorenum-virus').textContent   = scores.virus;
+  }
+  if (scores.stealth) {
+    document.getElementById('scorenum-stealth').textContent = scores.stealth;
+  }
+
+  // ── Virus card status ──
+  if (clearedVirus) {
+    document.getElementById('vstatus').textContent = '✓ Completed — play again';
+    document.getElementById('vstatus').className   = 'card-status complete';
+    document.getElementById('cond-virus').textContent = '✓ TREATED';
+    document.getElementById('cond-virus').className   = 'cond-status cleared';
+  }
+
+  // ── Stealth mode unlock ──
+  const stealthCard = document.getElementById('card-stealth');
+  if (stealthUnlocked) {
+    stealthCard.classList.remove('locked');
+    stealthCard.setAttribute('onclick','launchGame("stealth")');
+    stealthCard.setAttribute('onmouseenter','highlightBlob("virus")');
+    stealthCard.setAttribute('onmouseleave','unhighlightBlob("virus")');
+    document.getElementById('stealth-status').textContent = '▶ Play';
+    document.getElementById('stealth-status').className   = 'card-status available';
+  }
+
+  // ── Patient top/bottom labels ──
+  if (totalCleared >= AVAILABLE_GAMES.length) {
+
+  }
+
+  // ── Relapse system ──
+  const relapse = checkRelapse(totalCleared);
+  if (relapse) {
+    document.getElementById('relapse-banner').classList.add('visible');
+    // Mark the relevant card as relapsed
+    const card = document.getElementById('card-'+relapse);
+    if (card) {
+      const cs = card.querySelector('.card-status');
+      if (cs) { cs.textContent = '⚠ Relapse — treat now'; cs.className = 'card-status relapse'; }
+    }
+    // Mark condition log
+    const cond = document.getElementById('cond-'+relapse);
+    if (cond) { cond.textContent = '⚠ RELAPSE'; cond.className = 'cond-status relapse'; }
+  }
+
+  // ── Timestamp ──
+  const now = new Date();
+  document.getElementById('c-timestamp').textContent =
+    'Updated: ' + now.toLocaleDateString('en-GB') + ' ' +
+    now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+
+loadProgress();
+</script>
+
+<!-- ══ Menu Modal ══ -->
+<div class="modal-overlay" id="menu-modal" onclick="closeMenuOutside(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Menu</div>
+      <button class="modal-close" onclick="closeMenu()">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" onclick="switchTab('settings')">Settings</div>
+      <div class="modal-tab" onclick="switchTab('share')">Share</div>
+      <div class="modal-tab" onclick="switchTab('feedback')">Feedback</div>
+      <div class="modal-tab" onclick="switchTab('about')">About</div>
+    </div>
+    <div class="modal-body">
+
+      <!-- Settings tab -->
+      <div class="modal-tab-content active" id="tab-settings">
+        <div class="modal-section">
+          <div class="modal-section-title">Privacy</div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Share anonymous play stats</div>
+              <div class="toggle-sub">Helps us understand how the game is used. No personal data collected.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-tracking" checked onchange="setTracking(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Share tab -->
+      <div class="modal-tab-content" id="tab-share">
+        <div class="modal-section">
+          <div class="modal-section-title">Share Immune Quest</div>
+          <div class="share-grid">
+            <a class="modal-btn" onclick="shareTwitter()">
+              <span class="modal-btn-icon">𝕏</span> X / Twitter
+            </a>
+            <a class="modal-btn" onclick="shareWhatsApp()">
+              <span class="modal-btn-icon">💬</span> WhatsApp
+            </a>
+            <a class="modal-btn" onclick="shareEmail()">
+              <span class="modal-btn-icon">✉</span> Email
+            </a>
+            <a class="modal-btn" onclick="copyLink()">
+              <span class="modal-btn-icon">🔗</span> <span id="copy-label">Copy link</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feedback tab -->
+      <div class="modal-tab-content" id="tab-feedback">
+        <div class="modal-section">
+          <div class="modal-section-title">Send feedback</div>
+          <textarea class="feedback-area" id="feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..."></textarea>
+          <button class="feedback-submit" onclick="submitFeedback()">Send →</button>
+          <div id="feedback-confirm" style="font-size:10px;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
+        </div>
+      </div>
+
+      <!-- About tab -->
+      <div class="modal-tab-content" id="tab-about">
+        <div class="modal-section">
+          <div class="modal-section-title">About</div>
+          <div class="about-text">
+            <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
+            <span style="color:var(--muted)">Version 1.0 · Built 2026</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function openMenu() { document.getElementById('menu-modal').classList.add('open'); switchTab('share'); }
+function closeMenu() { document.getElementById('menu-modal').classList.remove('open'); }
+function closeMenuOutside(e) { if (e.target === document.getElementById('menu-modal')) closeMenu(); }
+
+function switchTab(name) {
+  document.querySelectorAll('.modal-tab').forEach((t,i) => {
+    const names = ['settings','share','feedback','about'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.modal-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function setTracking(on) {
+  localStorage.setItem('iq_no_track', on ? '0' : '1');
+}
+
+function shareTwitter() {
+  window.open('https://twitter.com/intent/tweet?text=Can+you+stop+the+spread%3F+Play+Immune+Quest+%E2%80%94+a+free+educational+game+about+viruses%2C+bacteria+%26+the+immune+system!&url='+encodeURIComponent(location.href), '_blank');
+}
+function shareWhatsApp() {
+  window.open('https://wa.me/?text=Can+you+stop+the+spread%3F+Play+Immune+Quest+%E2%80%94+'+encodeURIComponent(location.href), '_blank');
+}
+function shareEmail() {
+  location.href = 'mailto:?subject=Immune+Quest&body=Can+you+stop+the+spread%3F+Play+this+free+educational+game+about+viruses+and+the+immune+system%3A+'+encodeURIComponent(location.href);
+}
+function copyLink() {
+  navigator.clipboard.writeText(location.href).then(() => {
+    document.getElementById('copy-label').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('copy-label').textContent = 'Copy link', 2000);
+  });
+}
+function submitFeedback() {
+  const text = document.getElementById('feedback-text').value.trim();
+  if (!text) return;
+  // In production: send to your backend endpoint or email service
+  // For now: open a mailto as fallback
+  location.href = 'mailto:feedback@immunequest.org?subject=Feedback&body='+encodeURIComponent(text);
+  document.getElementById('feedback-text').value = '';
+  document.getElementById('feedback-confirm').style.display = 'block';
+}
+
+// Init tracking toggle from stored preference
+(function() {
+  const noTrack = localStorage.getItem('iq_no_track') === '1';
+  document.getElementById('toggle-tracking').checked = !noTrack;
+})();
+</script>
+
+</body>
 </html>
