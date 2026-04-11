@@ -283,7 +283,7 @@
       
     }
     /* Connector line drawn via SVG overlay */
-    .connector-svg { position:absolute; inset:0; pointer-events:none; z-index:15; overflow:visible; }
+    .connector-svg { position:absolute; inset:0; z-index:15; overflow:visible; }
 
 
 
@@ -737,6 +737,14 @@ function positionBlobs() {
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = '';
 
+  // Glow filter for solid organ dot
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  defs.innerHTML = `<filter id="dot-glow" x="-150%" y="-150%" width="400%" height="400%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>`;
+  svg.appendChild(defs);
+
   const colours = { virus:'#00e5ff', bacteria:'#ff9f1c', parasite:'#a855f7', cancer:'#ff4d6d' };
 
   Object.entries(HOTSPOT_CONFIG).forEach(([type, cfg]) => {
@@ -789,17 +797,23 @@ function positionBlobs() {
     labelDot.setAttribute('fill', 'black');
     labelDot.setAttribute('stroke', col);
     labelDot.setAttribute('stroke-width', '1.5');
+    labelDot.setAttribute('filter', 'url(#dot-glow)');
     labelDot.style.cursor = 'pointer';
     // Add click event to SVG dot
     labelDot.onclick = () => launchGame(type);
+    labelDot.addEventListener('mousemove', e => showTooltip(e, type));
+    labelDot.addEventListener('mouseleave', hideTooltip);
     svg.appendChild(labelDot);
 
-    // Static dot at organ location (pulse origin)
+    // Static dot at organ location (pulse origin) — with glow
     const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
     dot.setAttribute('cx', ox); dot.setAttribute('cy', oy);
     dot.setAttribute('r','3');
     dot.setAttribute('fill', col);
     dot.setAttribute('opacity','0.65');
+    dot.style.cursor = 'pointer';
+    dot.addEventListener('mousemove', e => showTooltip(e, type));
+    dot.addEventListener('mouseleave', hideTooltip);
     svg.appendChild(dot);
 
     // SVG text label at blob dot (bx,by) — aligned exactly with line endpoint
@@ -813,6 +827,7 @@ function positionBlobs() {
     svgText.setAttribute('font-size', '9');
     svgText.setAttribute('letter-spacing', '1');
     svgText.setAttribute('opacity', '0.95');
+    svgText.style.cursor = 'pointer';
     if (cfg.labelSide === 'right') {
       svgText.setAttribute('x', bx + dotR);
       svgText.setAttribute('text-anchor', 'start');
@@ -821,6 +836,8 @@ function positionBlobs() {
       svgText.setAttribute('text-anchor', 'end');
     }
     svgText.textContent = type.toUpperCase();
+    svgText.addEventListener('mousemove', e => showTooltip(e, type));
+    svgText.addEventListener('mouseleave', hideTooltip);
     svg.appendChild(svgText);
 
     // Three staggered pulse rings expanding from organ location
