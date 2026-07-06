@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stealth Mission — Immune Quest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070c18; --panel:#0d1525; --border:#1a2d48;
+    --accent:#00e5ff; --accent2:#ff4d6d; --stealth:#39ff14;
+    --text:#ddeeff; --muted:#4a6580;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--text); font-family:'Nunito',sans-serif;
+    min-height:100vh; overflow-x:hidden; display:flex; flex-direction:column;
+  }
+  body::before{
+    content:''; position:fixed; inset:0;
+    background-image:
+      linear-gradient(rgba(57,255,20,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(57,255,20,0.04) 1px, transparent 1px);
+    background-size:44px 44px; pointer-events:none; z-index:0;
+  }
+
+  /* header */
+  .header-outer{ position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(10px); }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 20px; max-width:1400px; margin:0 auto; position:relative; width:100%;
+  }
+  .logo-wrap{ display:flex; align-items:center; gap:12px; }
+  .back-link{
+    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+    color:var(--muted); text-decoration:none; transition:color .2s;
+  }
+  .back-link:hover{ color:var(--accent); }
+  .logo{ font-family:'Orbitron',monospace; font-size:19px; font-weight:900; letter-spacing:2px; color:var(--stealth); text-shadow:0 0 16px rgba(57,255,20,.4); }
+  .logo span{ color:var(--muted); font-size:12px; letter-spacing:3px; margin-left:6px; }
+
+  .header-right{ display:flex; gap:10px; align-items:center; }
+  .menu-btn{
+    background:none; border:1px solid var(--border); border-radius:8px;
+    color:var(--muted); cursor:pointer; padding:7px 12px;
+    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+    transition:border-color .2s, color .2s;
+    display:flex; align-items:center; gap:6px;
+  }
+  .menu-btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .help-btn{
+    background:none; border:1px solid var(--border); border-radius:8px;
+    color:var(--muted); cursor:pointer; padding:7px 12px;
+    font-family:'Orbitron',monospace; font-size:12px; letter-spacing:1px;
+    transition:border-color .2s, color .2s;
+  }
+  .help-btn:hover{ border-color:var(--stealth); color:var(--stealth); }
+
+  .wrap{ position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:20px 20px 0; flex:1; width:100%; }
+
+  /* intro */
+  .intro{ text-align:center; margin-bottom:30px; }
+  .eyebrow{ font-family:'Orbitron',monospace; font-size:9px; letter-spacing:4px; color:var(--muted); text-transform:uppercase; }
+  h1{ font-family:'Orbitron',monospace; font-size:28px; letter-spacing:1px; margin:8px 0 10px; color:var(--text); }
+  .sub{ color:var(--muted); font-size:13px; max-width:560px; margin:0 auto; line-height:1.6; }
+
+  /* virus grid */
+  .virus-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:16px; margin-bottom:20px; }
+  
+  .vcard{
+    border:1px solid var(--border); border-radius:12px; background:var(--panel);
+    padding:16px; cursor:pointer; transition:transform .15s,border-color .2s,box-shadow .2s; position:relative;
+  }
+  .vcard:hover{ transform:translateY(-3px); border-color:var(--stealth); box-shadow:0 6px 20px rgba(57,255,20,.12); }
+  .vcard.selected{ border-color:var(--stealth); box-shadow:0 0 0 1px var(--stealth), 0 6px 20px rgba(57,255,20,.18); }
+  .vcard-icon{ font-size:30px; }
+  .vcard-name{ font-family:'Orbitron',monospace; font-size:13px; letter-spacing:1px; margin:8px 0 2px; color:var(--stealth); }
+  .vcard-sub{ font-size:11px; color:var(--muted); margin-bottom:10px; min-height:32px; line-height:1.5; }
+  
+  .vcard-delete{
+    position:absolute; top:8px; right:8px; background:none; border:none;
+    color:var(--accent2); cursor:pointer; font-size:18px; opacity:0;
+    transition:opacity .2s;
+  }
+  .vcard:hover .vcard-delete{ opacity:1; }
+  
+  .vcard.new-virus{
+    border-style:dashed; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; text-align:center; min-height:190px;
+  }
+  .new-virus .plus{ font-size:26px; color:var(--stealth); }
+
+  /* detail panel */
+  .detail{
+    display:none; margin-top:26px; border:1px solid var(--stealth); border-radius:12px;
+    background:rgba(57,255,20,.04); padding:18px 20px;
+  }
+  .detail.visible{ display:block; }
+  .detail-top{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .detail-title{ font-family:'Orbitron',monospace; font-size:13px; letter-spacing:1px; color:var(--stealth); }
+  .deploy-btn{
+    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px;
+    padding:11px 22px; border-radius:8px; border:1px solid var(--stealth);
+    background:rgba(57,255,20,.1); color:var(--stealth); cursor:pointer; transition:background .2s;
+  }
+  .deploy-btn:hover{ background:rgba(57,255,20,.22); }
+  .detail-cards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-top:14px; }
+  .tcard{ border:1px solid var(--border); border-radius:9px; padding:10px; background:var(--panel); }
+  .tcard-icon{ font-size:18px; }
+  .tcard-name{ font-size:12px; font-weight:700; margin-top:6px; }
+  .tcard-desc{ font-size:10px; color:var(--muted); margin-top:4px; line-height:1.4; }
+
+  /* builder modal */
+  .modal-overlay{
+    display:none; position:fixed; inset:0;
+    background:rgba(7,12,24,0.92); z-index:2000; backdrop-filter:blur(6px);
+    align-items:center; justify-content:center;
+  }
+  .modal-overlay.open{ display:flex; }
+  .builder-modal{
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    width:100%; max-width:620px; margin:20px; max-height:90vh; overflow:auto;
+    box-shadow:0 0 40px rgba(57,255,20,.12);
+  }
+  .modal-header{
+    background:rgba(57,255,20,.08); border-bottom:1px solid var(--border);
+    padding:16px 20px; display:flex; justify-content:space-between; align-items:center;
+    position:sticky; top:0; z-index:1;
+  }
+  .modal-title{ font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--stealth); }
+  .modal-close{ background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; }
+  .modal-close:hover{ color:var(--text); }
+  .modal-body{ padding:20px; }
+
+  .builder-tabs{ display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px; overflow-x:auto; }
+  .tab-btn{
+    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px;
+    padding:8px 12px; border:none; background:none; color:var(--muted); cursor:pointer;
+    border-bottom:2px solid transparent; transition:all .2s; white-space:nowrap;
+  }
+  .tab-btn.active{ color:var(--stealth); border-bottom-color:var(--stealth); }
+  .tab-btn:hover:not(.active){ color:var(--text); }
+  
+  .tab-content{ display:none; }
+  .tab-content.active{ display:block; }
+  .tab-content > * + *{ margin-top:16px; }
+
+  .form-group{ display:flex; flex-direction:column; gap:6px; }
+  .form-label{ font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+  
+  .multi-select{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
+  .checkbox-card{
+    border:1px solid var(--border); border-radius:9px; padding:11px; background:var(--panel);
+    cursor:pointer; transition:border-color .2s,box-shadow .2s; text-align:center;
+  }
+  .checkbox-card:hover{ border-color:var(--accent); }
+  .checkbox-card.checked{ border-color:var(--stealth); box-shadow:0 0 12px rgba(57,255,20,.15); background:rgba(57,255,20,.05); }
+  .checkbox-label{ font-size:12px; font-weight:700; cursor:pointer; }
+  .checkbox-desc{ font-size:9px; color:var(--muted); margin-top:4px; line-height:1.3; }
+
+  .slider-row{ display:flex; align-items:center; gap:12px; }
+  .slider-row input[type="range"]{ flex:1; }
+  .slider-value{ font-family:'Share Tech Mono',monospace; font-size:12px; min-width:40px; text-align:right; color:var(--stealth); }
+  
+  .button-options{ display:flex; gap:8px; flex-wrap:wrap; }
+  .btn-option{
+    border:1px solid var(--border); border-radius:8px; padding:9px 14px;
+    background:var(--panel); color:var(--text); cursor:pointer; font-size:11px;
+    transition:border-color .2s,background .2s;
+  }
+  .btn-option:hover{ border-color:var(--accent); }
+  .btn-option.selected{ border-color:var(--stealth); background:rgba(57,255,20,.1); }
+
+  .text-input{
+    border:1px solid var(--border); border-radius:8px; padding:10px 12px;
+    background:var(--panel); color:var(--text); font-family:'Nunito',sans-serif; font-size:12px;
+  }
+  .text-input:focus{ outline:none; border-color:var(--stealth); }
+
+  .emoji-selector{ display:grid; grid-template-columns:repeat(6,1fr); gap:8px; }
+  .emoji-btn{
+    border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--panel);
+    font-size:20px; cursor:pointer; transition:all .2s;
+  }
+  .emoji-btn:hover{ border-color:var(--accent); }
+  .emoji-btn.selected{ border-color:var(--stealth); box-shadow:0 0 12px rgba(57,255,20,.15); }
+
+  .modal-footer{
+    padding:14px 20px; display:flex; gap:8px; justify-content:flex-end;
+    border-top:1px solid var(--border);
+    position:sticky; bottom:0; background:var(--panel); z-index:1;
+  }
+  .btn{
+    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px;
+    padding:10px 18px; border-radius:8px; border:1px solid var(--border);
+    background:var(--panel); color:var(--text); cursor:pointer; transition:all .2s;
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn-primary{
+    border-color:var(--stealth); background:rgba(57,255,20,.1); color:var(--stealth);
+  }
+  .btn-primary:hover{ background:rgba(57,255,20,.22); }
+
+  /* handoff screen */
+  .handoff{ display:none; text-align:center; padding:50px 10px; }
+  .handoff.visible{ display:block; }
+  .handoff .big-icon{ font-size:52px; }
+  .handoff h2{ font-family:'Orbitron',monospace; font-size:20px; color:var(--stealth); margin:14px 0 6px; letter-spacing:1px; }
+  .handoff p{ color:var(--muted); font-size:12px; max-width:420px; margin:0 auto 22px; line-height:1.7; }
+  .handoff .detail-cards{ max-width:640px; margin:0 auto 22px; }
+  .back-btn{
+    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted);
+    border:1px solid var(--border); border-radius:8px; padding:9px 16px; cursor:pointer; display:inline-block;
+    transition:border-color .2s,color .2s;
+  }
+  .back-btn:hover{ border-color:var(--accent); color:var(--accent); }
+
+  /* Help overlay */
+  .help-overlay{
+    display:none; position:fixed; inset:0; background:rgba(7,12,24,0.94); z-index:3000;
+    align-items:center; justify-content:center; backdrop-filter:blur(8px);
+  }
+  .help-overlay.open{ display:flex; }
+  .help-panel{
+    background:var(--panel); border:1px solid var(--stealth); border-radius:16px;
+    width:100%; max-width:500px; margin:20px;
+    box-shadow:0 0 50px rgba(57,255,20,.18);
+  }
+  .help-header{
+    background:linear-gradient(135deg, rgba(57,255,20,.12), rgba(0,229,255,.05));
+    border-bottom:1px solid var(--stealth); padding:18px 20px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .help-title{ font-family:'Orbitron',monospace; font-size:13px; letter-spacing:2px; color:var(--stealth); }
+  .help-close{ background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; }
+  .help-close:hover{ color:var(--text); }
+  .help-body{ padding:24px; }
+  .help-step-num{ font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--stealth); text-transform:uppercase; margin-bottom:8px; }
+  .help-step-title{ font-family:'Orbitron',monospace; font-size:14px; color:var(--text); margin-bottom:10px; letter-spacing:1px; }
+  .help-step-desc{ font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:16px; }
+  .help-step-highlight{
+    background:rgba(57,255,20,.08); border-left:3px solid var(--stealth);
+    padding:12px 14px; border-radius:6px; font-size:11px; margin-bottom:16px;
+  }
+  .help-footer{
+    padding:16px 20px; border-top:1px solid var(--border);
+    display:flex; gap:10px; justify-content:space-between;
+  }
+  .help-progress{ font-size:10px; color:var(--muted); letter-spacing:1px; }
+  .help-nav{ display:flex; gap:8px; }
+  .help-nav button{
+    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px;
+    padding:8px 14px; border:1px solid var(--border); border-radius:6px;
+    background:var(--panel); color:var(--text); cursor:pointer;
+    transition:border-color .2s, background .2s;
+  }
+  .help-nav button:hover{ border-color:var(--accent); }
+  .help-nav button.active{ border-color:var(--stealth); background:rgba(57,255,20,.1); color:var(--stealth); }
+
+  /* footer */
+  footer{ position:relative; z-index:1; text-align:center; padding:14px; font-size:11px; color:var(--muted); border-top:1px solid var(--border); letter-spacing:1px; margin-top:auto; }
+  footer a{ color:var(--accent); text-decoration:none; }
+
+    /* ── Menu button & modal ── */
+    /* Menu button width matches right column (185px), content right-aligned */
+    .menu-btn {
+      background:none; border:1px solid var(--border); border-radius:8px;
+      color:var(--muted); cursor:pointer; padding:7px 12px;
+      font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+      transition:border-color 0.2s, color 0.2s;
+      display:flex; align-items:center; gap:6px;
+      justify-content:flex-end;
+    }
+    .menu-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .menu-btn-icon { font-size:14px; }
+
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(7,12,24,0.88); z-index:1000;
+      align-items:center; justify-content:center;
+      backdrop-filter:blur(6px);
+    }
+    .modal-overlay.open { display:flex; }
+    #score-modal { z-index:3500; }
+    .modal {
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:16px; width:100%; max-width:400px; margin:20px;
+      overflow:hidden;
+      box-shadow:0 0 40px rgba(0,229,255,0.12);
+    }
+    .modal-header {
+      background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border);
+      padding:14px 18px; display:flex; justify-content:space-between; align-items:center;
+    }
+    .modal-title { font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--accent); }
+    .modal-close { background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:0 4px; }
+    .modal-close:hover { color:var(--text); }
+    .modal-body { padding:18px; display:flex; flex-direction:column; gap:16px; }
+
+    .modal-section { display:flex; flex-direction:column; gap:8px; }
+    .modal-section-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+
+    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+    .toggle-row:last-child { border-bottom:none; }
+    .toggle-label { font-size:12px; color:var(--text); }
+    .toggle-sub   { font-size:10px; color:var(--muted); margin-top:2px; }
+    .toggle-switch {
+      position:relative; width:40px; height:22px; flex-shrink:0;
+    }
+    .toggle-switch input { opacity:0; width:0; height:0; }
+    .toggle-slider {
+      position:absolute; inset:0; background:var(--border);
+      border-radius:11px; cursor:pointer; transition:background 0.2s;
+    }
+    .toggle-slider::before {
+      content:''; position:absolute;
+      width:16px; height:16px; left:3px; top:3px;
+      background:#fff; border-radius:50%;
+      transition:transform 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background:var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform:translateX(18px); }
+
+    .modal-btn {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px; border-radius:8px;
+      background:rgba(255,255,255,0.04); border:1px solid var(--border);
+      color:var(--text); cursor:pointer; font-size:12px;
+      transition:border-color 0.2s, background 0.2s;
+      text-decoration:none; font-family:'Nunito',sans-serif;
+    }
+    .modal-btn:hover { border-color:var(--accent); background:rgba(0,229,255,0.06); }
+    .modal-btn-icon { font-size:16px; width:20px; text-align:center; }
+
+    .share-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+    .about-text { font-size:11px; color:var(--muted); line-height:1.7; }
+    .about-text a { color:var(--accent); text-decoration:none; }
+    .onboarding-dots { display:flex; gap:6px; margin-top:14px; justify-content:center; }
+    .onboarding-dots span {
+      width:6px; height:6px; border-radius:50%; background:var(--border);
+      transition:background 0.2s, transform 0.2s;
+    }
+    .onboarding-dots span.active { background:var(--accent); transform:scale(1.3); }
+
+    .modal-tabs { display:flex; border-bottom:1px solid var(--border); }
+    .modal-tab {
+      flex:1; padding:10px; text-align:center; cursor:pointer;
+      font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px;
+      color:var(--muted); border-bottom:2px solid transparent;
+      transition:color 0.2s, border-color 0.2s;
+    }
+    .modal-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .modal-tab-content { display:none; }
+    .modal-tab-content.active { display:flex; flex-direction:column; gap:12px; }
+
+    .feedback-area {
+      width:100%; background:rgba(255,255,255,0.03); border:1px solid var(--border);
+      border-radius:8px; padding:10px; color:var(--text); font-family:'Nunito',sans-serif;
+      font-size:12px; resize:vertical; min-height:80px; outline:none;
+    }
+    .feedback-area:focus { border-color:var(--accent); }
+    .feedback-submit {
+      padding:9px 18px; background:rgba(0,229,255,0.1); border:1px solid var(--accent);
+      border-radius:8px; color:var(--accent); font-family:'Orbitron',monospace;
+      font-size:9px; letter-spacing:2px; cursor:pointer; align-self:flex-end;
+      transition:background 0.2s;
+    }
+    .feedback-submit:hover { background:rgba(0,229,255,0.2); }
+
+  @media (max-width:600px){
+    h1{ font-size:22px; }
+    .wrap{ padding:16px 14px 0; }
+    .virus-grid{ grid-template-columns:1fr; }
+    .multi-select{ grid-template-columns:1fr; }
+    .emoji-selector{ grid-template-columns:repeat(4,1fr); }
+    header{ padding:14px 16px; }
+    .logo{ font-size:16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header-outer">
+  <header>
+    <div class="logo-wrap">
+      <div class="logo">STEALTH<span>MISSION</span></div>
+    </div>
+    <div class="header-tagline" style="position:absolute;left:50%;transform:translateX(-50%);">Can you remain undetected?</div>
+    <div class="header-right">
+      <button class="help-btn" id="help-trigger" onclick="openHelp()" title="Tutorial">?</button>
+      <button class="menu-btn" id="menu-trigger" onclick="openMenu()">☰ MENU</button>
+    </div>
+  </header>
+</div>
+
+<!-- Main content -->
+<div class="wrap">
+
+  <!-- ═══ SELECT SCREEN ═══ -->
+  <div id="select-screen">
+    <div class="intro">
+      <h1>Choose your virus</h1>
+      <p class="sub">Every virus has traits that help it spread, resist medicine, or dodge host defenses—but those same traits can expose it to the immune system. Your mission is to slip by the immune system and not get trapped!</p>
+    </div>
+
+    <div class="virus-grid" id="virus-grid"></div>
+
+    <div class="detail" id="virus-detail">
+      <div class="detail-top">
+        <div class="detail-title" id="virus-detail-title"></div>
+        <button class="deploy-btn" id="deploy-btn" onclick="deploy()">Begin Infiltration →</button>
+      </div>
+      <div class="detail-cards" id="virus-detail-cards"></div>
+    </div>
+  </div>
+
+  <!-- ═══ HANDOFF / LOADOUT CONFIRMED ═══ -->
+  <div class="handoff" id="handoff-screen">
+    <div class="big-icon" id="handoff-icon">🦠</div>
+    <h2>Loadout confirmed</h2>
+    <p id="handoff-copy"></p>
+    <div class="detail-cards" id="handoff-cards"></div>
+    <div class="back-btn" onclick="backToSelect()">↺ Choose a different virus</div>
+  </div>
+
+</div>
+
+<!-- Footer -->
+<footer>© 2026 Arwen Altenburg</footer>
+
+<!-- ═══ BUILDER MODAL ═══ -->
+<div class="modal-overlay" id="builder-modal">
+  <div class="builder-modal">
+    <div class="modal-header">
+      <div class="modal-title">Design Your Virus</div>
+      <button class="modal-close" onclick="closeBuilder()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="builder-tabs">
+        <button class="tab-btn active" onclick="switchTab('tropism')">Tropism</button>
+        <button class="tab-btn" onclick="switchTab('replication')">Replication speed</button>
+        <button class="tab-btn" onclick="switchTab('mutation')">Mutation rate</button>
+        <button class="tab-btn" onclick="switchTab('abilities')">4. Abilities</button>
+        <button class="tab-btn" onclick="switchTab('identity')">5. Identity</button>
+      </div>
+
+      <div class="tab-content active" id="tab-tropism">
+        <div class="form-group">
+          <div class="form-label">Which organ does your virus infect?</div>
+          <div class="multi-select">
+            <div class="checkbox-card" id="tropism-lung" onclick="toggleTropism('lung-tropism')">
+              <div class="checkbox-label">🫁 Lung</div>
+            </div>
+            <div class="checkbox-card" id="tropism-liver" onclick="toggleTropism('liver-tropism')">
+              <div class="checkbox-label">🔴 Liver</div>
+            </div>
+            <div class="checkbox-card" id="tropism-intestine" onclick="toggleTropism('intestine-tropism')">
+              <div class="checkbox-label">🧬 Intestine</div>
+            </div>
+          <div style="font-size:10px; color:var(--accent2); margin-top:12px;">Select at least one organ</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-replication">
+        <div class="form-group">
+          <div class="form-label">How fast does your virus spread?</div>
+          <div class="slider-row">
+            <input type="range" id="speed-slider" min="1" max="10" value="5" onchange="updateSpeed()">
+            <div class="slider-value" id="speed-value">5</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-mutation">
+        <div class="form-group">
+          <div class="form-label">How quickly does your virus mutate?</div>
+          <div style="font-size:11px; color:var(--muted); margin-top:12px;" id="mutation-desc">Mutations can cause the virus to gain or lose random cards.</div>
+          <div class="button-options">
+            <button class="btn-option selected" id="mut-low" onclick="setMutation('low')">Low</button>
+            <button class="btn-option" id="mut-med" onclick="setMutation('medium')">Medium</button>
+            <button class="btn-option" id="mut-high" onclick="setMutation('high')">High</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-abilities">
+        <div class="form-group">
+          <div class="form-label">Special Abilities</div>
+          <div style="display:grid; gap:10px;">
+            <div class="checkbox-card" id="ability-drift" onclick="toggleAbility('antigenic-drift')">
+              <div class="checkbox-label">🎭 Antigenic Drift</div>
+              <div class="checkbox-desc">Frequently shift appearance to evade antibodies, like influenza virus.</div>
+            </div>
+            <div class="checkbox-card" id="ability-latency" onclick="toggleAbility('latency')">
+              <div class="checkbox-label">😴 Latency</div>
+              <div class="checkbox-desc">Go dormant and reappear strategically, like hepatitis C virus or varicella zoster virus (chickenpox).</div>
+            </div>
+            <div class="checkbox-card" id="ability-cytokine" onclick="toggleAbility('cytokine-resistance')">
+              <div class="checkbox-label">🔵 Cytokine Resistance</div>
+              <div class="checkbox-desc">Bypass the alarm bells of the host's defence system.</div>
+            </div>
+            <div class="checkbox-card" id="ability-tregs" onclick="toggleAbility('activate-tregs')">
+              <div class="checkbox-label">🤐 Activate Tregs</div>
+              <div class="checkbox-desc">Suppress the host's defence response.</div>
+            </div>
+          </div>
+          <div style="font-size:10px; color:var(--accent2); margin-top:12px;">Select maximum 2 special abilities</div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-identity">
+        <div class="form-group">
+          <div class="form-label">Virus Name</div>
+          <input type="text" id="virus-name" class="text-input" placeholder="e.g., Ghost Strain, Night Shift...">
+        </div>
+        <div class="form-group">
+          <div class="form-label">Choose an emoji</div>
+          <div class="emoji-selector" id="emoji-selector"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" onclick="closeBuilder()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCustomVirus()">Save & Deploy →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ Menu Modal ══ -->
+<div class="modal-overlay" id="menu-modal" onclick="closeMenuOutside(event)">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <div class="modal-title">Menu</div>
+      <button class="modal-close" onclick="closeMenu()">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" onclick="switchTab('about')">About</div>
+      <div class="modal-tab" onclick="switchTab('settings')">Settings</div>
+      <div class="modal-tab" onclick="switchTab('share')">Share</div>
+      <div class="modal-tab" onclick="switchTab('feedback')">Feedback</div>
+    </div>
+    <div class="modal-body">
+
+      <!-- About tab -->
+      <div class="modal-tab-content active" id="tab-about">
+        <div class="modal-section">
+          <div class="modal-section-title">About</div>
+          <div class="about-text">
+            <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
+            
+            <strong style="color:var(--text)">The Infection Game (virus)</strong><br>
+            Original game developed by Dr AJ te Velthuis (Princeton University) and Dr Arwen Altenburg (University of Cambridge) with SKYLE games. Artwork by Ramon Calvante. A massive thank you to Dr Ingrida Olendraite for her assistance and to the University of Cambridge School of Biological Sciences and the British Society for Immunology for their financial support.<br><br>
+            <span style="color:var(--muted)">Version 1.0 · Developed 2026 by Arwen Altenburg with Claude Sonnet 4.6 & Gemini Flash 3.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings tab -->
+      <div class="modal-tab-content" id="tab-settings">
+        <div class="modal-section">
+          <div class="modal-section-title">Privacy</div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Share anonymous play stats</div>
+              <div class="toggle-sub">Helps us understand how the game is used. No personal data collected.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-tracking" checked onchange="setTracking(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Progress (this device)</div>
+          <div class="modal-btn" style="cursor:pointer; align-self:flex-start;" onclick="resetProgress()">
+            <span class="modal-btn-icon">↺</span> Reset all progress
+          </div>
+        </div>
+      </div>
+
+      <!-- Share tab -->
+      <div class="modal-tab-content" id="tab-share">
+        <div class="modal-section">
+          <div class="modal-section-title">Share Immune Quest</div>
+          <div class="share-grid">
+            <a class="modal-btn" onclick="shareTwitter()">
+              <span class="modal-btn-icon">𝕏</span> X / Twitter
+            </a>
+            <a class="modal-btn" onclick="shareWhatsApp()">
+              <span class="modal-btn-icon">💬</span> WhatsApp
+            </a>
+            <a class="modal-btn" onclick="shareEmail()">
+              <span class="modal-btn-icon">✉</span> Email
+            </a>
+            <a class="modal-btn" onclick="copyLink()">
+              <span class="modal-btn-icon">🔗</span> <span id="copy-label">Copy link</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feedback tab -->
+      <div class="modal-tab-content" id="tab-feedback">
+        <div class="modal-section">
+          <div class="modal-section-title">Send feedback</div>
+          <textarea class="feedback-area" id="feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..."></textarea>
+          <button class="feedback-submit" onclick="submitFeedback()">Send →</button>
+          <div id="feedback-confirm" style="font-size:10px;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function openMenu() { document.getElementById('menu-modal').classList.add('open'); switchTab('about'); }
+function closeMenu() { document.getElementById('menu-modal').classList.remove('open'); }
+function closeMenuOutside(e) { if (e.target === document.getElementById('menu-modal')) closeMenu(); }
+
+function switchTab(name) {
+  document.querySelectorAll('.modal-tab').forEach((t,i) => {
+    const names = ['about','settings','share','feedback'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.modal-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function setTracking(on) {
+  localStorage.setItem('iq_no_track', on ? '0' : '1');
+}
+
+function resetProgress() {
+  Object.keys(localStorage).filter(k => k.startsWith('iq_')).forEach(k => localStorage.removeItem(k));
+  sessionStorage.removeItem('iq_relapse');
+  sessionStorage.removeItem('iq_relapse_resolved');
+  location.reload();
+}
+
+function shareTwitter() {
+  window.open('https://twitter.com/intent/tweet?text=Can+you+stop+the+spread%3F+Play+Immune+Quest+%E2%80%94+a+free+educational+game+about+viruses%2C+bacteria+%26+the+immune+system!&url='+encodeURIComponent(location.href), '_blank');
+}
+function shareWhatsApp() {
+  window.open('https://wa.me/?text=Can+you+stop+the+spread%3F+Play+Immune+Quest+%E2%80%94+'+encodeURIComponent(location.href), '_blank');
+}
+function shareEmail() {
+  location.href = 'mailto:?subject=Immune+Quest&body=Can+you+stop+the+spread%3F+Play+this+free+educational+game+about+viruses+and+the+immune+system%3A+'+encodeURIComponent(location.href);
+}
+function copyLink() {
+  navigator.clipboard.writeText(location.href).then(() => {
+    document.getElementById('copy-label').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('copy-label').textContent = 'Copy link', 2000);
+  });
+}
+function submitFeedback() {
+  const text = document.getElementById('feedback-text').value.trim();
+  if (!text) return;
+  // In production: send to your backend endpoint or email service
+  // For now: open a mailto as fallback
+  location.href = 'mailto:feedback@immunequest.org?subject=Feedback&body='+encodeURIComponent(text);
+  document.getElementById('feedback-text').value = '';
+  document.getElementById('feedback-confirm').style.display = 'block';
+}
+
+// Init tracking toggle from stored preference
+(function() {
+  const noTrack = localStorage.getItem('iq_no_track') === '1';
+  document.getElementById('toggle-tracking').checked = !noTrack;
+})();
+</script>
+
+<!-- ═══ HELP OVERLAY ═══ -->
+<div class="help-overlay" id="help-overlay">
+  <div class="help-panel">
+    <div class="help-header">
+      <div class="help-title">🎓 WELCOME TO STEALTH MISSION</div>
+      <button class="help-close" onclick="closeHelp()">✕</button>
+    </div>
+    <div class="help-body" id="help-body"></div>
+    <div class="help-footer">
+      <div class="help-progress" id="help-progress"></div>
+      <div class="help-nav" id="help-nav"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+//  VIRUS CARD LIBRARY
+// ════════════════════════════════════════════════
+const VIRUS_CARDS = {
+  'lung-tropism': { icon: '🫁', name: 'Lung Tropism', desc: 'Start in lung. Infects lung cells.' },
+  'liver-tropism': { icon: '🔴', name: 'Liver Tropism', desc: 'Start in liver. Infects liver cells.' },
+  'intestine-tropism': { icon: '🧬', name: 'Intestine Tropism', desc: 'Start in intestine. Infects intestinal cells.' },
+  'infect-cell': { icon: '📍', name: 'Infect Cell', desc: 'Player chooses which cells to infect. Number depends on replication speed.' },
+  'spread-speed-plus': { icon: '⚡', name: 'Spread Speed +1', desc: 'Boost infect power. +1 cell infected per turn.' },
+  'latency': { icon: '😴', name: 'Latency', desc: 'Place dormant token. Wakes and auto-infects adjacent cells next turn.' },
+  'antigenic-drift': { icon: '🎭', name: 'Antigenic Drift', desc: 'Frequently escape antibodies and change appearance.' },
+  'cytokine-resistance': { icon: '🔵', name: 'Cytokine Resistance', desc: 'Bypass cytokine protection barriers.' },
+  'activate-tregs': { icon: '🤐', name: 'Activate Tregs', desc: 'Suppress immune cell production for a turn.' },
+  'antibody-escape-lung': { icon: '🛡️', name: 'Antibody Escape: Lung', desc: 'Antibodies cannot be placed in lung.' },
+  'antibody-escape-liver': { icon: '🛡️', name: 'Antibody Escape: Liver', desc: 'Antibodies cannot be placed in liver.' },
+  'antibody-escape-intestine': { icon: '🛡️', name: 'Antibody Escape: Intestine', desc: 'Antibodies cannot be placed in intestine.' },
+};
+
+function getCard(cardId){ return VIRUS_CARDS[cardId]; }
+
+const PRESETS = [
+  {
+    id:'influenza', icon:'🦠', name:'Influenza', tagline:'The Shapeshifter',
+    sub:'Lung-based, fast-spreading, endlessly disguised. Easy difficulty.',
+    tissue:['lung-tropism'], replication: 7, mutation:'high', abilities:['antigenic-drift']
+  },
+  {
+    id:'norovirus', icon:'🤢', name:'Norovirus', tagline:'The Gut Saboteur',
+    sub:'Intestinal invader. Brutally fast. Medium difficulty, quick game.',
+    tissue:['intestine-tropism'], replication: 9, mutation:'medium', abilities:[]
+  },
+  {
+    id:'hepatitis', icon:'🟡', name:'Hepatitis', tagline:'The Persistent One',
+    sub:'Liver-resident with dormancy. Long, strategic games. Hard difficulty.',
+    tissue:['liver-tropism'], replication: 4, mutation:'medium', abilities:['latency']
+  }
+];
+
+const EMOJI_OPTIONS = ['🦠', '🧬', '🤢', '🟡', '👑', '🕷️', '🧪', '💀', '⚔️', '🎭', '👻', '🔴'];
+
+// ════════════════════════════════════════════════
+//  HELP TUTORIAL STEPS
+// ════════════════════════════════════════════════
+const HELP_STEPS = [
+  {
+    title: 'Choose Your Pathogen',
+    desc: 'Welcome to Stealth Mission! Your goal is to design or select a virus, then infiltrate the immune system without being detected.',
+    highlight: 'You can pick one of three preset viruses (Influenza, Norovirus, Hepatitis) or design your own custom strain.',
+  },
+  {
+    title: 'Preset Viruses',
+    desc: 'Three pre-built strains are ready to deploy:',
+    highlight: '🦠 Influenza (fast, easy) | 🤢 Norovirus (brutal, quick) | 🟡 Hepatitis (long, strategic)',
+  },
+  {
+    title: 'Design Your Own Virus',
+    desc: 'Click "Design New" to create a custom virus in 5 simple steps. Choose your tissue, speed, mutation rate, special abilities, and name.',
+    highlight: 'Building a virus lets you experiment with different strategies and difficulty levels.',
+  },
+  {
+    title: 'Step 1: Select Tissues',
+    desc: 'Pick 1–3 body tissues your virus will infect. Each tissue has different immune defense strategies.',
+    highlight: '🫁 Lung = fast spread but strong opposition | 🔴 Liver = strategy game | 🧬 Intestine = brutal speed',
+  },
+  {
+    title: 'Step 2: Replication Speed',
+    desc: 'Slide from 1 (slow) to 10 (extremely fast). Faster viruses win quicker but face stronger immune opposition.',
+    highlight: 'Slow virus = long game, more time to think. Fast virus = quick confrontation.',
+  },
+  {
+    title: 'Step 3: Mutation Rate',
+    desc: 'Choose Low, Medium, or High. Higher mutation means your virus changes during the game, gaining and losing abilities.',
+    highlight: 'High mutation = unpredictable, chaotic gameplay. Low mutation = stable, predictable strategy.',
+  },
+  {
+    title: 'Step 4: Special Abilities',
+    desc: 'Pick 1–2 special powers for your virus. Each changes how you play.',
+    highlight: '🎭 Antigenic Drift = evade antibodies | 😴 Latency = go dormant | 🔵 Cytokine Resistance = bypass defenses | 🤐 Activate Tregs = stun immune response',
+  },
+  {
+    title: 'Step 5: Identity',
+    desc: 'Give your virus a name and pick an emoji. This is YOUR strain—make it memorable!',
+    highlight: 'Your custom viruses are saved and will appear in the main grid on your next visit.',
+  },
+  {
+    title: 'Review Your Loadout',
+    desc: 'Before deploying, review your virus\'s starting cards. These are the tools you\'ll use to infiltrate the immune system.',
+    highlight: 'Every preset and custom virus comes with tissue tropism, Infect Cell action, and special traits based on your choices.',
+  },
+  {
+    title: 'Begin Your Mission',
+    desc: 'Click "Begin Infiltration →" to load your virus into the game engine. The mission is about to begin!',
+    highlight: 'Good luck! Remember: stealth, speed, and strategy are your keys to survival.',
+  },
+];
+
+let currentHelpStep = 0;
+
+// ════════════════════════════════════════════════
+//  DECK GENERATION & UI STATE
+// ════════════════════════════════════════════════
+function generateDeck(tissue, replication, mutation, abilities){
+  let deck = [];
+  tissue.forEach(t => deck.push(t));
+  deck.push('infect-cell');
+  if(replication >= 6) deck.push('spread-speed-plus');
+  if(replication >= 9) deck.push('spread-speed-plus');
+  abilities.forEach(a => deck.push(a));
+  if(mutation === 'high'){
+    deck.push('antibody-escape-lung', 'antibody-escape-intestine');
+  } else if(mutation === 'medium'){
+    deck.push('antibody-escape-liver');
+  }
+  return deck;
+}
+
+function deckToCardDisplay(cardIds){
+  return cardIds.map(id => {
+    const card = getCard(id);
+    return `<div class="tcard">
+      <div class="tcard-icon">${card.icon}</div>
+      <div class="tcard-name">${card.name}</div>
+      <div class="tcard-desc">${card.desc}</div>
+    </div>`;
+  }).join('');
+}
+
+let selectedVirus = null;
+let builderState = {
+  tissue: [],
+  replication: 5,
+  mutation: 'low',
+  abilities: [],
+  emoji: '🧬',
+  name: ''
+};
+
+const EMOJI_SELECTOR = document.getElementById('emoji-selector');
+EMOJI_OPTIONS.forEach(emoji => {
+  const btn = document.createElement('button');
+  btn.className = 'emoji-btn';
+  if(emoji === builderState.emoji) btn.classList.add('selected');
+  btn.textContent = emoji;
+  btn.onclick = (e) => selectEmoji(emoji, e);
+  EMOJI_SELECTOR.appendChild(btn);
+});
+
+function selectEmoji(emoji, e){
+  builderState.emoji = emoji;
+  document.querySelectorAll('.emoji-btn').forEach(b => b.classList.remove('selected'));
+  e.target.classList.add('selected');
+}
+
+function toggleTropism(tissue){
+  const idx = builderState.tissue.indexOf(tissue);
+  if(idx >= 0){
+    builderState.tissue.splice(idx, 1);
+  } else if(builderState.tissue.length < 3){
+    builderState.tissue.push(tissue);
+  }
+  const tissueMap = { 'lung-tropism':'tropism-lung', 'liver-tropism':'tropism-liver', 'intestine-tropism':'tropism-intestine' };
+  document.getElementById(tissueMap[tissue]).classList.toggle('checked', builderState.tissue.includes(tissue));
+}
+
+function updateSpeed(){
+  const speed = parseInt(document.getElementById('speed-slider').value);
+  builderState.replication = speed;
+  document.getElementById('speed-value').textContent = speed;
+  if(speed <= 3) document.getElementById('speed-desc').textContent = 'Slow. Immune gets time to prepare.';
+  else if(speed <= 5) document.getElementById('speed-desc').textContent = 'Medium pace. +1–2 cells per turn.';
+  else if(speed <= 7) document.getElementById('speed-desc').textContent = 'Fast. +2–3 cells per turn.';
+  else document.getElementById('speed-desc').textContent = 'Extremely fast. Overwhelming spread.';
+}
+
+function setMutation(rate){
+  builderState.mutation = rate;
+  document.querySelectorAll('#tab-mutation .btn-option').forEach(b => b.classList.remove('selected'));
+  document.getElementById('mut-' + (rate === 'medium' ? 'med' : rate)).classList.add('selected');
+  const descMap = {
+    low: 'Stable. Few surprises, predictable behavior.',
+    medium: 'Balanced. Mix of stability and random changes.',
+    high: 'Chaotic. Constantly gaining and losing mutations.'
+  };
+  document.getElementById('mutation-desc').textContent = descMap[rate];
+}
+
+function toggleAbility(ability){
+  const idx = builderState.abilities.indexOf(ability);
+  if(idx >= 0){
+    builderState.abilities.splice(idx, 1);
+  } else if(builderState.abilities.length < 2){
+    builderState.abilities.push(ability);
+  }
+  const abilityMap = {
+    'antigenic-drift': 'ability-drift',
+    'latency': 'ability-latency',
+    'cytokine-resistance': 'ability-cytokine',
+    'activate-tregs': 'ability-tregs'
+  };
+  document.getElementById(abilityMap[ability]).classList.toggle('checked', builderState.abilities.includes(ability));
+}
+
+function switchTab(tabName){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + tabName).classList.add('active');
+}
+
+function openBuilder(){
+  builderState = { tissue: [], replication: 5, mutation: 'low', abilities: [], emoji: '🧬', name: '' };
+  document.getElementById('virus-name').value = '';
+  document.querySelectorAll('.checkbox-card').forEach(c => c.classList.remove('checked'));
+  document.querySelectorAll('.btn-option').forEach(b => b.classList.remove('selected'));
+  document.getElementById('mut-low').classList.add('selected');
+  document.getElementById('speed-slider').value = 5;
+  updateSpeed();
+  document.getElementById('builder-modal').classList.add('open');
+}
+
+function closeBuilder(){
+  document.getElementById('builder-modal').classList.remove('open');
+}
+
+function saveCustomVirus(){
+  if(!builderState.tissue.length){ alert('Please select at least one tissue'); return; }
+  if(!builderState.name.trim()){ alert('Please name your virus'); return; }
+  
+  const customVirus = {
+    id: 'custom_' + Date.now(),
+    icon: builderState.emoji,
+    name: builderState.name,
+    tagline: 'Custom strain',
+    tissue: builderState.tissue,
+    replication: builderState.replication,
+    mutation: builderState.mutation,
+    abilities: builderState.abilities,
+    isCustom: true
+  };
+  
+  let saved = JSON.parse(localStorage.getItem('iq_saved_viruses') || '[]');
+  saved.push(customVirus);
+  localStorage.setItem('iq_saved_viruses', JSON.stringify(saved));
+  
+  closeBuilder();
+  renderViruses();
+  selectVirus(customVirus.id);
+}
+
+// ════════════════════════════════════════════════
+//  VIRUS SELECTION & RENDERING
+// ════════════════════════════════════════════════
+function renderViruses(){
+  const grid = document.getElementById('virus-grid');
+  grid.innerHTML = '';
+  
+  PRESETS.forEach(p => grid.appendChild(createVirusCard(p)));
+  
+  let saved = JSON.parse(localStorage.getItem('iq_saved_viruses') || '[]');
+  saved.forEach(v => grid.appendChild(createVirusCard(v)));
+  
+  const newCard = document.createElement('div');
+  newCard.className = 'vcard new-virus';
+  newCard.onclick = openBuilder;
+  newCard.innerHTML = `<div class="plus">+</div><div class="vcard-name">Design New</div><div class="vcard-sub">Create a custom virus strain.</div>`;
+  grid.appendChild(newCard);
+}
+
+function createVirusCard(virus){
+  const card = document.createElement('div');
+  card.className = 'vcard';
+  card.id = 'card-' + virus.id;
+  if(selectedVirus && selectedVirus.id === virus.id) card.classList.add('selected');
+  
+  const sub = virus.sub || virus.tagline;
+  let deleteBtn = '';
+  if(virus.isCustom){
+    deleteBtn = `<button class="vcard-delete" onclick="deleteVirus('${virus.id}', event)">✕</button>`;
+  }
+  
+  card.innerHTML = `${deleteBtn}<div class="vcard-icon">${virus.icon}</div><div class="vcard-name">${virus.name}</div><div class="vcard-sub">${sub}</div>`;
+  card.onclick = () => selectVirus(virus.id);
+  return card;
+}
+
+function selectVirus(id){
+  selectedVirus = findVirusById(id);
+  if(!selectedVirus) return;
+  
+  document.querySelectorAll('.vcard').forEach(c => c.classList.remove('selected'));
+  document.getElementById('card-' + id).classList.add('selected');
+  
+  const deck = generateDeck(selectedVirus.tissue, selectedVirus.replication, selectedVirus.mutation, selectedVirus.abilities);
+  const sub = selectedVirus.sub || selectedVirus.tagline;
+  document.getElementById('virus-detail-title').textContent = `${selectedVirus.icon} ${selectedVirus.name} — ${sub}`;
+  document.getElementById('virus-detail-cards').innerHTML = deckToCardDisplay(deck);
+  document.getElementById('virus-detail').classList.add('visible');
+}
+
+function deleteVirus(id, e){
+  e.stopPropagation();
+  if(!confirm('Delete this virus?')) return;
+  let saved = JSON.parse(localStorage.getItem('iq_saved_viruses') || '[]');
+  saved = saved.filter(v => v.id !== id);
+  localStorage.setItem('iq_saved_viruses', JSON.stringify(saved));
+  selectedVirus = null;
+  document.getElementById('virus-detail').classList.remove('visible');
+  renderViruses();
+}
+
+function findVirusById(id){
+  for(let p of PRESETS) if(p.id === id) return p;
+  let saved = JSON.parse(localStorage.getItem('iq_saved_viruses') || '[]');
+  return saved.find(v => v.id === id);
+}
+
+// ════════════════════════════════════════════════
+//  DEPLOY & HANDOFF
+// ════════════════════════════════════════════════
+function deploy(){
+  if(!selectedVirus) return;
+  const deck = generateDeck(selectedVirus.tissue, selectedVirus.replication, selectedVirus.mutation, selectedVirus.abilities);
+  const payload = {
+    name: selectedVirus.name,
+    icon: selectedVirus.icon,
+    tissue: selectedVirus.tissue,
+    replication: selectedVirus.replication,
+    mutation: selectedVirus.mutation,
+    abilities: selectedVirus.abilities,
+    deck: deck,
+    ts: Date.now()
+  };
+  try{ localStorage.setItem('iq_stealth_loadout', JSON.stringify(payload)); }catch(e){}
+  
+  document.getElementById('select-screen').style.display = 'none';
+  document.getElementById('handoff-icon').textContent = selectedVirus.icon;
+  const sub = selectedVirus.sub || selectedVirus.tagline;
+  document.getElementById('handoff-copy').innerHTML = `Deploying <strong style="color:var(--text)">${selectedVirus.name}</strong> — <em>${sub}</em>. This loadout is ready for the mission engine.`;
+  document.getElementById('handoff-cards').innerHTML = deckToCardDisplay(deck);
+  document.getElementById('handoff-screen').classList.add('visible');
+}
+
+function backToSelect(){
+  document.getElementById('handoff-screen').classList.remove('visible');
+  document.getElementById('select-screen').style.display = 'block';
+  selectedVirus = null;
+  renderViruses();
+}
+
+// ════════════════════════════════════════════════
+//  HELP SYSTEM
+// ════════════════════════════════════════════════
+function openHelp(){
+  currentHelpStep = 0;
+  renderHelpStep();
+  document.getElementById('help-overlay').classList.add('open');
+  localStorage.setItem('iq_help_seen', 'true');
+}
+
+function closeHelp(){
+  document.getElementById('help-overlay').classList.remove('open');
+}
+
+function renderHelpStep(){
+  const step = HELP_STEPS[currentHelpStep];
+  const body = document.getElementById('help-body');
+  const progress = document.getElementById('help-progress');
+  const nav = document.getElementById('help-nav');
+  
+  body.innerHTML = `
+    <div class="help-step-num">Step ${currentHelpStep + 1} of ${HELP_STEPS.length}</div>
+    <div class="help-step-title">${step.title}</div>
+    <div class="help-step-desc">${step.desc}</div>
+    <div class="help-step-highlight">${step.highlight}</div>
+  `;
+  
+  progress.textContent = `${currentHelpStep + 1} / ${HELP_STEPS.length}`;
+  
+  nav.innerHTML = '';
+  if(currentHelpStep > 0){
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = '← PREV';
+    prevBtn.onclick = () => { currentHelpStep--; renderHelpStep(); };
+    nav.appendChild(prevBtn);
+  }
+  
+  if(currentHelpStep < HELP_STEPS.length - 1){
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'NEXT →';
+    nextBtn.classList.add('active');
+    nextBtn.onclick = () => { currentHelpStep++; renderHelpStep(); };
+    nav.appendChild(nextBtn);
+  } else {
+    const doneBtn = document.createElement('button');
+    doneBtn.textContent = 'GOT IT';
+    doneBtn.classList.add('active');
+    doneBtn.onclick = closeHelp;
+    nav.appendChild(doneBtn);
+  }
+}
+
+// ════════════════════════════════════════════════
+//  MENU SYSTEM
+// ════════════════════════════════════════════════
+function openMenu(){
+  document.getElementById('menu-modal').classList.add('open');
+}
+
+function closeMenu(){
+  document.getElementById('menu-modal').classList.remove('open');
+}
+
+// ════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════
+renderViruses();
+
+// Show help on first visit
+if(!localStorage.getItem('iq_help_seen')){
+  setTimeout(openHelp, 500);
+}
+</script>
+</body>
+</html>
