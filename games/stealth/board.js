@@ -1,0 +1,646 @@
+// ═══════════════════════════════════════════════════════════════════
+//  board.js — Cell state management for one tissue board.
+//  Mirrors games/cancer/board.js structure, with the virus spreading
+//  top-down and the immune system placing individual antibody/cytokine
+//  cells strategically each turn — not a blind row-by-row sweep. See
+//  playImmuneTurn() for the immune card system.
+//
+//  Cell states:
+//    'healthy'   — normal tissue cell, infectable
+//    'infected'  — virus present
+//    'dormant'   — latency token: invisible to immune response, wakes and
+//                  infects neighbours on a future turn
+//    'immune'    — protected, blocks infection (unless escaped). Permanent
+//                  if placed by Antibody (protectedTurns stays 0); temporary
+//                  if placed by a Cytokine (protectedTurns counts down and
+//                  reverts the cell to healthy — see tickTimers()).
+//
+//  Every immune-response clear (T-Cell, NK Cell, DNA/RNA Sensing) puts a
+//  cell straight back to plain 'healthy' — no separate resistant-to-
+//  reinfection state or cooldown in between.
+//
+//  Each cell object:
+//    { state, turnsInfected, dormantTurns, escapeImmune, protectedTurns }
+// ═══════════════════════════════════════════════════════════════════
+
+// One shared counter across every board — each protectShape() call (one
+// Cytokine play) claims the next id, so cytokinePlacementId is unique
+// even across separate tissues, not just within one board. See
+// protectShape()/neutralizeCytokine() below.
+let _nextCytokinePlacementId = 1;
+
+class StealthBoard {
+  constructor(tissue, loadout) {
+    this.tissue = tissue;   // 'lung' | 'liver' | 'intestine'
+    this.cols   = STEALTH_CONFIG.BOARD.COLS;
+    this.rows   = STEALTH_CONFIG.BOARD.ROWS;
+    this.cells  = [];
+    this._init();
+    // No per-board immune deck/hand any more — the immune system has ONE
+    // shared deck/hand for the whole game now (StealthGame.immuneDeck /
+    // immuneHand), not one per tissue. See _runImmuneResponse() (game.js).
+
+    // Set by seedInfection(), cleared after this board's very next
+    // spreadVirus() call — suppresses cascading (see spreadVirus()) for
+    // that one growth phase, so a tissue's opening seed (game start, or a
+    // tropism_gain mutation) grows by one normal, non-cascading spread
+    // step before cascading kicks in on later turns, instead of the fresh
+    // seed immediately blowing up into a much bigger blob than intended
+    // before the player's even taken an action.
+    this.justSeeded = false;
+  }
+
+  _init() {
+    for (let r = 0; r < this.rows; r++) {
+      this.cells[r] = [];
+      for (let c = 0; c < this.cols; c++) {
+        this.cells[r][c] = this._emptyCell();
+      }
+    }
+  }
+
+  _emptyCell() {
+    return {
+      state:         'healthy',
+      turnsInfected: 0,
+      dormantTurns:  0,
+      escapeImmune:  0,   // turns of antibody-escape immunity remaining
+      protectedTurns: 0,  // turns of Cytokine protection remaining (0 = permanent if 'immune')
+      cytokineColor: null, // 'blue'|'orange'|'red' if protected by a Cytokine — null for Antibody (permanent) or unprotected
+      // Which single protectShape() call placed this cell's shield — lets
+      // Cytokine Neutralisation strip only the one targeted block instead
+      // of every same-coloured cell anywhere on the board (see
+      // neutralizeCytokine()). null whenever cytokineColor is null.
+      cytokinePlacementId: null,
+    };
+  }
+
+  getCell(col, row) {
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) return null;
+    return this.cells[row][col];
+  }
+
+  // ── Seed initial infection at the top, up to STARTING_SEED_ROWS deep ──
+  // Same blocking rule as spillover into an already-fortified entry cell
+  // (see game.js _runSpillover) — now that a tissue can be pre-fortified
+  // with Antibody/Cytokine before the virus ever arrives (see the
+  // StealthGame constructor), the very first seed has to respect that too,
+  // not just later spread attempts. Straight down the centre column, row
+  // by row from the top — stops at the first non-healthy cell (e.g. a
+  // pre-fortified row) rather than skipping over it, so the seed is always
+  // a single unbroken column, never a healthy row 1 sitting isolated below
+  // a blocked row 0. Returns true if at least the top cell was seeded.
+  seedInfection(col = Math.floor(this.cols / 2)) {
+    let seededAny = false;
+    for (let row = 0; row < STEALTH_CONFIG.BOARD.STARTING_SEED_ROWS; row++) {
+      const cell = this.getCell(col, row);
+      if (!cell || cell.state !== 'healthy') break;
+      cell.state         = 'infected';
+      cell.turnsInfected = 1;
+      seededAny = true;
+    }
+    if (seededAny) this.justSeeded = true;
+    return seededAny;
+  }
+
+  // ── Phase 1: autonomous virus spread ───────────────────────────
+  // `penalized` comes from the game-level Antiviral-or-Protein-Vaccine
+  // timer — beyond just changing replicationSpeed's attempt count, it also
+  // directly shifts the actual per-attempt spread CHANCE (see
+  // _rollSpreadTargets()). Replication Boost has no equivalent bonus of
+  // its own any more — it's a permanent +1 to loadout.replication (see
+  // cards.js 'spread-speed-plus'), which already raises replicationSpeed
+  // itself rather than needing a separate flag here.
+  spreadVirus(replicationSpeed, penalized = false) {
+    // Higher replication speed = more spread attempts per turn. Thresholds
+    // lowered (was >=9/>=6) — Hepatitis in particular starts at speed 4 and
+    // was stuck at 1 attempt/turn for most of a game, too slow to outrun
+    // the immune system's row-clears before establishing itself.
+    const attemptsPerSource = replicationSpeed >= 7 ? 3 : replicationSpeed >= 4 ? 2 : 1;
+
+    const newlyInfected = [];
+    // Worklist, not a fixed snapshot — starts as every cell already
+    // infected before this phase, but a cell infected DURING this phase
+    // (below) is pushed onto the very same queue, so it gets its own
+    // attemptsPerSource-worth of rolls to spread further too, same turn.
+    // Infection can now cascade across several cells in a single spread
+    // phase instead of only ever moving one cell deep per source per turn
+    // — depth (0 for the pre-existing snapshot, +1 each hop) decays the
+    // chance via CASCADE_DECAY (see _rollSpreadTargets()) so that cascade
+    // tapers out instead of flood-filling the whole board; CASCADE_MAX_
+    // DEPTH below is just the hard backstop on top of that.
+    // turnsInfected++ only happens for the pre-existing snapshot here —
+    // cells infected via the cascade already got turnsInfected set to 1 by
+    // _infect() itself and shouldn't be double-bumped to 2 on the same
+    // turn they were infected.
+    //
+    // justSeeded (set by seedInfection(), consumed here) caps this one
+    // call at maxDepth 0 — every cell in the queue starts at depth 0, so
+    // `depth >= maxDepth` is true immediately and NOTHING rolls this call,
+    // not even the freshly-seeded cells themselves (turnsInfected still
+    // ticks up for them in the loop above, just no spread attempt). A
+    // maxDepth of 1 (tried first) still let the seeded cells make one
+    // normal, non-cascading roll — which was enough on its own to push a
+    // row-1 seed cell down into row 2, showing 3 rows deep on turn 1
+    // instead of the intended 2. Zero means the tissue's very first growth
+    // phase (game start, or right after a tropism_gain mutation) is a
+    // no-op for it — the board shows exactly the seed, nothing more —
+    // before normal growth (and cascading) begins on the NEXT phase.
+    const maxDepth = this.justSeeded ? 0 : STEALTH_CONFIG.SPREAD.CASCADE_MAX_DEPTH;
+    this.justSeeded = false;
+    const queue = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.cells[r][c].state === 'infected') {
+          this.cells[r][c].turnsInfected++;
+          queue.push({ col: c, row: r, depth: 0 });
+        }
+      }
+    }
+
+    for (let i = 0; i < queue.length; i++) {
+      const { col, row, depth } = queue[i];
+      if (depth >= maxDepth) continue; // hard backstop — this cell doesn't cascade further
+      for (let a = 0; a < attemptsPerSource; a++) {
+        const targets = this._rollSpreadTargets(col, row, penalized, depth);
+        targets.forEach(target => {
+          const t = this.cells[target.row][target.col];
+          if (this._infect(t)) {
+            newlyInfected.push({ col: target.col, row: target.row });
+            queue.push({ col: target.col, row: target.row, depth: depth + 1 });
+          }
+        });
+      }
+    }
+
+    // Wake any dormant cells whose timer has elapsed — tracked separately
+    // from newlyInfected's other entries so the UI can give this its own
+    // "exploding" narration/animation instead of blending into the
+    // ordinary spread line.
+    const awoken = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state === 'dormant') {
+          cell.dormantTurns--;
+          if (cell.dormantTurns <= 0) {
+            cell.state = 'infected';
+            cell.turnsInfected = 1;
+            newlyInfected.push({ col: c, row: r });
+            awoken.push({ col: c, row: r });
+            // Dormant cells auto-infect one adjacent cell on waking — a
+            // guaranteed single pick among whatever's open, not a chance
+            // roll (this is the "explosion," it should always land).
+            const candidates = this._spreadCandidates(c, r);
+            if (candidates.length) {
+              const pick = candidates[Math.floor(Math.random() * candidates.length)];
+              const t = this.cells[pick.row][pick.col];
+              if (this._infect(t)) { newlyInfected.push({ col: pick.col, row: pick.row }); awoken.push({ col: pick.col, row: pick.row }); }
+            }
+          }
+        }
+      }
+    }
+
+    return { cells: newlyInfected, awoken };
+  }
+
+  _infect(cell) {
+    if (cell.state !== 'healthy') return false;
+    cell.state         = 'infected';
+    cell.turnsInfected  = 1;
+    return true;
+  }
+
+  // Every healthy cell this infected cell could possibly spread into right
+  // now (sideways or down) — a pure possibility check, no randomness. Used
+  // for the "can this cell spread at all" question (hasSpreadTarget(), the
+  // boxed-in loss check, and the dormant wake-up's guaranteed pick), as
+  // opposed to _rollSpreadTargets() below, which decides what actually
+  // happens this turn.
+  _spreadCandidates(col, row) {
+    const candidates = [];
+    if (row + 1 < this.rows) candidates.push({ col, row: row + 1 });
+    if (col - 1 >= 0)        candidates.push({ col: col - 1, row });
+    if (col + 1 < this.cols) candidates.push({ col: col + 1, row });
+    return candidates.filter(t => this.cells[t.row][t.col].state === 'healthy');
+  }
+
+  // Horizontal spread is rolled first, then vertical — two independent
+  // chances rather than a single either/or pick, so a cell blocked
+  // straight down can still spread sideways in the very same attempt (and
+  // vice versa). Can return 0, 1, or both targets. `penalized` (Antiviral /
+  // Protein Vaccine) lowers both chances — Replication Boost no longer has
+  // an equivalent bonus here (see spreadVirus() above). `depth` (0 for a
+  // cell that was already infected before this phase, +1 each cascade hop
+  // — see spreadVirus()) tapers both chances down via CASCADE_DECAY so a
+  // single-phase cascade fades out instead of flood-filling the board.
+  _rollSpreadTargets(col, row, penalized = false, depth = 0) {
+    const bonus = penalized ? -STEALTH_CONFIG.SPREAD.BOOST_CHANCE_BONUS : 0;
+    const decay = Math.pow(STEALTH_CONFIG.SPREAD.CASCADE_DECAY, depth);
+    const sideChance = Math.min(1, Math.max(0, STEALTH_CONFIG.SPREAD.WEIGHT_SIDE + bonus)) * decay;
+    const downChance = Math.min(1, Math.max(0, STEALTH_CONFIG.SPREAD.WEIGHT_DOWN + bonus)) * decay;
+    const targets = [];
+
+    [[col - 1, row], [col + 1, row]].forEach(([c, r]) => {
+      const cell = this.getCell(c, r);
+      if (cell && cell.state === 'healthy' && Math.random() < sideChance) {
+        targets.push({ col: c, row: r });
+      }
+    });
+
+    const below = this.getCell(col, row + 1);
+    if (below && below.state === 'healthy' && Math.random() < downChance) {
+      targets.push({ col, row: row + 1 });
+    }
+
+    return targets;
+  }
+
+  // Immune response resolution now lives at the game level, one shared
+  // deck/hand for the whole immune system instead of one per tissue — see
+  // _runImmuneResponse() (game.js).
+
+  // T-Cell targets the row with the MOST clearable infected cells — the
+  // most impactful row available. Returns null if no row has any (no
+  // minimum floor — any row with at least one infected cell qualifies).
+  _pickTCellRow() {
+    let best = null, bestCount = 0;
+    for (let r = 0; r < this.rows; r++) {
+      const count = this.cells[r].filter(c => c.state === 'infected' && c.escapeImmune <= 0).length;
+      if (count > bestCount) { bestCount = count; best = r; }
+    }
+    return bestCount > 0 ? best : null;
+  }
+
+  // NK Cells' own target on this board — the single infected cell that's
+  // advanced furthest toward the bottom row (the most urgent one to clear
+  // right now), tie-broken randomly. No row-size floor like T-Cell has,
+  // since NK Cells is deliberately a small, always-available single-cell
+  // play rather than a big row-clearing swing.
+  _pickDeepestInfectedCell() {
+    let deepestRow = -1;
+    for (let r = this.rows - 1; r >= 0; r--) {
+      if (this.cells[r].some(c => c.state === 'infected' && c.escapeImmune <= 0)) { deepestRow = r; break; }
+    }
+    if (deepestRow === -1) return null;
+    const candidates = [];
+    this.cells[deepestRow].forEach((cell, c) => {
+      if (cell.state === 'infected' && cell.escapeImmune <= 0) candidates.push({ col: c, row: deepestRow });
+    });
+    return candidates[Math.floor(Math.random() * candidates.length)];
+  }
+
+  clearRow(row) {
+    const cleared = [];
+    for (let c = 0; c < this.cols; c++) {
+      const cell = this.cells[row][c];
+      if (cell.state === 'infected' && cell.escapeImmune <= 0) {
+        // Straight back to a normal healthy cell — no transient 'cleared'
+        // cooldown (that's still used by DNA/RNA Sensing, just not here):
+        // T-Cell's "poof" animation (see .cell-tcell-poof, highlightCells()
+        // in game-ui.js) is a separate transient CSS class layered on top
+        // at render time, so it still plays regardless of the cell's real
+        // state underneath — it just settles into the plain healthy look
+        // once it's done, instead of the dimmed .state-cleared one, and the
+        // cell can be infected again immediately rather than waiting out a
+        // resistance window.
+        cell.state = 'healthy'; cell.turnsInfected = 0;
+        cleared.push({ col: c, row });
+      }
+    }
+    return cleared;
+  }
+
+  // Antibody protects a whole row PERMANENTLY, but only a row with no
+  // virus anywhere in it. Prefers the row immediately ahead of the
+  // infection front (deepest infected row + 1) so it's actually in the
+  // virus's path; falls back to the closest virus-free row to the front,
+  // or row 0 (the entry point) if nothing's infected yet.
+  _pickAntibodyRow() {
+    const isVirusFree = r => this.cells[r].every(c => c.state !== 'infected' && c.state !== 'dormant');
+    const hasProtectableCell = r => this.cells[r].some(c => c.state === 'healthy');
+    const candidates = [];
+    for (let r = 0; r < this.rows; r++) {
+      if (isVirusFree(r) && hasProtectableCell(r)) candidates.push(r);
+    }
+    if (candidates.length === 0) return null;
+
+    const deepest = this._deepestInfectedRow();
+    if (deepest === -1) return candidates.includes(0) ? 0 : Math.min(...candidates);
+
+    const preferred = deepest + 1;
+    if (candidates.includes(preferred)) return preferred;
+    return candidates.reduce((best, r) => Math.abs(r - deepest) < Math.abs(best - deepest) ? r : best);
+  }
+
+  protectRow(row, turns) {
+    const protectedCells = [];
+    for (let c = 0; c < this.cols; c++) {
+      const cell = this.cells[row][c];
+      if (cell.state === 'healthy') {
+        cell.state = 'immune';
+        cell.protectedTurns = turns;
+        protectedCells.push({ col: c, row });
+      }
+    }
+    return protectedCells;
+  }
+
+  // Places temporary protection (blocks infection) on healthy cells within
+  // `offsets` of a centre cell — used by the Cytokine cards. `color`
+  // ('blue'/'orange'/'red') tags which cytokine placed it, and every cell
+  // from this one call shares a fresh placement id (see
+  // _nextCytokinePlacementId below), so Cytokine Neutralisation can later
+  // strip just this one block instead of every same-coloured cell
+  // anywhere on the board.
+  protectShape(centerCol, centerRow, offsets, turns, color = null) {
+    const protectedCells = [];
+    const placementId = color ? _nextCytokinePlacementId++ : null;
+    offsets.forEach(([dx, dy]) => {
+      const cell = this.getCell(centerCol + dx, centerRow + dy);
+      if (cell && cell.state === 'healthy') {
+        cell.state = 'immune';
+        cell.protectedTurns = turns;
+        cell.cytokineColor = color;
+        cell.cytokinePlacementId = placementId;
+        protectedCells.push({ col: centerCol + dx, row: centerRow + dy });
+      }
+    });
+    return protectedCells;
+  }
+
+  // "Cytokine Neutralisation" (virus card) — strips protection from just
+  // the ONE block a Cytokine of this colour placed (identified by
+  // placementId, the targeted cell's own cytokinePlacementId — see
+  // protectShape() above), leaving any OTHER same-coloured block placed by
+  // a separate play untouched, and leaving Antibody's separate permanent
+  // protection (cytokineColor stays null) untouched too.
+  neutralizeCytokine(color, placementId) {
+    let count = 0;
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state === 'immune' && cell.cytokineColor === color && cell.cytokinePlacementId === placementId) {
+          cell.state = 'healthy';
+          cell.protectedTurns = 0;
+          cell.cytokineColor = null;
+          cell.cytokinePlacementId = null;
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  hasDormant() {
+    for (let r = 0; r < this.rows; r++)
+      for (let c = 0; c < this.cols; c++)
+        if (this.cells[r][c].state === 'dormant') return true;
+    return false;
+  }
+
+  // Priority 1: a healthy cell directly BELOW an infected cell — blocks
+  //             the specific move that would advance toward the win
+  //             condition (the bottom row). Scanned from the BOTTOM row
+  //             up, so the deepest (most advanced, most urgent) infected
+  //             row's own candidates are used first — the previous
+  //             version collected "below" candidates from every infected
+  //             cell on the board and picked among them uniformly at
+  //             random, which could just as easily block a cell in the
+  //             middle of the board while the virus's actual front, one
+  //             row from winning, sat completely unguarded.
+  // Priority 2: a healthy cell beside (same row as) an infected cell —
+  //             same bottom-up preference.
+  // Priority 3: no infection anywhere on this board yet — guard the entry
+  //             point (row 0, centre) pre-emptively, matching where
+  //             seedInfection()/spillover would land.
+  _pickStrategicAntibodyTarget() {
+    for (let r = this.rows - 1; r >= 0; r--) {
+      const below = [];
+      for (let c = 0; c < this.cols; c++) {
+        if (this.cells[r][c].state !== 'infected') continue;
+        const downCell = this.getCell(c, r + 1);
+        if (downCell && downCell.state === 'healthy') below.push({ col: c, row: r + 1 });
+      }
+      if (below.length) return below[Math.floor(Math.random() * below.length)];
+    }
+    for (let r = this.rows - 1; r >= 0; r--) {
+      const beside = [];
+      for (let c = 0; c < this.cols; c++) {
+        if (this.cells[r][c].state !== 'infected') continue;
+        [[c - 1, r], [c + 1, r]].forEach(([cc, rr]) => {
+          const cell = this.getCell(cc, rr);
+          if (cell && cell.state === 'healthy') beside.push({ col: cc, row: rr });
+        });
+      }
+      if (beside.length) return beside[Math.floor(Math.random() * beside.length)];
+    }
+
+    if (this._deepestInfectedRow() === -1) {
+      const entryCol = Math.floor(this.cols / 2);
+      const entry = this.getCell(entryCol, 0);
+      if (entry && entry.state === 'healthy') return { col: entryCol, row: 0 };
+    }
+    return null;
+  }
+
+  // Deepest (highest row index) cell currently infected or dormant, or
+  // -1 if the virus hasn't reached this tissue at all (yet).
+  _deepestInfectedRow() {
+    for (let r = this.rows - 1; r >= 0; r--) {
+      for (let c = 0; c < this.cols; c++) {
+        const s = this.cells[r][c].state;
+        if (s === 'infected' || s === 'dormant') return r;
+      }
+    }
+    return -1;
+  }
+
+  // ── Tick per-cell timers (end of turn) ─────────────────────────
+  tickTimers() {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.escapeImmune > 0) cell.escapeImmune--;
+        // Cytokine protection expires and reverts to healthy. Antibody-
+        // placed cells never get protectedTurns set, so they're unaffected
+        // and stay permanently protected.
+        if (cell.protectedTurns > 0) {
+          cell.protectedTurns--;
+          if (cell.protectedTurns === 0 && cell.state === 'immune') { cell.state = 'healthy'; cell.cytokineColor = null; cell.cytokinePlacementId = null; }
+        }
+      }
+    }
+  }
+
+  // ── Player card effects ─────────────────────────────────────────
+
+  // "Horizontal Spread" — infect a healthy cell directly beside an
+  // already-infected cell in the same row (sideways only).
+  infectHorizontal(col, row) {
+    const cell = this.getCell(col, row);
+    if (!cell || cell.state !== 'healthy') return false;
+    const left  = this.getCell(col - 1, row);
+    const right = this.getCell(col + 1, row);
+    const adjacentInfected = (left && left.state === 'infected') || (right && right.state === 'infected');
+    if (!adjacentInfected) return false;
+    return this._infect(cell);
+  }
+
+  // "Vertical Spread" — infect a healthy cell directly below an
+  // already-infected cell in the same column (progresses toward the
+  // bottom row — the win condition).
+  infectVertical(col, row) {
+    const cell = this.getCell(col, row);
+    if (!cell || cell.state !== 'healthy') return false;
+    const above = this.getCell(col, row - 1);
+    if (!above || above.state !== 'infected') return false;
+    return this._infect(cell);
+  }
+
+  // "Latency" — place a dormant token on a healthy cell; it wakes and
+  // auto-infects after a delay, invisible to immune response meanwhile.
+  // Restricted to at most one row past the current infection front (the
+  // deepest infected/dormant row + 1) — latency represents the virus lying
+  // low just ahead of where it already is, not seeding somewhere random
+  // and disconnected from the active infection.
+  placeDormant(col, row, turns = 2) {
+    const cell = this.getCell(col, row);
+    if (!cell || cell.state !== 'healthy') return false;
+    const maxRow = this._deepestInfectedRow() + 1; // -1+1=0 if nothing infected yet
+    if (row > maxRow) return false;
+    cell.state        = 'dormant';
+    cell.dormantTurns = turns;
+    return true;
+  }
+
+  // Mutation "lost latency" — finds one dormant cell (if any) and clears
+  // it straight back to healthy, the inverse of placeDormant().
+  clearDormant() {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.cells[r][c].state === 'dormant') {
+          this.cells[r][c].state = 'healthy';
+          this.cells[r][c].dormantTurns = 0;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // "Antibody Escape: <tissue>" — grants all currently-infected cells in
+  // this tissue immunity from immune-response clearing for N turns.
+  grantEscapeImmunity(turns) {
+    let count = 0;
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state === 'infected') {
+          cell.escapeImmune = Math.max(cell.escapeImmune, turns);
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  // "Antibody Escape" also breaks through any EXISTING antibody barrier in
+  // this tissue, not just future clearing — the virus evades the
+  // antibodies that were already blocking it. Cytokine shields are left
+  // alone (cytokineColor set) since those have their own counter, see
+  // Cytokine Neutralisation.
+  // Returns the cleared cells (not just a count) so the UI can animate
+  // exactly which ones just lost their antibody — see the "poof" flash in
+  // game-ui.js.
+  clearAntibodyProtection() {
+    const cleared = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state === 'immune' && !cell.cytokineColor) {
+          cell.state = 'healthy';
+          cell.protectedTurns = 0;
+          cleared.push({ col: c, row: r });
+        }
+      }
+    }
+    return cleared;
+  }
+
+  // "Escape Loss" mutation — the immune system identifies the virus's
+  // disguise; strip any active antibody-escape protection immediately.
+  clearEscapeImmunity() {
+    let count = 0;
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.escapeImmune > 0) { cell.escapeImmune = 0; count++; }
+      }
+    }
+    return count;
+  }
+
+  // ── Queries ───────────────────────────────────────────────────
+  infectedCount() {
+    let n = 0;
+    for (let r = 0; r < this.rows; r++)
+      for (let c = 0; c < this.cols; c++)
+        if (this.cells[r][c].state === 'infected' || this.cells[r][c].state === 'dormant') n++;
+    return n;
+  }
+
+  hasNoInfection() {
+    return this.infectedCount() === 0;
+  }
+
+  // Wipes every infected/dormant cell back to plain healthy — used when a
+  // tropism_loss mutation deactivates this tissue outright (game.js): the
+  // tissue is just done, immediately available to be pre-fortified for
+  // whenever (if ever) the virus comes back.
+  clearAllInfection() {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state === 'infected' || cell.state === 'dormant') {
+          cell.state = 'healthy';
+          cell.turnsInfected = 0;
+          cell.dormantTurns = 0;
+          cell.escapeImmune = 0;
+        }
+      }
+    }
+  }
+
+  // True if at least one infected OR dormant cell has a healthy cell it
+  // could still spread into (same row, or directly below) — used to
+  // detect the virus being fully boxed in on this board. Dormant cells
+  // count too: when one wakes it's guaranteed to auto-infect an open
+  // neighbour (see spreadVirus()'s dormant-wake handling), so a dormant
+  // cell that isn't itself boxed in means the virus isn't really finished
+  // here yet even if every currently-infected cell already is.
+  hasSpreadTarget() {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const state = this.cells[r][c].state;
+        if ((state === 'infected' || state === 'dormant') && this._spreadCandidates(c, r).length) return true;
+      }
+    }
+    return false;
+  }
+
+  hasReachedBottomRow() {
+    const r = this.rows - 1;
+    for (let c = 0; c < this.cols; c++) {
+      if (this.cells[r][c].state === 'infected') return true;
+    }
+    return false;
+  }
+
+  toRenderData() {
+    return this.cells.map((row, ri) =>
+      row.map((cell, ci) => ({ ...cell, col: ci, row: ri }))
+    );
+  }
+}

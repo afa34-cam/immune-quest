@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Immune Quest — Cancer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body {
+      background:#070c18; color:#ddeeff;
+      font-family:'Nunito',sans-serif;
+      overflow:hidden; height:100vh; width:100vw;
+      display:flex; flex-direction:column;
+    }
+    #game-canvas { display:block; flex:1; }
+
+    /* ── Overlay screens ── */
+    .screen {
+      position:fixed; inset:0; z-index:100;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      background:rgba(7,12,24,0.95);
+      padding:32px 20px;
+    }
+    .screen.hidden { display:none; }
+
+    .screen-title {
+      font-family:'Orbitron',monospace; font-size:clamp(18px,3vw,32px);
+      font-weight:900; letter-spacing:3px; margin-bottom:16px;
+      text-align:center;
+    }
+    .screen-sub {
+      font-size:clamp(12px,1.5vw,15px); color:#4a6580;
+      letter-spacing:2px; text-transform:uppercase;
+      margin-bottom:32px; text-align:center;
+    }
+    .screen-body {
+      max-width:600px; font-size:clamp(13px,1.5vw,16px);
+      line-height:1.7; color:#b0c8e0; text-align:center;
+      margin-bottom:32px;
+    }
+    .screen-btn {
+      font-family:'Orbitron',monospace; font-size:13px;
+      letter-spacing:2px; padding:14px 36px;
+      border-radius:8px; cursor:pointer;
+      transition:all 0.2s; border:none;
+      text-transform:uppercase; margin:6px;
+    }
+    .btn-primary {
+      background:rgba(0,229,255,0.15);
+      border:1px solid #00e5ff; color:#00e5ff;
+    }
+    .btn-primary:hover { background:rgba(0,229,255,0.3); }
+    .btn-danger {
+      background:rgba(255,77,109,0.15);
+      border:1px solid #ff4d6d; color:#ff4d6d;
+    }
+    .btn-danger:hover { background:rgba(255,77,109,0.3); }
+    .btn-success {
+      background:rgba(57,255,20,0.15);
+      border:1px solid #39ff14; color:#39ff14;
+    }
+    .btn-success:hover { background:rgba(57,255,20,0.3); }
+    .btn-row { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+
+    /* Difficulty selector */
+    .diff-card {
+      border:1px solid #1a2d48; border-radius:10px;
+      padding:18px 24px; cursor:pointer; margin:6px;
+      transition:all 0.2s; min-width:150px; text-align:center;
+      background:#0d1525;
+    }
+    .diff-card:hover, .diff-card.selected {
+      border-color:#00e5ff; background:rgba(0,229,255,0.08);
+    }
+    .diff-card h3 {
+      font-family:'Orbitron',monospace; font-size:12px;
+      letter-spacing:2px; color:#00e5ff; margin-bottom:8px;
+    }
+    .diff-card p { font-size:12px; color:#4a6580; line-height:1.5; }
+    .diff-row { display:flex; flex-wrap:wrap; justify-content:center; }
+
+    /* Metastasis event */
+    #screen-meta .screen-title { color:#ff4d6d; }
+    #screen-meta .site-name {
+      font-family:'Orbitron',monospace; font-size:clamp(20px,3vw,36px);
+      color:#ff4d6d; font-weight:900; letter-spacing:4px;
+      text-shadow:0 0 24px rgba(255,77,109,0.6);
+      margin:16px 0;
+    }
+
+    /* Win / lose */
+    #screen-win  .screen-title { color:#39ff14; }
+    #screen-lose .screen-title { color:#ff4d6d; }
+    .score-display {
+      font-family:'Orbitron',monospace; font-size:clamp(28px,5vw,56px);
+      font-weight:900; color:#00e5ff;
+      text-shadow:0 0 24px rgba(0,229,255,0.5);
+      margin:16px 0;
+    }
+
+    /* ── HUD (in-game overlay on canvas) ── */
+    #hud {
+      position:fixed; top:0; left:0; right:0; height:52px; z-index:50;
+      background:rgba(7,12,24,0.9); backdrop-filter:blur(8px);
+      border-bottom:1px solid #1a2d48;
+      display:flex; align-items:center; padding:0 16px; gap:20px;
+    }
+    #hud.hidden { display:none; }
+    .hud-logo {
+      font-family:'Orbitron',monospace; font-size:14px; font-weight:900;
+      color:#00e5ff; letter-spacing:2px; white-space:nowrap;
+    }
+    .hud-logo span { color:#ff4d6d; }
+    .hud-sep { flex:1; }
+    .hud-item {
+      font-family:'Orbitron',monospace; font-size:10px;
+      letter-spacing:1px; color:#4a6580; white-space:nowrap;
+    }
+    .hud-item span { color:#ddeeff; }
+    .hud-item.warn span { color:#ff9f1c; }
+    .hud-item.danger span { color:#ff4d6d; animation:blink 1s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    .hud-turn { font-family:'Orbitron',monospace; font-size:12px; color:#00e5ff; }
+
+    /* ── Card panel (right side during play) ── */
+    #card-panel {
+      position:fixed; right:0; top:52px; bottom:0; width:220px; z-index:50;
+      background:rgba(7,12,24,0.92); backdrop-filter:blur(8px);
+      border-left:1px solid #1a2d48;
+      display:flex; flex-direction:column;
+      padding:12px 8px;
+    }
+    #card-panel.hidden { display:none; }
+    .panel-label {
+      font-family:'Orbitron',monospace; font-size:9px;
+      letter-spacing:2px; color:#4a6580; text-transform:uppercase;
+      margin-bottom:8px; padding:0 4px;
+    }
+    .card-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+    .card-item {
+      border:1px solid #1a2d48; border-radius:8px; padding:8px 10px;
+      cursor:pointer; transition:all 0.15s; background:#0d1525;
+      position:relative;
+    }
+    .card-item:hover  { border-color:currentColor; background:rgba(0,0,0,0.5); transform:translateX(-2px); }
+    .card-item.selected { border-width:2px; background:rgba(0,0,0,0.6); }
+    .card-item.disabled { opacity:0.4; cursor:default; }
+    .card-top { display:flex; align-items:center; gap:6px; margin-bottom:3px; }
+    .card-icon-sm { font-size:14px; }
+    .card-name-sm { font-family:'Orbitron',monospace; font-size:9px; font-weight:700; letter-spacing:1px; }
+    .card-cat  { font-size:10px; color:#4a6580; }
+    .card-rarity {
+      position:absolute; top:6px; right:8px;
+      font-size:8px; font-family:'Orbitron',monospace;
+      letter-spacing:1px; opacity:0.6;
+    }
+
+    /* Tooltip */
+    #card-tooltip {
+      position:fixed; z-index:200; pointer-events:none;
+      background:#0d1525; border:1px solid #00e5ff;
+      border-radius:8px; padding:10px 13px;
+      max-width:220px; font-size:11px; line-height:1.5;
+      color:#b0c8e0; opacity:0;
+      transition:opacity 0.15s;
+      box-shadow:0 0 16px rgba(0,229,255,0.15);
+    }
+    #card-tooltip.visible { opacity:1; }
+    #card-tooltip .tt-name {
+      font-family:'Orbitron',monospace; font-size:10px;
+      font-weight:700; margin-bottom:5px;
+    }
+
+    /* End turn button */
+    #btn-end-turn {
+      margin-top:10px; width:100%;
+      font-family:'Orbitron',monospace; font-size:10px;
+      letter-spacing:2px; padding:10px;
+      border-radius:6px; cursor:pointer;
+      background:rgba(57,255,20,0.12);
+      border:1px solid #39ff14; color:#39ff14;
+      transition:all 0.2s; text-transform:uppercase;
+    }
+    #btn-end-turn:hover { background:rgba(57,255,20,0.25); }
+    #btn-end-turn:disabled { opacity:0.3; cursor:default; }
+
+    /* Status bar */
+    #status-bar {
+      position:fixed; left:0; bottom:0; right:220px; height:36px; z-index:50;
+      background:rgba(7,12,24,0.9); backdrop-filter:blur(6px);
+      border-top:1px solid #1a2d48; border-right:1px solid #1a2d48;
+      display:flex; align-items:center; padding:0 14px; gap:16px;
+    }
+    #status-bar.hidden { display:none; }
+    .status-item {
+      font-family:'Orbitron',monospace; font-size:9px;
+      letter-spacing:1px; color:#4a6580; white-space:nowrap;
+    }
+    .status-item span { color:#ddeeff; }
+    .status-msg { flex:1; font-size:11px; color:#4a6580; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    /* Phase indicator */
+    .phase-badge {
+      font-family:'Orbitron',monospace; font-size:9px;
+      letter-spacing:2px; padding:3px 8px; border-radius:4px;
+      text-transform:uppercase;
+    }
+    .phase-badge.cancer  { background:rgba(255,77,109,0.15); border:1px solid #ff4d6d; color:#ff4d6d; }
+    .phase-badge.draw    { background:rgba(0,229,255,0.12);  border:1px solid #00e5ff; color:#00e5ff; }
+    .phase-badge.play    { background:rgba(57,255,20,0.12);  border:1px solid #39ff14; color:#39ff14; }
+    .phase-badge.mutate  { background:rgba(168,85,247,0.12); border:1px solid #a855f7; color:#a855f7; }
+
+    /* Active effects banner */
+    #effects-bar {
+      position:fixed; left:0; top:52px; right:220px; z-index:40;
+      display:flex; gap:6px; padding:5px 14px; flex-wrap:wrap;
+    }
+    .effect-pill {
+      font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px;
+      padding:3px 8px; border-radius:10px; white-space:nowrap;
+    }
+    .effect-pill.warning { background:rgba(255,159,28,0.15); border:1px solid #ff9f1c; color:#ff9f1c; }
+    .effect-pill.danger  { background:rgba(255,77,109,0.15);  border:1px solid #ff4d6d; color:#ff4d6d; }
+    .effect-pill.success { background:rgba(57,255,20,0.12);   border:1px solid #39ff14; color:#39ff14; }
+    .effect-pill.info    { background:rgba(0,229,255,0.12);   border:1px solid #00e5ff; color:#00e5ff; }
+  </style>
+</head>
+<body>
+
+<!-- ══ HUD ══ -->
+<div id="hud" class="hidden">
+  <div class="hud-logo">IMMUNE<span>QUEST</span></div>
+  <div class="hud-sep"></div>
+  <div class="hud-item" id="hud-turn">Turn <span id="h-turn">1</span></div>
+  <div class="hud-item" id="hud-cells">Cancerous <span id="h-cells">1</span></div>
+  <div class="hud-item" id="hud-score">Score <span id="h-score">0</span></div>
+  <div class="hud-item" id="hud-deck">Deck <span id="h-deck">30</span></div>
+</div>
+
+<!-- ══ Active effects bar ══ -->
+<div id="effects-bar"></div>
+
+<!-- ══ Canvas ══ -->
+<canvas id="game-canvas"></canvas>
+
+<!-- ══ Card panel ══ -->
+<div id="card-panel" class="hidden">
+  <div class="panel-label">Your hand</div>
+  <div class="card-list" id="card-list"></div>
+  <button id="btn-end-turn" onclick="endTurn()">End turn →</button>
+  <div style="margin-top:8px;text-align:center;font-size:9px;color:#2a3a52;font-family:'Orbitron',monospace;letter-spacing:1px;" id="phase-display"></div>
+</div>
+
+<!-- ══ Status bar ══ -->
+<div id="status-bar" class="hidden">
+  <div class="status-item">Deck <span id="s-deck">30</span></div>
+  <div class="status-item">Discard <span id="s-discard">0</span></div>
+  <div class="status-msg" id="s-msg">Select a card then click a target on the board.</div>
+</div>
+
+<!-- ══ Card tooltip ══ -->
+<div id="card-tooltip">
+  <div class="tt-name" id="tt-name"></div>
+  <div id="tt-body"></div>
+</div>
+
+<!-- ══ INTRO / DIFFICULTY SCREEN ══ -->
+<div id="screen-intro" class="screen">
+  <div class="screen-sub">Immune Quest — Cancer Game</div>
+  <div class="screen-title" style="color:#ff4d6d;">Colorectal Cancer</div>
+  <div class="screen-body">
+    Cancer starts when a single cell in your body begins dividing out of control.
+    In colorectal cancer, that cell is in the lining of your large intestine.
+    The body's defence system constantly patrols for these rogue cells — but
+    sometimes a tumour grows faster than the defences can keep up.<br><br>
+    If it escapes into the bloodstream, it can reach other organs like the liver.
+    <strong style="color:#ddeeff;">Your job is to stop it before that happens.</strong>
+  </div>
+  <div class="screen-sub" style="margin-bottom:12px;">Select difficulty</div>
+  <div class="diff-row">
+    <div class="diff-card selected" onclick="selectDiff('normal', this)">
+      <h3>Normal</h3>
+      <p>More cards per turn.<br>Slower mutations.<br>Recommended for new players.</p>
+    </div>
+    <div class="diff-card" onclick="selectDiff('advanced', this)">
+      <h3>Advanced</h3>
+      <p>Standard mutations.<br>Treatment side effects active.</p>
+    </div>
+    <div class="diff-card" onclick="selectDiff('expert', this)">
+      <h3>Expert</h3>
+      <p>Faster mutations.<br>Earlier metastasis.<br>Full penalties.</p>
+    </div>
+  </div>
+  <div class="btn-row" style="margin-top:24px;">
+    <button class="screen-btn btn-primary" onclick="startGame()">Start game →</button>
+    <button class="screen-btn btn-danger" style="font-size:11px;" onclick="window.location.href='../../index.html'">← Back to platform</button>
+  </div>
+</div>
+
+<!-- ══ METASTASIS EVENT SCREEN ══ -->
+<div id="screen-meta" class="screen hidden">
+  <div class="screen-title">🚨 Metastasis detected</div>
+  <div class="site-name" id="meta-site-name">LIVER</div>
+  <div class="screen-body" id="meta-body">
+    The cancer has broken through the intestinal wall and entered the bloodstream.
+  </div>
+  <button class="screen-btn btn-danger" onclick="acknowledgeMetastasis()">Fight on two fronts →</button>
+</div>
+
+<!-- ══ WIN SCREEN ══ -->
+<div id="screen-win" class="screen hidden">
+  <div class="screen-sub">Mission complete</div>
+  <div class="screen-title">Tumour eliminated</div>
+  <div class="score-display" id="win-score">0</div>
+  <div class="screen-body">
+    The immune system has eliminated the tumour. Early detection and a strong immune
+    response made the difference.<br><br>
+    Real treatments like immunotherapy and CAR T-cell therapy work the same way —
+    by helping your immune system find and destroy cancer cells.
+  </div>
+  <div class="btn-row">
+    <button class="screen-btn btn-success" onclick="restartGame()">Play again</button>
+    <button class="screen-btn btn-primary" onclick="window.location.href='../../index.html'">← Platform</button>
+  </div>
+</div>
+
+<!-- ══ LOSE SCREEN ══ -->
+<div id="screen-lose" class="screen hidden">
+  <div class="screen-sub">Game over</div>
+  <div class="screen-title">The tumour spread too far</div>
+  <div class="score-display" style="color:#ff4d6d;" id="lose-score">0</div>
+  <div class="screen-body">
+    The tumour spread too far for the immune system to contain it.
+    This is why screening programmes and early treatment are so important —
+    the earlier a cancer is detected, the more options there are to stop it.
+  </div>
+  <div class="btn-row">
+    <button class="screen-btn btn-primary" onclick="restartGame()">Try again</button>
+    <button class="screen-btn btn-danger"  onclick="window.location.href='../../index.html'">← Platform</button>
+  </div>
+</div>
+
+<!-- ══ Scripts ══ -->
+<script src="config.js"></script>
+<script src="cards.js"></script>
+<script src="board.js"></script>
+<script src="metastasis.js"></script>
+<script src="game.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

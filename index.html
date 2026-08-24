@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Immune Quest</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #070c18;
+      --panel:    #0d1525;
+      --border:   #24406a;
+      --accent:   #00e5ff;
+      --accent2:  #ff4d6d;
+      --accent3:  #39ff14;
+      --text:     #ddeeff;
+      --muted:    #7c9cc4;
+      --virus:    #00e5ff;
+      --bacteria: #ff9f1c;
+      --parasite: #a855f7;
+      --cancer:   #ff4d6d;
+      --stealth:  #39ff14;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body {
+      background:var(--bg); color:var(--text);
+      font-family:'Nunito',sans-serif;
+      min-height:100vh; overflow-x:hidden;
+      display:flex; flex-direction:column;
+    }
+
+    /* Blueprint grid */
+    body::before {
+      content:''; position:fixed; inset:0;
+      background-image:
+        linear-gradient(rgba(0,180,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,180,255,0.04) 1px, transparent 1px);
+      background-size:44px 44px;
+      pointer-events:none; z-index:0;
+    }
+
+    /* Background icon layer */
+    .icon-layer { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+    .heart-icon { position:absolute; opacity:0.07; color:#ff4d6d; animation:heartbeat 1.3s ease-in-out infinite; }
+    @keyframes heartbeat {
+      0%,100%{transform:scale(1)} 15%{transform:scale(1.28)} 30%{transform:scale(1)} 45%{transform:scale(1.14)}
+    }
+    .virus-spin { position:absolute; opacity:0.055; color:#00e5ff; animation:vspin linear infinite; }
+    @keyframes vspin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+    .dna-wrap   { position:absolute; opacity:0.07; }
+    @keyframes dna-spin-y { from{transform:rotateY(0deg)} to{transform:rotateY(360deg)} }
+    .dna-moving { animation:dna-spin-y 3s linear infinite; transform-style:preserve-3d; }
+
+    /* Particles */
+    .particles { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+    .particle  { position:absolute; border-radius:50%; opacity:0; animation:float-up linear infinite; }
+    @keyframes float-up {
+      0%{transform:translateY(100vh);opacity:0} 10%{opacity:0.45} 90%{opacity:0.18} 100%{transform:translateY(-10vh);opacity:0}
+    }
+
+    /* Header */
+    .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(10px); }
+    header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:16px 20px;
+      max-width:1400px; margin:0 auto;
+      position:relative;
+    }
+    .logo { font-family:'Orbitron',monospace; font-size:21px; font-weight:900; color:var(--accent); letter-spacing:2px; text-shadow:0 0 18px rgba(0,229,255,0.45);}
+    .logo span { color:var(--accent2); }
+    .header-tagline { font-family:'Orbitron',monospace; font-size:12px; color:var(--text); letter-spacing:3px; text-transform:uppercase; text-shadow:0 0 10px rgba(0,229,255,0.3); }
+
+    /* ══════════════════════════════════════════════════════════════
+       3-COLUMN LAYOUT
+       ══════════════════════════════════════════════════════════════ */
+    .main {
+      position:relative; z-index:1;
+      display:grid;
+      grid-template-columns: 185px 1fr 185px; /* ← LEFT | CENTRE | RIGHT */
+      max-width:1400px;  /* ← overall page width cap */
+      margin:0 auto;
+      padding:24px 20px 20px; /* ← TOP | HORIZONTAL | BOTTOM */
+      /* Column gap scales with viewport width instead of staying fixed, so
+         narrowing the window doesn't dump all the lost space onto the centre
+         (patient) column alone — the gap gives some of it back too. Caps at
+         150px, matching the original fixed gap once .main hits its 1400px max-width. */
+      gap:0px clamp(24px, 11vw, 150px);
+      align-items:start;
+    }
+
+    /* ══════════════════════════════════════════════════════════════
+       LEFT COLUMN — games panel
+       ══════════════════════════════════════════════════════════════ */
+    .left-col {
+      display:flex; flex-direction:column;
+      gap:18px;        /* ← vertical spacing between items */
+      padding-top:40px; /* ← top offset within column */
+    }
+
+    .panel-label {
+      font-family:'Orbitron',monospace; font-size:9px;
+      letter-spacing:2px; color:var(--muted);
+      text-transform:uppercase; margin-bottom:6px;
+    }
+
+    /* Health status */
+    .health-status-wrap { display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; }
+    .health-bar-label   { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+    .health-pct         { font-family:'Orbitron',monospace; font-size:22px; font-weight:700; color:var(--accent3); text-shadow:0 0 10px rgba(57,255,20,0.5); line-height:1; }
+    .power-track        { width:100%; height:15px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:4px; overflow:hidden; position:relative; }
+    .power-fill         { height:100%; width:25%; background:linear-gradient(90deg,#39ff14,#00e5ff); border-radius:3px; transition:width 1.2s ease; animation:scanline 2s linear infinite; }
+    @keyframes scanline { 0%,100%{box-shadow:inset 0 0 8px rgba(255,255,255,0.2)} 50%{box-shadow:inset 0 0 18px rgba(255,255,255,0.5)} }
+    .power-segs { position:absolute; inset:0; display:flex; }
+    .seg { flex:1; border-right:1px solid rgba(0,0,0,0.22); }
+    .seg:last-child { border-right:none; }
+    .status-text { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; animation:blink 1.6s step-end infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* Game cards */
+    .game-card {
+      border:1px solid var(--border); border-radius:10px;
+      padding:9px 11px; background:var(--panel);
+      cursor:pointer; transition:border-color 0.2s,transform 0.15s,box-shadow 0.2s;
+      position:relative; overflow:hidden;
+    }
+    .game-card::before { content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:2px 2px 0 0; }
+    .game-card.virus::before    { background:var(--virus); }
+    .game-card.bacteria::before { background:var(--bacteria); }
+    .game-card.parasite::before { background:var(--parasite); }
+    .game-card.cancer::before   { background:var(--cancer); }
+    .game-card.stealth::before  { background:var(--stealth); }
+    .game-card:not(.locked):hover { transform:translateX(3px); }
+    .game-card.virus:hover    { border-color:var(--virus);    box-shadow:-3px 0 14px rgba(0,229,255,0.15); }
+    .game-card.bacteria:hover { border-color:var(--bacteria); box-shadow:-3px 0 14px rgba(255,159,28,0.15); }
+    .game-card.parasite:hover { border-color:var(--parasite); box-shadow:-3px 0 14px rgba(168,85,247,0.15); }
+    .game-card.cancer:hover   { border-color:var(--cancer);   box-shadow:-3px 0 14px rgba(255,77,109,0.15); }
+    .game-card.stealth:hover  { border-color:var(--stealth);  box-shadow:-3px 0 14px rgba(57,255,20,0.15); }
+    .game-card.locked { opacity:0.35; cursor:default; filter:grayscale(0.7); }
+    .card-top    { display:flex; justify-content:space-between; align-items:flex-start; }
+    .card-icon   { font-size:17px; }
+    .card-score  { font-family:'Orbitron',monospace; font-size:8px; color:var(--accent); text-align:right; line-height:1.4; }
+    .card-score .score-num { font-size:11px; color:var(--accent3); display:block; }
+    .card-name   { font-family:'Orbitron',monospace; font-size:9px; font-weight:700; letter-spacing:1px; margin:3px 0 1px; }
+    .card-name.virus    { color:var(--virus); }
+    .card-name.bacteria { color:var(--bacteria); }
+    .card-name.parasite { color:var(--parasite); }
+    .card-name.cancer   { color:var(--cancer); }
+    .card-name.stealth  { color:var(--stealth); }
+    .card-sub    { font-size:10px; color:var(--muted); }
+    .card-status { font-size:9px; margin-top:4px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+    .card-status.available  { color:var(--accent3); }
+    .card-status.locked-txt { color:var(--muted); }
+    .card-status.complete   { color:var(--accent); }
+    .card-status.relapse    { color:var(--accent2); animation:blink 1.2s step-end infinite; }
+
+    /* ══════════════════════════════════════════════════════════════
+       CENTRE COLUMN — patient body
+       ══════════════════════════════════════════════════════════════ */
+    .centre-col {
+      display:flex; flex-direction:column; align-items:center; gap:0;
+      justify-content:flex-start; width:100%;
+    }
+    .patient-row {
+      display:flex;
+      align-items:flex-start;
+      justify-content:center;
+      width:100%;
+    }
+    .patient-wrap-outer {
+      display:flex; flex-direction:column; align-items:center; gap:8px;
+      width:100%; /* fills the centre column */
+    }
+    .patient-condition-title {
+      font-family:'Orbitron',monospace; font-size:10px; letter-spacing:3px;
+      color:var(--muted); text-transform:uppercase; text-align:center;
+    }
+    .patient-img-wrap {
+      position:relative;
+      width:100%; max-width:600px; margin: 0 auto;
+      display:flex; flex-direction:column; align-items:center;
+      padding-top: 30px;
+    }
+    .patient-img-inner { position:relative; width:100%; max-width:300px; margin:0 auto; }
+    .patient-img-inner img {
+      width:100%;
+      max-height:720px; /* ← maximum image height; JS also sets this to match left col */
+      display:block; object-fit:contain; mix-blend-mode:screen;
+    }
+
+    /* Tooltip */
+    .tooltip {
+      position:absolute; background:var(--panel);
+      border:1px solid var(--accent); border-radius:8px;
+      padding:9px 12px; pointer-events:none;
+      opacity:0; transition:opacity 0.2s;
+      z-index:200; min-width:155px; max-width:185px;
+      box-shadow:0 0 18px rgba(0,229,255,0.18);
+    }
+    .tooltip.visible { opacity:1; }
+    .tooltip-title  { font-family:'Orbitron',monospace; font-size:10px; margin-bottom:3px; }
+    .tooltip-desc   { font-size:10px; color:var(--muted); line-height:1.5; }
+    .tooltip-action { font-size:9px; margin-top:5px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+
+    .hotspot-blob {
+      position:absolute;
+      cursor:pointer;
+      z-index:20;
+    }
+    .hotspot-blob.locked { cursor:default; opacity:0; pointer-events:none; }
+
+    .blob-dot {
+      width:10px; height:10px; border-radius:50%;
+      border:1.5px solid currentColor;
+      background:rgba(0,0,0,0.8);
+      position:relative;
+      transition:transform 0.15s;
+      box-shadow:0 0 6px currentColor;
+    }
+    .hotspot-blob:not(.locked):hover .blob-dot { transform:scale(1.3); }
+    
+    @keyframes hpulse {
+      0%   { opacity:0.85; r:8px; }
+      100% { opacity:0;    r:40px; }
+    }
+
+    .blob-label {
+      position:absolute; 
+      display: flex; 
+      align-items:center;
+      white-space:nowrap;
+      font-family:'Orbitron',monospace; font-size:9px;
+      letter-spacing:1px; color:currentColor;
+      opacity:0.95; cursor:pointer;
+      text-shadow:0 0 8px currentColor;
+      
+    }
+    
+    .connector-svg { position:absolute; inset:0; z-index:15; overflow:visible; }
+
+    /* ══════════════════════════════════════════════════════════════
+       RIGHT COLUMN — patient chart
+       ══════════════════════════════════════════════════════════════ */
+    .right-col { padding-top:40px; /* ← matches left col top offset */ }
+    .chart-card { border:1px solid var(--border); border-radius:10px; background:var(--panel); overflow:hidden; }
+    .chart-header { background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
+    .chart-header-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--accent); text-transform:uppercase; }
+    .chart-id { font-family:'Share Tech Mono',monospace; font-size:8px; color:var(--muted); }
+    .chart-body { padding:12px 14px; display:flex; flex-direction:column; }
+    .chart-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(26,45,72,0.7); gap:8px; }
+    .chart-row:last-child { border-bottom:none; }
+    .chart-key { font-size:10px; color:var(--muted); white-space:nowrap; font-family:'Share Tech Mono',monospace; }
+    .chart-val { font-family:'Orbitron',monospace; font-size:10px; color:var(--text); text-align:right; }
+    .chart-val.danger  { color:var(--accent2); }
+    .chart-val.warning { color:var(--bacteria); }
+    .chart-val.ok      { color:var(--accent3); }
+    .chart-val.accent  { color:var(--accent); }
+
+    /* Relapse notification banner */
+    .relapse-banner {
+      display:none; margin-bottom:12px;
+      background:rgba(255,77,109,0.1); border:1px solid var(--accent2);
+      border-radius:8px; padding:8px 12px;
+      font-size:10px; color:var(--accent2);
+      font-family:'Share Tech Mono',monospace; line-height:1.5;
+      text-align: center;
+      animation:blink-border 2s ease-in-out infinite;
+    }
+    @keyframes blink-border { 0%,100%{border-color:var(--accent2)} 50%{border-color:transparent} }
+    .relapse-banner.visible { display:block; }
+    .relapse-banner strong { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px; display:block; margin-bottom:3px; }
+
+
+    /* ── Menu button & modal ── */
+    /* Menu button width matches right column (185px), content right-aligned */
+    .menu-btn {
+      background:none; border:1px solid var(--border); border-radius:8px;
+      color:var(--muted); cursor:pointer; padding:7px 12px;
+      font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+      transition:border-color 0.2s, color 0.2s;
+      display:flex; align-items:center; gap:6px;
+      justify-content:flex-end;
+    }
+    .menu-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .menu-btn-icon { font-size:14px; }
+
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(7,12,24,0.88); z-index:1000;
+      align-items:center; justify-content:center;
+      backdrop-filter:blur(6px);
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--panel); border:1px solid var(--border);
+      border-radius:16px; width:100%; max-width:400px; margin:20px;
+      overflow:hidden;
+      box-shadow:0 0 40px rgba(0,229,255,0.12);
+    }
+    .modal-header {
+      background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border);
+      padding:14px 18px; display:flex; justify-content:space-between; align-items:center;
+    }
+    .modal-title { font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--accent); }
+    .modal-close { background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:0 4px; }
+    .modal-close:hover { color:var(--text); }
+    .modal-body { padding:18px; display:flex; flex-direction:column; gap:16px; }
+
+    .modal-section { display:flex; flex-direction:column; gap:8px; }
+    .modal-section-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+
+    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
+    .toggle-row:last-child { border-bottom:none; }
+    .toggle-label { font-size:12px; color:var(--text); }
+    .toggle-sub   { font-size:10px; color:var(--muted); margin-top:2px; }
+    .toggle-switch {
+      position:relative; width:40px; height:22px; flex-shrink:0;
+    }
+    .toggle-switch input { opacity:0; width:0; height:0; }
+    .toggle-slider {
+      position:absolute; inset:0; background:var(--border);
+      border-radius:11px; cursor:pointer; transition:background 0.2s;
+    }
+    .toggle-slider::before {
+      content:''; position:absolute;
+      width:16px; height:16px; left:3px; top:3px;
+      background:#fff; border-radius:50%;
+      transition:transform 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider { background:var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform:translateX(18px); }
+
+    .modal-btn {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px; border-radius:8px;
+      background:rgba(255,255,255,0.04); border:1px solid var(--border);
+      color:var(--text); cursor:pointer; font-size:12px;
+      transition:border-color 0.2s, background 0.2s;
+      text-decoration:none; font-family:'Nunito',sans-serif;
+    }
+    .modal-btn:hover { border-color:var(--accent); background:rgba(0,229,255,0.06); }
+    .modal-btn-icon { font-size:16px; width:20px; text-align:center; }
+
+    .share-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+
+    .about-text { font-size:11px; color:var(--muted); line-height:1.7; }
+    .about-text a { color:var(--accent); text-decoration:none; }
+    .onboarding-dots { display:flex; gap:6px; margin-top:14px; justify-content:center; }
+    .onboarding-dots span {
+      width:6px; height:6px; border-radius:50%; background:var(--border);
+      transition:background 0.2s, transform 0.2s;
+    }
+    .onboarding-dots span.active { background:var(--accent); transform:scale(1.3); }
+
+    .modal-tabs { display:flex; border-bottom:1px solid var(--border); }
+    .modal-tab {
+      flex:1; padding:10px; text-align:center; cursor:pointer;
+      font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px;
+      color:var(--muted); border-bottom:2px solid transparent;
+      transition:color 0.2s, border-color 0.2s;
+    }
+    .modal-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .modal-tab-content { display:none; }
+    .modal-tab-content.active { display:flex; flex-direction:column; gap:12px; }
+
+    .feedback-area {
+      width:100%; background:rgba(255,255,255,0.03); border:1px solid var(--border);
+      border-radius:8px; padding:10px; color:var(--text); font-family:'Nunito',sans-serif;
+      font-size:12px; resize:vertical; min-height:80px; outline:none;
+    }
+    .feedback-area:focus { border-color:var(--accent); }
+    .onboarding-next-btn {
+      padding:8px 16px; background:rgba(57,255,20,0.08); border:1px solid var(--accent3);
+      border-radius:8px; color:var(--accent3); font-family:'Orbitron',monospace;
+      font-size:9px; letter-spacing:1px; cursor:pointer; transition:background 0.2s;
+    }
+    .onboarding-next-btn:hover { background:rgba(57,255,20,0.18); }
+      padding:9px 18px; background:rgba(0,229,255,0.1); border:1px solid var(--accent);
+      border-radius:8px; color:var(--accent); font-family:'Orbitron',monospace;
+      font-size:9px; letter-spacing:2px; cursor:pointer; align-self:flex-end;
+      transition:background 0.2s;
+    }
+    .feedback-submit:hover { background:rgba(0,229,255,0.2); }
+
+    footer { position:relative; z-index:1; text-align:center; padding:14px; font-size:11px; color:var(--muted); border-top:1px solid var(--border); letter-spacing:1px; margin-top:auto; }
+
+    /* ══ Unlock toast ══ */
+    .unlock-toast {
+      position:fixed; top:24px; left:50%; transform:translateX(-50%) translateY(-20px);
+      z-index:5000;
+      background:var(--panel); border:1px solid var(--accent3); border-radius:10px;
+      padding:12px 18px; display:flex; align-items:center; gap:10px;
+      box-shadow:0 0 30px rgba(57,255,20,0.25);
+      opacity:0; pointer-events:none;
+      transition:opacity 0.3s ease, transform 0.3s ease;
+    }
+    .unlock-toast.visible { opacity:1; transform:translateX(-50%) translateY(0); }
+    .unlock-toast-icon { font-size:18px; }
+    .unlock-toast-text { font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px; color:var(--accent3); }
+    .unlock-toast-text span { display:block; font-family:'Nunito',sans-serif; font-size:10px; letter-spacing:0; color:var(--muted); margin-top:2px; font-weight:400; text-transform:none; }
+    .main { flex:1; }
+    footer a { color:var(--accent); text-decoration:none; }
+
+    /* ══ Game modal ══ */
+    .game-modal-overlay {
+      position:fixed; inset:0; z-index:3000;
+      background:#000;
+      display:flex; align-items:stretch; justify-content:stretch;
+    }
+    .game-modal-inner {
+      position:relative;
+      width:100%; height:100%; max-width:none; margin:0;
+      display:flex; flex-direction:column; gap:0;
+      background:var(--panel); border:none;
+      border-radius:0; overflow:hidden;
+      box-shadow:none;
+    }
+
+    /* ── Self-report panel — shown over the still-visible game on Exit,
+       since the compiled build doesn't postMessage its result back. Sits
+       near the top of the screen for visibility, rather than the bottom
+       where it could go unnoticed under the game's own UI. ── */
+    .score-report {
+      position:absolute; left:50%; top:28px; transform:translateX(-50%);
+      z-index:20;
+      background:rgba(13,21,37,0.96); border:1px solid var(--accent);
+      border-radius:12px; padding:16px 20px;
+      box-shadow:0 0 30px rgba(0,229,255,0.25), 0 8px 24px rgba(0,0,0,0.5);
+      backdrop-filter:blur(8px);
+      width:300px; max-width:90vw;
+      display:none; flex-direction:column; gap:12px; align-items:center;
+    }
+    .score-report-title { font-family:'Orbitron',monospace; font-size:11px; letter-spacing:1px; color:var(--text); text-align:center; }
+    .score-report-sub    { font-size:11px; color:var(--muted); text-align:center; }
+    .score-report-stage  { display:flex; flex-direction:column; gap:10px; align-items:center; width:100%; }
+    .score-report-actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+    .score-report-btn {
+      background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px;
+      color:var(--text); cursor:pointer; padding:9px 16px;
+      font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px;
+      transition:border-color 0.2s, background 0.2s;
+    }
+    .score-report-btn:hover { border-color:var(--accent); background:rgba(0,229,255,0.08); }
+    .score-report-btn.primary { border-color:var(--accent3); color:var(--accent3); }
+    .score-report-btn.primary:hover { background:rgba(57,255,20,0.1); }
+    .score-report-input {
+      background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px;
+      color:var(--text); padding:8px 12px; font-family:'Share Tech Mono',monospace; font-size:14px;
+      width:120px; text-align:center; outline:none;
+    }
+    .score-report-input:focus { border-color:var(--accent); }
+    /* In real browser fullscreen (requestFullscreen on this element),
+       :fullscreen still needs explicit 100% sizing — some browsers don't
+       otherwise stretch a flex child to the fullscreen viewport. */
+    .game-modal-inner:fullscreen { width:100vw; height:100vh; }
+    .game-modal-bar {
+      flex:0 0 auto;
+      display:flex; justify-content:space-between; align-items:center;
+      padding:10px 16px; background:rgba(0,180,255,0.06);
+      border-bottom:1px solid var(--border);
+    }
+    .game-modal-title {
+      display:flex; align-items:center; gap:9px;
+    }
+    .game-modal-logo {
+      font-family:'Orbitron',monospace; font-size:13px; font-weight:900; color:var(--accent);
+      letter-spacing:1.5px; text-shadow:0 0 14px rgba(0,229,255,0.4);
+    }
+    .game-modal-logo span { color:var(--accent2); }
+    .game-modal-gamename {
+      font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--muted);
+      padding-left:9px; border-left:1px solid var(--border);
+    }
+    .game-modal-fs, .game-modal-close {
+      background:none; border:1px solid var(--border); border-radius:8px;
+      color:var(--muted); cursor:pointer; padding:6px 12px;
+      font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px;
+      transition:border-color 0.2s, color 0.2s;
+    }
+    .game-modal-fs:hover { border-color:var(--accent); color:var(--accent); }
+    .game-modal-close:hover { border-color:var(--accent2); color:var(--accent2); }
+    .game-modal-frame-wrap {
+      width:100%; flex:1 1 auto; min-height:0; background:#000;
+      display:flex; align-items:stretch; justify-content:stretch;
+      position:relative; overflow:hidden;
+    }
+    .game-modal-frame-wrap iframe { width:100%; height:100%; border:none; display:block; flex:1; }
+
+    /* Responsive */
+    @media (max-width:860px) {
+      header { padding:14px 20px; }
+      .logo { font-size:16px; }
+      .header-tagline { font-size:9px; letter-spacing:2px; }
+      .main { grid-template-columns:1fr; padding:14px; gap:16px; }
+      .health-status-wrap { min-width:160px; }
+      .patient-row { gap:8px; }
+      .thermo-outer { width:18px; height:110px; } /* tablet: narrower tube */
+      .patient-img-wrap { width:100%; max-width:320px; }
+    }
+
+    /* Phone layout — reorder to Patient -> Games -> Chart (instead of DOM order
+       Games -> Patient -> Chart), since the patient visual is the most orienting
+       thing to see first on a small screen. */
+    @media (max-width:600px) {
+      .main { display:flex; flex-direction:column; padding:12px; gap:18px; }
+      .left-col {
+        display:flex; flex-direction:column; padding-top:0; gap:18px;
+        order:1; /* left-col (patient+games) before right-col (chart) */
+      }
+      .left-col .patient-wrap-outer { order:1; } /* patient first within left-col */
+      .left-col .games-block        { order:2; } /* games second within left-col */
+      .right-col { order:2; padding-top:0; } /* chart last, overrides earlier order:-1 */
+      .patient-img-wrap { width:100%; max-width:none; }
+      .game-card { padding:10px 12px; }
+    }
+  </style>
+  <link rel="stylesheet" href="./games/shared/ui.css">
+</head>
+<body>
+
+<div class="icon-layer" id="icon-layer"></div>
+<div class="particles" id="particles"></div>
+
+<div class="header-outer"></div>
+
+<div class="main">
+
+  <!-- ══ LEFT COL ══ -->
+  <div class="left-col">
+
+    <div style="width:100%" class="games-block">
+      <div class="panel-label">Games</div>
+      <div style="display:flex;flex-direction:column;gap:7px;" id="game-cards">
+
+        <div class="game-card virus" id="card-virus"
+             onclick="launchGame('virus')"
+             onmouseenter="highlightBlob('virus')"
+             onmouseleave="unhighlightBlob('virus')">
+          <div class="card-top">
+            <div class="card-icon">🦠</div>
+            <div class="card-score" id="score-virus"><span class="score-num" id="scorenum-virus">—</span>Best</div>
+          </div>
+          <div class="card-name virus">Virus</div>
+          <div class="card-sub">The Infection Game • legacy</div>
+          <div class="card-status available" id="vstatus">▶ Play</div>
+        </div>
+
+        <!-- Stealth mode — unlocked after first virus completion -->
+        <div class="game-card stealth locked" id="card-stealth">
+          <div class="card-top">
+            <div class="card-icon">🥷</div>
+            <div class="card-score" id="score-stealth"><span class="score-num" id="scorenum-stealth">—</span>Best</div>
+          </div>
+          <div class="card-name stealth">Stealth mission</div>
+          <div class="card-sub">Play as the virus</div>
+          <div class="card-status locked-txt" id="stealth-status">🔒 Complete virus game</div>
+        </div>
+
+        <div class="game-card bacteria locked" id="card-bacteria">
+          <div class="card-top"><div class="card-icon">🧫</div></div>
+          <div class="card-name bacteria">Bacteria</div>
+          <div class="card-sub">Intestine</div>
+          <div class="card-status locked-txt">⬛ Coming soon</div>
+        </div>
+
+        <div class="game-card parasite locked" id="card-parasite">
+          <div class="card-top"><div class="card-icon">🦟</div></div>
+          <div class="card-name parasite">Parasite</div>
+          <div class="card-sub">Liver/Blood</div>
+          <div class="card-status locked-txt">⬛ Coming soon</div>
+        </div>
+
+        <div class="game-card cancer locked" id="card-cancer">
+          <div class="card-top"><div class="card-icon">🔬</div></div>
+          <div class="card-name cancer">Cancer</div>
+          <div class="card-sub">Skin</div>
+          <div class="card-status locked-txt">⬛ Coming soon</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CENTRE COL ══ -->
+  <div class="centre-col">
+    <!-- Relapse banner -->
+    <div class="relapse-banner" id="relapse-banner">
+      <strong>⚠ New condition detected</strong>
+      The patient has relapsed. A condition requires treatment.
+    </div>
+
+    <div class="patient-row">
+
+      <div class="patient-wrap-outer">
+      <div class="patient-condition-title">Select a condition to treat</div>
+      <!-- Patient image + blobs + connectors -->
+      <div class="patient-img-wrap">
+
+        <div class="patient-img-inner" id="patient-inner">
+
+          <!-- Connector SVG overlay -->
+          <svg class="connector-svg" id="connectors" viewBox="0 0 340 680" preserveAspectRatio="none"></svg>
+
+          <!-- Tooltip -->
+          <div class="tooltip" id="tooltip">
+            <div class="tooltip-title"  id="tt-title"></div>
+            <div class="tooltip-desc"   id="tt-desc"></div>
+            <div class="tooltip-action" id="tt-action"></div>
+          </div>
+
+          <img src="assets/images/patient/patient.png"
+               alt="Patient body"
+               id="patient-img"
+               style="width:100%;height:100%;object-fit:contain;display:block;mix-blend-mode:screen;"
+               onerror="this.style.display='none';document.getElementById('patient-fallback').style.display='flex'">
+
+          <!-- Fallback if image not found -->
+          <div id="patient-fallback" style="display:none;width:100%;aspect-ratio:9/19;background:linear-gradient(180deg,#111e36,#0a1220);border:1px dashed #1e3050;border-radius:12px;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+            <svg viewBox="0 0 100 200" style="width:50%;opacity:0.2;" fill="#4a6580">
+              <ellipse cx="50" cy="18" rx="16" ry="17"/>
+              <rect x="39" y="33" width="22" height="10" rx="3"/>
+              <path d="M28 43 Q18 48 17 80 L17 125 Q17 135 28 137 L72 137 Q83 135 83 125 L83 80 Q82 48 72 43 Z"/>
+              <path d="M28 50 Q12 55 10 90 Q8 112 14 124 Q22 134 28 128 L30 80 Z"/>
+              <path d="M72 50 Q88 55 90 90 Q92 112 86 124 Q78 134 72 128 L70 80 Z"/>
+              <path d="M38 136 Q34 150 33 175 Q32 190 36 197 L50 197 L50 137 Z"/>
+              <path d="M62 136 Q66 150 67 175 Q68 190 64 197 L50 197 L50 137 Z"/>
+            </svg>
+            <div style="font-size:9px;color:var(--muted);text-align:center;padding:0 12px;">assets/images/patient/patient.png</div>
+          </div>
+
+          <!-- Hotspot blobs — positioned via JS -->
+          <div class="hotspot-blob" id="blob-virus" style="color:var(--virus)"
+               onmouseenter="showTooltip(event,'virus')" onmouseleave="hideTooltip()"
+               onclick="launchGame('virus')" title="The Infection Game (original)">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-virus" style="display:none;">VIRUS</div>
+          </div>
+
+          <div class="hotspot-blob locked" id="blob-stealth" style="color:var(--stealth)"
+               onmouseenter="showTooltip(event,'stealth')" onmouseleave="hideTooltip()">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-stealth" style="display:none;">STEALTH</div>
+          </div>
+
+          <div class="hotspot-blob locked" id="blob-bacteria" style="color:var(--bacteria)"
+               onmouseenter="showTooltip(event,'bacteria')" onmouseleave="hideTooltip()">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-bacteria" style="display:none;">BACTERIA</div>
+          </div>
+
+          <div class="hotspot-blob locked" id="blob-parasite" style="color:var(--parasite)"
+               onmouseenter="showTooltip(event,'parasite')" onmouseleave="hideTooltip()">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-parasite" style="display:none;">PARASITE</div>
+          </div>
+
+          <div class="hotspot-blob locked" id="blob-cancer" style="color:var(--cancer)"
+               onmouseenter="showTooltip(event,'cancer')" onmouseleave="hideTooltip()">
+            <div class="blob-dot"></div>
+            <div class="blob-label" id="blabel-cancer" style="display:none;">CANCER</div>
+          </div>
+
+        </div><!-- /patient-img-inner -->
+
+      </div><!-- /patient-img-wrap -->
+      </div><!-- /patient-wrap-outer -->
+
+    </div><!-- /patient-row -->
+
+  </div>
+
+  <!-- ══ RIGHT COL — patient chart ══ -->
+  <div class="right-col">
+
+    <!-- Health status — moved from left col -->
+    <div class="health-status-wrap" style="margin-bottom:16px;">
+      <div class="health-bar-label">Health status</div>
+      <div class="health-pct" id="power-pct">25%</div>
+      <div class="power-track">
+        <div class="power-fill" id="power-fill">
+          <div class="power-segs">
+            <div class="seg"></div><div class="seg"></div><div class="seg"></div>
+            <div class="seg"></div><div class="seg"></div><div class="seg"></div>
+            <div class="seg"></div><div class="seg"></div><div class="seg"></div>
+            <div class="seg"></div>
+          </div>
+        </div>
+      </div>
+      <div class="status-text" id="status-text" style="color:var(--accent2)">⚠ Critical condition</div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-header-title">Patient chart</div>
+          <div class="chart-id" style="margin-top:3px;">ID #IQ-001</div>
+        </div>
+      </div>
+      <div class="chart-body">
+
+        
+        <div class="chart-row" style="align-items:flex-start;flex-direction:column;gap:4px;">
+          <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+            <div class="chart-key">Temperature</div>
+            <div class="chart-val danger" id="c-temp">39.2 °C</div>
+          </div>
+          <!-- Mini thermometer bar: yellow=low/healthy (left), red=high/fever (right) -->
+          <div style="width:100%;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;position:relative;">
+            <div id="c-temp-bar" style="position:absolute;top:0;left:0;bottom:0;width:72%;background:linear-gradient(to right,#ffdb58,#ff9f1c,#ff4d6d);border-radius:3px;transition:width 1.2s ease;"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;width:100%;padding-bottom:15px;">
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">37°C</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">39°C</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">41°C</span>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Status</div>
+          <div class="chart-val danger" id="c-status">Critical</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Conditions</div>
+          <div class="chart-val danger" id="c-active">4 active</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Treated</div>
+          <div class="chart-val ok" id="c-cleared">0 / 4</div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-key">Sessions</div>
+          <div class="chart-val accent" id="c-played">0</div>
+        </div>
+
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);text-align:right;min-height:12px;" id="c-timestamp">—</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /main -->
+
+<!-- ══ Game Modal ══ -->
+<div class="game-modal-overlay" id="game-modal" style="display:none;">
+  <div class="game-modal-inner" id="game-modal-inner">
+    <div class="game-modal-bar" id="game-modal-bar">
+      <div class="game-modal-title" id="game-modal-title">
+        <span class="game-modal-logo">IMMUNE<span>QUEST</span></span>
+        <span class="game-modal-gamename" id="game-modal-gamename">VIRUS</span>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button class="game-modal-fs" onclick="goFullscreen()" title="Fullscreen" id="btn-fullscreen">⛶ Fullscreen</button>
+        <button class="game-modal-fs" onclick="exitFullscreenOnly()" title="Minimise" id="btn-minimise" style="display:none;">⤢ Minimise</button>
+        <button class="game-modal-close" onclick="requestCloseGame()" aria-label="Close">✕ Exit</button>
+      </div>
+    </div>
+    <div class="game-modal-frame-wrap" id="game-frame-wrap">
+      <iframe id="game-iframe" frameborder="0" style="display:none;"
+        src="" allowfullscreen allow="fullscreen"></iframe>
+    </div>
+
+    <!-- Self-report panel: game stays visible behind it so the player can read their score -->
+    <div class="score-report" id="score-report">
+      <div class="score-report-stage" id="score-report-stage-ask">
+        <div class="score-report-title">Did you complete the mission?</div>
+        <div class="score-report-actions">
+          <button class="score-report-btn primary" onclick="scoreReportWon()">✓ Yes, I won!</button>
+          <button class="score-report-btn" onclick="scoreReportNotYet()">Not yet</button>
+        </div>
+      </div>
+      <div class="score-report-stage" id="score-report-stage-score" style="display:none;">
+        <div class="score-report-title">Nice work!</div>
+        <div class="score-report-sub">Enter the score shown on screen:</div>
+        <input type="number" id="score-report-input" class="score-report-input" min="0" inputmode="numeric" placeholder="Score">
+        <button class="score-report-btn primary" onclick="scoreReportSubmit()">Confirm →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer></footer>
+
+<!-- Menu Modal — Main Platform (Tabbed menu with About, Settings, Share, Feedback) -->
+<div class="modal-overlay" id="menu-modal" onclick="closeMenuOutside(event)">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <div class="modal-title">Menu</div>
+      <button class="modal-close" onclick="closeMenu()">✕</button>
+    </div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" onclick="switchTab('about')">About</div>
+      <div class="modal-tab" onclick="switchTab('settings')">Settings</div>
+      <div class="modal-tab" onclick="switchTab('share')">Share</div>
+      <div class="modal-tab" onclick="switchTab('feedback')">Feedback</div>
+    </div>
+    <div class="modal-body">
+
+      <!-- About tab -->
+      <div class="modal-tab-content active" id="tab-about">
+        <div class="modal-section">
+          <div class="modal-section-title">About</div>
+          <div class="about-text">
+            <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
+
+            <span style="color:var(--muted)">Version 1.0 · Developed 2026 by Arwen Altenburg with Claude (Sonnet 4.6, 5) & Gemini Flash 3.</span><br><br>
+
+            <b>The Infection Game (legacy)</b><br>
+            Original game developed by Dr AJ te Velthuis (Princeton University) and Dr Arwen Altenburg (University of Cambridge) with SKYLE games. Artwork by Ramon Calvante. A massive thank you to Dr Ingrida Olendraite for her assistance and to the University of Cambridge School of Biological Sciences and the British Society for Immunology for their financial support.<br><br>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings tab -->
+      <div class="modal-tab-content" id="tab-settings">
+        <div class="modal-section">
+          <div class="modal-section-title">Privacy</div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Share anonymous play stats</div>
+              <div class="toggle-sub">Helps us understand how the game is used. No personal data collected.</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-tracking" checked onchange="setTracking(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-section">
+          <div class="modal-section-title">Progress (this device)</div>
+          <div class="modal-btn" style="cursor:pointer; align-self:flex-start;" onclick="resetProgress()">
+            <span class="modal-btn-icon">↺</span> Reset all progress
+          </div>
+        </div>
+      </div>
+
+      <!-- Share tab -->
+      <div class="modal-tab-content" id="tab-share">
+        <div class="modal-section">
+          <div class="modal-section-title">Share Immune Quest</div>
+          <div class="share-grid">
+            <a class="modal-btn" onclick="shareTwitter()">
+              <span class="modal-btn-icon">𝕏</span> X / Twitter
+            </a>
+            <a class="modal-btn" onclick="shareWhatsApp()">
+              <span class="modal-btn-icon">💬</span> WhatsApp
+            </a>
+            <a class="modal-btn" onclick="shareEmail()">
+              <span class="modal-btn-icon">✉</span> Email
+            </a>
+            <a class="modal-btn" onclick="copyLink()">
+              <span class="modal-btn-icon">🔗</span> <span id="copy-label">Copy link</span>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feedback tab -->
+      <div class="modal-tab-content" id="tab-feedback">
+        <div class="modal-section">
+          <div class="modal-section-title">Send feedback</div>
+          <textarea class="feedback-area" id="feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..."></textarea>
+          <button class="feedback-submit" onclick="submitFeedback()">Send →</button>
+          <div id="feedback-confirm" style="font-size:10px;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Unlock toast — page-level, shown after returning from the game (not while the game modal is open) -->
+<div class="unlock-toast" id="unlock-toast">
+  <div class="unlock-toast-icon">🔓</div>
+  <div class="unlock-toast-text">Stealth mission unlocked<span>Play as the virus against the immune system</span></div>
+</div>
+
+<!-- Onboarding walkthrough — auto-shown once on first visit, replayable via the "?" button -->
+<div class="modal-overlay" id="onboarding-modal" onclick="if(event.target===this) closeOnboarding()">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title" id="onboarding-title">Welcome to Immune Quest</div>
+      <button class="modal-close" onclick="closeOnboarding()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <div class="about-text" id="onboarding-text">
+          You're looking after a patient fighting off disease. Treat the different conditions by playing games where you act as the immune system.
+        </div>
+        <div class="onboarding-dots" id="onboarding-dots"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+          <button class="modal-btn" style="cursor:pointer; padding:7px 14px; font-size:9px;" onclick="skipOnboarding()">Skip</button>
+          <button class="onboarding-next-btn" id="onboarding-next-btn" onclick="onboardingNext()">Next →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+//  HOTSPOT CONFIG
+//  orgX/orgY = % position on the patient image where the connector line should point
+//  blobSide  = which side of the image the blob dot sits ('left' or 'right')
+//  blobY     = % down the image where blob dot appears
+//  labelSide = which side of dot the label appears
+//  Calibrated to patient.png (1300×930 original, displayed at 240px wide)
+// ════════════════════════════════════════════════
+const HOTSPOT_CONFIG = {
+  virus:    { orgX:60, orgY:24, blobX:107, blobY:20, labelSide:'right' },  // lungs
+  stealth:  { orgX:40, orgY:29, blobX:-3,  blobY:24, labelSide:'left', pulseDur:2.4 },  // other lung — offset lower/closer to break symmetry, slower pulse
+  bacteria: { orgX:78, orgY:38, blobX:107, blobY:41, labelSide:'right' },  // left arm bloodstream
+  parasite: { orgX:42, orgY:30, blobX:-7, blobY:35, labelSide:'left' },  // liver (right side)
+  cancer:   { orgX:49, orgY:17, blobX:20,  blobY:12, labelSide:'left'  },  // neck
+};
+
+// ════════════════════════════════════════════════
+//  POSITION BLOBS & DRAW CONNECTOR LINES
+// ════════════════════════════════════════════════
+function positionBlobs() {
+  const inner = document.getElementById('patient-inner');
+  const W = inner.offsetWidth;
+  const H = inner.offsetHeight;
+  if (!W || !H) { setTimeout(positionBlobs, 100); return; }
+
+  const svg = document.getElementById('connectors');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+
+  // Glow filter for solid organ dot
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  defs.innerHTML = `<filter id="dot-glow" x="-150%" y="-150%" width="400%" height="400%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>`;
+  svg.appendChild(defs);
+
+  const colours = { virus:'#00e5ff', stealth:'#39ff14', bacteria:'#ff9f1c', parasite:'#a855f7', cancer:'#ff4d6d' };
+
+  Object.entries(HOTSPOT_CONFIG).forEach(([type, cfg]) => {
+    const blob  = document.getElementById('blob-' + type);
+    const label = document.getElementById('blabel-' + type);
+    if (!blob) return;
+
+    const isLocked = blob.classList.contains('locked');
+
+    // blobX: >100 = % beyond right edge; negative = % before left edge; else straight %
+    let bx;
+    if (cfg.blobX > 100)    bx = W + (cfg.blobX - 100) / 100 * W * 0.12;
+    else if (cfg.blobX < 0) bx = (cfg.blobX / 100) * W * 0.12;
+    else                     bx = (cfg.blobX / 100) * W;
+    const by = (cfg.blobY / 100) * H;
+    
+    blob.style.display = 'none';
+
+    // ── LOCKED games: no line, no organ dot, no pulse — skip SVG entirely ──
+    if (isLocked) return;
+
+    const ox = (cfg.orgX / 100) * W;
+    const oy = (cfg.orgY / 100) * H;
+    const col = colours[type];
+
+    // Dashed connector line from label dot to organ
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', bx);  line.setAttribute('y1', by);
+    line.setAttribute('x2', ox);  line.setAttribute('y2', oy);
+    line.setAttribute('stroke', col);
+    line.setAttribute('stroke-width','1');
+    line.setAttribute('stroke-dasharray','3 3');
+    line.setAttribute('opacity','0.5');
+    svg.appendChild(line);
+    
+    // Invisible larger hit-area behind the label dot — makes the click target forgiving
+    // rather than requiring the pointer to land on the tiny 4px visible dot exactly.
+    const hitArea = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    hitArea.setAttribute('cx', bx);
+    hitArea.setAttribute('cy', by);
+    hitArea.setAttribute('r', '16');
+    hitArea.setAttribute('fill', 'transparent');
+    hitArea.style.cursor = 'pointer';
+    hitArea.onclick = () => launchGame(type);
+    hitArea.addEventListener('mousemove', e => showTooltip(e, type));
+    hitArea.addEventListener('mouseleave', hideTooltip);
+    svg.appendChild(hitArea);
+
+    // 2. Draw the "Label Dot" (The one that was floating)
+    const labelDot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    labelDot.setAttribute('cx', bx);
+    labelDot.setAttribute('cy', by);
+    labelDot.setAttribute('r', '4');
+    labelDot.setAttribute('fill', 'black');
+    labelDot.setAttribute('stroke', col);
+    labelDot.setAttribute('stroke-width', '1.5');
+    labelDot.setAttribute('filter', 'url(#dot-glow)');
+    labelDot.style.cursor = 'pointer';
+    // Add click event to SVG dot
+    labelDot.onclick = () => launchGame(type);
+    labelDot.addEventListener('mousemove', e => showTooltip(e, type));
+    labelDot.addEventListener('mouseleave', hideTooltip);
+    svg.appendChild(labelDot);
+
+    // Static dot at organ location (pulse origin) — with glow
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', ox); dot.setAttribute('cy', oy);
+    dot.setAttribute('r','3');
+    dot.setAttribute('fill', col);
+    dot.setAttribute('opacity','0.65');
+    dot.style.cursor = 'pointer';
+    dot.onclick = () => launchGame(type);
+    dot.addEventListener('mousemove', e => showTooltip(e, type));
+    dot.addEventListener('mouseleave', hideTooltip);
+    svg.appendChild(dot);
+
+    // SVG text label at blob dot (bx,by) — aligned exactly with line endpoint
+    // dot sits between line and label; label reads outward from dot
+    const dotR = 10; // half of 10px CSS dot + small gap
+    const svgText = document.createElementNS('http://www.w3.org/2000/svg','text');
+    svgText.setAttribute('y', by);
+    svgText.setAttribute('dominant-baseline', 'central');
+    svgText.setAttribute('fill', col);
+    svgText.setAttribute('font-family', 'Orbitron, monospace');
+    svgText.setAttribute('font-size', '9');
+    svgText.setAttribute('letter-spacing', '1');
+    svgText.setAttribute('opacity', '0.95');
+    svgText.style.cursor = 'pointer';
+    if (cfg.labelSide === 'right') {
+      svgText.setAttribute('x', bx + dotR);
+      svgText.setAttribute('text-anchor', 'start');
+    } else {
+      svgText.setAttribute('x', bx - dotR);
+      svgText.setAttribute('text-anchor', 'end');
+    }
+    svgText.textContent = type.toUpperCase();
+    svgText.onclick = () => launchGame(type);
+    svgText.addEventListener('mousemove', e => showTooltip(e, type));
+    svgText.addEventListener('mouseleave', hideTooltip);
+    svg.appendChild(svgText);
+
+    // Three staggered pulse rings expanding from organ location
+    // pulseDur lets a type run its pulse at a different rate (e.g. to break visual symmetry
+    // between two similar blobs); stagger delays scale with it so the 3 rings stay evenly spaced.
+    const pulseDur = cfg.pulseDur || 1.8;
+    [0, pulseDur / 2.77, pulseDur / 1.38].forEach(delay => {
+      const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      ring.setAttribute('cx', ox); ring.setAttribute('cy', oy);
+      ring.setAttribute('r','4');
+      ring.setAttribute('fill','none');
+      ring.setAttribute('stroke', col);
+      ring.setAttribute('stroke-width','1.8');
+      ring.setAttribute('opacity','0');
+      ring.innerHTML = `
+        <animate attributeName="r"       from="4"   to="36"  dur="${pulseDur}s" begin="${delay.toFixed(2)}s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" from="0.75" to="0"  dur="${pulseDur}s" begin="${delay.toFixed(2)}s" repeatCount="indefinite"/>
+      `;
+      svg.appendChild(ring);
+    });
+  });
+}
+
+function syncPatientHeight() {
+  const leftCol = document.querySelector('.left-col');
+  const img = document.getElementById('patient-img');
+  if (!leftCol || !img) return;
+  const leftH = leftCol.offsetHeight;
+  if (leftH > 200) {
+    img.style.maxHeight = leftH + 'px';
+  }
+}
+
+window.addEventListener('load', () => { positionBlobs(); syncPatientHeight(); });
+window.addEventListener('resize', () => { positionBlobs(); syncPatientHeight(); });
+
+// ════════════════════════════════════════════════
+//  BACKGROUND ICONS
+// ════════════════════════════════════════════════
+(function() {
+  const layer = document.getElementById('icon-layer');
+  const placed = []; // track placed positions to avoid overlap
+
+  function noOverlap(x, y, r, minDist) {
+    return placed.every(p => Math.hypot(p.x - x, p.y - y) > (minDist + p.r));
+  }
+  function placeRandom(attempts, minDist, r, fn) {
+    for (let a = 0; a < attempts; a++) {
+      const x = 5 + Math.random() * 90;
+      const y = 5 + Math.random() * 90;
+      if (noOverlap(x, y, r, minDist)) {
+        placed.push({x, y, r});
+        fn(x, y);
+        return;
+      }
+    }
+  }
+
+  // Hearts
+  for (let i = 0; i < 6; i++) {
+    placeRandom(20, 12, 3, (x, y) => {
+      const el = document.createElement('div');
+      el.className = 'heart-icon';
+      el.textContent = '♥';
+      el.style.cssText = `left:${x}%;top:${y}%;font-size:${18+Math.random()*14}px;animation-delay:${Math.random()*1.3}s`;
+      layer.appendChild(el);
+    });
+  }
+
+  // Virus shapes
+  for (let i = 0; i < 7; i++) {
+    placeRandom(20, 10, 2, (x, y) => {
+      const el = document.createElement('div');
+      el.className = 'virus-spin';
+      el.textContent = ['⬡','✦','⬢','✧'][Math.floor(Math.random()*4)];
+      el.style.cssText = `left:${x}%;top:${y}%;font-size:${14+Math.random()*18}px;animation-duration:${5+Math.random()*9}s;animation-delay:${Math.random()*6}s`;
+      layer.appendChild(el);
+    });
+  }
+
+  // DNA helices — spin on own axis (rotateY)
+  for (let i = 0; i < 5; i++) {
+    placeRandom(20, 14, 4, (x, y) => {
+      const wrap = document.createElement('div');
+      wrap.className = 'dna-wrap';
+      wrap.style.cssText = `left:${x}%;top:${y}%;perspective:200px;`;
+      const dh=70, dw=18, steps=8; let p1='', p2='';
+      for (let s=0;s<=steps;s++) {
+        const sy=(s/steps)*dh, x1=dw/2+(dw/2)*Math.sin((s/steps)*Math.PI*2), x2=dw/2-(dw/2)*Math.sin((s/steps)*Math.PI*2);
+        p1+=(s===0?'M':'L')+x1.toFixed(1)+','+sy.toFixed(1)+' ';
+        p2+=(s===0?'M':'L')+x2.toFixed(1)+','+sy.toFixed(1)+' ';
+      }
+      const dur = (2.5+Math.random()*3).toFixed(1);
+      wrap.innerHTML = `<svg width="${dw}" height="${dh}" viewBox="0 0 ${dw} ${dh}" class="dna-moving" style="animation-duration:${dur}s"><path d="${p1}" stroke="#00bfff" stroke-width="1.2" fill="none"/><path d="${p2}" stroke="#00bfff" stroke-width="1.2" fill="none" stroke-dasharray="3,3"/></svg>`;
+      layer.appendChild(wrap);
+    });
+  }
+})();
+
+// Particles
+(function() {
+  const c=document.getElementById('particles');
+  const cols=['#00e5ff','#ff4d6d','#39ff14','#a855f7','#ff9f1c'];
+  for(let i=0;i<22;i++){
+    const p=document.createElement('div'); p.className='particle';
+    const sz=Math.random()*3+1.5;
+    p.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;background:${cols[Math.floor(Math.random()*cols.length)]};animation-duration:${9+Math.random()*13}s;animation-delay:${Math.random()*12}s`;
+    c.appendChild(p);
+  }
+})();
+
+// ════════════════════════════════════════════════
+//  TOOLTIP
+// ════════════════════════════════════════════════
+const tooltipEl = document.getElementById('tooltip');
+const zoneInfo = {
+  virus:    { title:'Virus',   desc:'Can you stop a rapidly spreading virus with the power of the immune system?', action:'Play →', color:'var(--virus)',    available:true  },
+  stealth:  { title:'Stealth mission', desc:'Play as the virus against the immune system. Unlocked early — game in development.', action:'Coming soon', color:'var(--stealth)', available:false },
+  bacteria: { title:'Bacteria', desc:'Bacteria are spreading. Treatment in development.',           action:'Coming soon',   color:'var(--bacteria)', available:false },
+  parasite: { title:'Parasite',desc:'Parasites are present. Treatment in development.',                 action:'Coming soon',   color:'var(--parasite)', available:false },
+  cancer:   { title:'Cancer',          desc:'Abnormal cells are dividing uncontrolled. Treatment in development.',      action:'Coming soon',   color:'var(--cancer)',   available:false },
+};
+function showTooltip(e, type) {
+  const info = zoneInfo[type];
+  document.getElementById('tt-title').textContent = info.title;
+  document.getElementById('tt-title').style.color = info.color;
+  document.getElementById('tt-desc').textContent  = info.desc;
+  const act = document.getElementById('tt-action');
+  act.textContent = info.action;
+  act.style.color = info.available ? '#39ff14' : '#4a6580';
+  tooltipEl.classList.add('visible');
+  const wrap = document.getElementById('patient-inner');
+  const rect = wrap.getBoundingClientRect();
+  let x = e.clientX - rect.left + 14;
+  let y = e.clientY - rect.top  - 22;
+  if (x + 185 > rect.width) x = e.clientX - rect.left - 192;
+  if (y < 0) y = 4;
+  tooltipEl.style.left = x + 'px';
+  tooltipEl.style.top  = y + 'px';
+}
+function hideTooltip() { tooltipEl.classList.remove('visible'); }
+
+// ════════════════════════════════════════════════
+//  BLOB HIGHLIGHT FROM CARD HOVER
+// ════════════════════════════════════════════════
+function highlightBlob(type) {
+  const b = document.getElementById('blob-'+type);
+  if (b) b.querySelector('.blob-dot').style.boxShadow = '0 0 18px currentColor';
+}
+function unhighlightBlob(type) {
+  const b = document.getElementById('blob-'+type);
+  if (b) b.querySelector('.blob-dot').style.boxShadow = '0 0 8px currentColor';
+}
+
+// ════════════════════════════════════════════════
+//  ANALYTICS (unchanged from original)
+// ════════════════════════════════════════════════
+async function trackPlay(game) {
+  // Analytics: only track if user has not opted out
+  if (localStorage.getItem('iq_no_track') === '1') return;
+  try {
+    // Uses goatcounter.com free self-hosted pixel or countapi.xyz
+    // Replace 'immune-quest' with your actual namespace after signing up at countapi.xyz
+    await fetch(`https://api.countapi.xyz/hit/immune-quest-game/${game}`, { mode:'cors' }).catch(()=>{});
+  } catch(e) {}
+}
+trackPlay('pageview');
+
+// ════════════════════════════════════════════════
+//  LAUNCH GAME
+// ════════════════════════════════════════════════
+const GAME_URLS = {
+  virus:   'games/virus/index.html',
+  stealth: 'games/stealth/index.html',
+};
+
+// Games whose result the platform can only learn via self-report on Exit
+// (compiled builds with no iq_game_result bridge wired up). Games not
+// listed here manage and save their own result directly — asking again
+// on Exit would be redundant and could double-record a score.
+const SELF_REPORT_GAMES = new Set(['virus']);
+
+// Games that render their own in-iframe header (menu/help/fullscreen) —
+// for these the hub's own IMMUNE QUEST modal bar is redundant and hidden.
+// Legacy/compiled games with no header of their own (e.g. the Unity
+// "virus" build) keep the hub's bar for Fullscreen/Exit access.
+const OWN_HEADER_GAMES = new Set(['stealth']);
+
+let currentGameType = null;
+let pendingUnlockToast = false;
+
+function launchGame(type) {
+  if (type === 'stealth') {
+    const stealthCard = document.getElementById('card-stealth');
+    if (stealthCard && stealthCard.classList.contains('locked')) return;
+  }
+  const url = GAME_URLS[type];
+  if (!url) return;
+
+  trackPlay(type);
+  currentGameType = type;
+
+  const titleMap = { virus: 'VIRUS', stealth: 'STEALTH MISSION' };
+  document.getElementById('game-modal-gamename').textContent = titleMap[type] || type.toUpperCase();
+  document.getElementById('game-modal-bar').style.display = OWN_HEADER_GAMES.has(type) ? 'none' : 'flex';
+
+  const iframeEl = document.getElementById('game-iframe');
+  iframeEl.style.display = 'block';
+  iframeEl.onload = () => {
+    // Proactive analytics answer, in case a future build of the Unity game
+    // listens for this without waiting to be asked (see iq_analytics_request/
+    // response bridge above). The current compiled build (checked directly —
+    // no 'iq_analytics' string anywhere in its JS) predates this bridge and
+    // doesn't call out to it, so its Yes/No screen is unaffected by this for
+    // now; it's drawn on the WebGL canvas itself, not as real DOM, so it
+    // can't be dismissed from outside without a Unity-side code change.
+    const allowed = localStorage.getItem('iq_no_track') !== '1';
+    iframeEl.contentWindow?.postMessage({ type: 'iq_analytics_response', allowed }, '*');
+  };
+  iframeEl.src = url;
+
+  // Opens at normal window size — Fullscreen is a deliberate choice via
+  // the button (hub bar for legacy games, in-game header for others),
+  // not forced automatically on launch.
+  document.getElementById('game-modal').style.display = 'flex';
+}
+
+// ════════════════════════════════════════════════
+//  UNITY POSTMESSAGE INTEGRATION
+//
+//  Receives two event types from the Unity game:
+//
+//  1. SCORE / WIN RESULT — fires when the game ends:
+//     { type: 'iq_game_result', win: true|false, score: <number> }
+//
+//  2. ANALYTICS CONSENT — fires when Unity asks the player
+//     about analytics. We auto-answer using the platform
+//     preference already stored in localStorage:
+//     Unity sends:  { type: 'iq_analytics_request' }
+//     We reply:     { type: 'iq_analytics_response', allowed: true|false }
+//
+//  NOTE: These postMessage events require a one-line addition
+//  in the Unity C# project (see README). The platform handles
+//  everything on its side — Unity only needs to send the message.
+// ════════════════════════════════════════════════
+window.addEventListener('message', (e) => {
+  // Only accept messages from our own hosted game
+  if (!e.origin || (e.origin !== window.location.origin && e.origin !== 'null')) return;
+
+  const data = e.data;
+  if (!data || typeof data !== 'object') return;
+
+  // ── Analytics consent auto-reply ──
+  if (data.type === 'iq_analytics_request') {
+    const allowed = localStorage.getItem('iq_no_track') !== '1';
+    const iframe = document.getElementById('game-iframe');
+    if (iframe?.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'iq_analytics_response', allowed }, '*');
+    }
+    return;
+  }
+
+  // ── Game result (score + win/loss) ──
+  if (data.type === 'iq_game_result' && currentGameType) {
+    const won   = data.win === true;
+    const score = typeof data.score === 'number' ? data.score : null;
+    recordGameResult(currentGameType, won, score);
+    return;
+  }
+
+  // ── Fullscreen/Exit requested from a game's own in-iframe header (see
+  //    OWN_HEADER_GAMES) — these controls only work from the parent, since
+  //    the fullscreen target and modal itself live outside the iframe. ──
+  if (data.type === 'iq_toggle_fullscreen') {
+    if (document.fullscreenElement) exitFullscreenOnly(); else goFullscreen();
+    return;
+  }
+  if (data.type === 'iq_close_game') {
+    requestCloseGame();
+    return;
+  }
+
+  // ── Settings/Share/Feedback actions from a game's own menu (see
+  //    setupSimpleMenu in shared/ui.js) — these run here so they act on
+  //    the hub's own URL/DOM (e.g. sharing the hub link, not the game's
+  //    iframe URL), then confirm back to the game for any UI it owns
+  //    (e.g. the "Copied!" label). ──
+  if (data.type === 'iq_set_tracking') {
+    setTracking(data.on);
+    return;
+  }
+  if (data.type === 'iq_reset_progress') {
+    resetProgress();
+    return;
+  }
+  if (data.type === 'iq_share') {
+    if (data.kind === 'twitter') shareTwitter();
+    else if (data.kind === 'whatsapp') shareWhatsApp();
+    else if (data.kind === 'email') shareEmail();
+    else if (data.kind === 'copy') copyLink();
+    const iframe = document.getElementById('game-iframe');
+    iframe?.contentWindow?.postMessage({ type: 'iq_share_done', kind: data.kind }, '*');
+    return;
+  }
+  if (data.type === 'iq_submit_feedback') {
+    const el = document.getElementById('feedback-text');
+    if (el) el.value = data.text || '';
+    submitFeedback();
+    return;
+  }
+});
+
+// ════════════════════════════════════════════════
+//  RECORD GAME RESULT — shared by the postMessage bridge above (for a
+//  future Unity build that actually calls it) and the self-report panel
+//  below (used now, since the current compiled build doesn't call it).
+// ════════════════════════════════════════════════
+function recordGameResult(type, won, score) {
+  if (!won) return;
+
+  const stealthWasLocked = document.getElementById('card-stealth')?.classList.contains('locked');
+
+  localStorage.setItem('iq_cleared_' + type, '1');
+
+  if (typeof score === 'number' && !Number.isNaN(score)) {
+    const prevKey = 'iq_score_' + type;
+    const prev = parseInt(localStorage.getItem(prevKey) || '0', 10);
+    if (score > prev) localStorage.setItem(prevKey, score);
+  }
+
+  // Resolve any active relapse for this game
+  const activeRelapse = sessionStorage.getItem('iq_relapse');
+  if (activeRelapse === type) {
+    sessionStorage.removeItem('iq_relapse');
+    sessionStorage.setItem('iq_relapse_resolved', '1');
+  }
+
+  loadProgress();
+
+  if (type === 'virus' && stealthWasLocked) {
+    pendingUnlockToast = true;
+  }
+}
+
+function goFullscreen() {
+  const el = document.getElementById('game-modal-inner');
+  if (!el) return;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+  if (req) req.call(el).catch(() => {});
+}
+
+function exitFullscreenOnly() {
+  const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+  if (exit) exit.call(document).catch(() => {});
+}
+
+function syncFullscreenButtons() {
+  const isFs = !!document.fullscreenElement;
+  document.getElementById('btn-fullscreen').style.display = isFs ? 'none' : 'inline-flex';
+  document.getElementById('btn-minimise').style.display   = isFs ? 'inline-flex' : 'none';
+  // Let a game with its own in-iframe header (see OWN_HEADER_GAMES) know
+  // the real fullscreen state, since the fullscreen target is this parent
+  // document, not the iframe's own (meaningless) document.fullscreenElement.
+  const iframe = document.getElementById('game-iframe');
+  iframe?.contentWindow?.postMessage({ type: 'iq_fullscreen_state', isFullscreen: isFs }, '*');
+}
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange']
+  .forEach(evt => document.addEventListener(evt, syncFullscreenButtons));
+
+// ════════════════════════════════════════════════
+//  SELF-REPORT PANEL — shown on Exit, on top of the still-visible game,
+//  so the player can read their own result off the screen. Needed because
+//  the current compiled Unity build never calls the iq_game_result bridge.
+// ════════════════════════════════════════════════
+function requestCloseGame() {
+  if (!currentGameType || !SELF_REPORT_GAMES.has(currentGameType)) { closeGame(); return; }
+  document.getElementById('score-report-stage-ask').style.display = 'flex';
+  document.getElementById('score-report-stage-score').style.display = 'none';
+  document.getElementById('score-report-input').value = '';
+  document.getElementById('score-report').style.display = 'flex';
+}
+
+function scoreReportWon() {
+  document.getElementById('score-report-stage-ask').style.display = 'none';
+  document.getElementById('score-report-stage-score').style.display = 'flex';
+  document.getElementById('score-report-input').focus();
+}
+
+function scoreReportNotYet() {
+  document.getElementById('score-report').style.display = 'none';
+  closeGame();
+}
+
+function scoreReportSubmit() {
+  const raw = document.getElementById('score-report-input').value;
+  const score = raw.trim() === '' ? null : parseInt(raw, 10);
+  document.getElementById('score-report').style.display = 'none';
+  recordGameResult(currentGameType, true, Number.isFinite(score) ? score : null);
+  closeGame();
+}
+
+function closeGame() {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  document.getElementById('game-modal').style.display = 'none';
+  document.getElementById('game-iframe').src = '';
+  const played = parseInt(localStorage.getItem('iq_played') || '0') + 1;
+  localStorage.setItem('iq_played', played);
+  loadProgress();
+  if (pendingUnlockToast) {
+    showUnlockToast();
+    pendingUnlockToast = false;
+  }
+}
+
+// ════════════════════════════════════════════════
+//  UNLOCK TOAST — brief visual confirmation when a new card unlocks
+// ════════════════════════════════════════════════
+let unlockToastTimer = null;
+function showUnlockToast() {
+  const toast = document.getElementById('unlock-toast');
+  if (!toast) return;
+  toast.classList.add('visible');
+  clearTimeout(unlockToastTimer);
+  unlockToastTimer = setTimeout(() => toast.classList.remove('visible'), 3200);
+}
+
+// ════════════════════════════════════════════════
+//  ONBOARDING WALKTHROUGH
+//  Auto-shows once per browser (via localStorage flag), and is always
+//  replayable via the "?" button in the header.
+// ════════════════════════════════════════════════
+const ONBOARDING_STEPS = [
+  {
+    title: 'Welcome to Immune Quest',
+    text: "You're looking after a patient fighting off disease. Treat the different conditions by playing games where you act as the immune system.",
+  },
+  {
+    title: 'The patient',
+    text: 'Pulsing dots on the patient show conditions you can treat. Click a dot, or its label, to open that game.',
+  },
+  {
+    title: 'The games panel',
+    text: "On the left, you'll find the same conditions as a list of game cards. Locked cards show what you need to do to unlock them.",
+  },
+  {
+    title: 'The patient chart',
+    text: "On the right, the chart tracks the patient's health, temperature, and which conditions have been treated. Watch out for relapses — they'll need treating again!",
+  },
+];
+let onboardingStep = 0;
+
+function startOnboarding() {
+  onboardingStep = 0;
+  renderOnboardingStep();
+  document.getElementById('onboarding-modal').classList.add('open');
+}
+
+// The header's "?" button (rendered by games/shared/ui.js) calls this by name
+function openHelp() { startOnboarding(); }
+
+function renderOnboardingStep() {
+  const step = ONBOARDING_STEPS[onboardingStep];
+  document.getElementById('onboarding-title').textContent = step.title;
+  document.getElementById('onboarding-text').textContent = step.text;
+  const isLast = onboardingStep === ONBOARDING_STEPS.length - 1;
+  document.getElementById('onboarding-next-btn').textContent = isLast ? 'Got it →' : 'Next →';
+
+  const dotsEl = document.getElementById('onboarding-dots');
+  dotsEl.innerHTML = ONBOARDING_STEPS.map((_, i) =>
+    `<span class="${i === onboardingStep ? 'active' : ''}"></span>`
+  ).join('');
+}
+
+function onboardingNext() {
+  if (onboardingStep < ONBOARDING_STEPS.length - 1) {
+    onboardingStep++;
+    renderOnboardingStep();
+  } else {
+    closeOnboarding();
+  }
+}
+
+function skipOnboarding() { closeOnboarding(); }
+
+function closeOnboarding() {
+  document.getElementById('onboarding-modal').classList.remove('open');
+}
+
+
+// ════════════════════════════════════════════════
+//  RELAPSE SYSTEM
+//  Once all available games cleared, 30% chance
+//  on page load that 1 condition has relapsed.
+// ════════════════════════════════════════════════
+const AVAILABLE_GAMES = ['virus']; // extend as games are built
+
+function checkRelapse(cleared) {
+  const allCleared = AVAILABLE_GAMES.every(g => localStorage.getItem('iq_cleared_'+g) === '1');
+  if (!allCleared) return null;
+  // Check if a relapse was already set this session
+  const existing = sessionStorage.getItem('iq_relapse');
+  if (existing) return existing;
+  // Don't immediately re-roll a brand-new relapse in the same session right after one was resolved —
+  // otherwise treating a relapse can look like it never went away, just coincidentally re-rolled.
+  if (sessionStorage.getItem('iq_relapse_resolved') === '1') return null;
+  if (Math.random() < 0.30) {
+    const pick = AVAILABLE_GAMES[Math.floor(Math.random()*AVAILABLE_GAMES.length)];
+    sessionStorage.setItem('iq_relapse', pick);
+    return pick;
+  }
+  return null;
+}
+
+// ════════════════════════════════════════════════
+//  LOAD PROGRESS & UPDATE UI
+// ════════════════════════════════════════════════
+function loadProgress() {
+  // Per-game scores
+  const scores = {
+    virus:    localStorage.getItem('iq_score_virus')    || null,
+    stealth:  localStorage.getItem('iq_score_stealth')  || null,
+    bacteria: null, parasite: null, cancer: null,
+  };
+  // Per-game cleared flags
+  const clearedVirus   = localStorage.getItem('iq_cleared_virus')   === '1';
+  const stealthUnlocked = clearedVirus;
+  // Counts across ALL available games generically (not just virus), so this scales
+  // correctly as more games are added — previously hardcoded to virus only, which
+  // silently broke severity/health/temp calculations the moment a 2nd game existed.
+  const totalCleared = AVAILABLE_GAMES.filter(g => localStorage.getItem('iq_cleared_'+g) === '1').length;
+
+  // Played count
+  const played = parseInt(localStorage.getItem('iq_played') || '0');
+
+  // ── Unified severity scale ──
+  // Drives status text, health %, and temperature together so they always agree with
+  // each other and with whether a relapse is active. Lower severity = healthier.
+  //   4 = Critical        (nothing treated)
+  //   3 = Unwell (severe)
+  //   2 = Unwell (moderate)
+  //   1 = Unwell (mild)
+  //   0 = Healthy          (everything treated, no active relapse)
+  const UNWELL_STAGES = 3; // number of distinct "Unwell" stages between Critical and Healthy
+  const MAX_SEVERITY = UNWELL_STAGES + 1; // +1 for the Critical tier itself
+
+  // Relapse must be known before computing severity, since a relapse should never be
+  // allowed to read as "Healthy" even if all games are otherwise cleared.
+  // Computed once here and reused below (in the Relapse system block) rather than
+  // calling checkRelapse() twice — it's idempotent within a single loadProgress() run,
+  // but there's no reason to call it more than once.
+  const activeRelapseGame = checkRelapse(totalCleared);
+  const relapseActive = !!activeRelapseGame;
+
+  // Base severity from treatment progress: maps "games remaining" proportionally onto
+  // the severity scale, so it naturally rescales as AVAILABLE_GAMES grows.
+  const remainingRatio = AVAILABLE_GAMES.length > 0
+    ? (AVAILABLE_GAMES.length - totalCleared) / AVAILABLE_GAMES.length
+    : 0;
+  let severity = Math.round(remainingRatio * MAX_SEVERITY);
+
+  // A relapse always costs at least one full "Unwell" stage, and can never drop all
+  // the way to 0 (Healthy) — even if every game is otherwise cleared.
+  if (relapseActive) {
+    severity = Math.max(severity, 1);
+  }
+  severity = Math.min(severity, MAX_SEVERITY);
+
+  // ── Health bar (inverse of severity: 100% at severity 0, down to a 10% floor at max severity) ──
+  const hp = Math.max(10, Math.round(100 - (severity / MAX_SEVERITY) * 90));
+  document.getElementById('power-fill').style.width = hp + '%';
+  document.getElementById('power-pct').textContent  = hp + '%';
+
+  // ── Temperature (rises with severity: 37.0°C healthy baseline up to ~39.8°C at max severity) ──
+  const temp = (37.0 + (severity / MAX_SEVERITY) * 2.8).toFixed(1);
+  document.getElementById('c-temp').textContent = temp + ' °C';
+  // Mini temp bar: width% maps 37°C (0%) to 41°C (100%)
+  const tempBarW = Math.min(100, Math.max(0, (parseFloat(temp) - 37) / 4 * 100));
+  const tempBarEl = document.getElementById('c-temp-bar');
+  if (tempBarEl) tempBarEl.style.width = tempBarW + '%';
+  const tempEl = document.getElementById('c-temp');
+  tempEl.className = 'chart-val ' + (parseFloat(temp) > 38.5 ? 'danger' : parseFloat(temp) > 37.5 ? 'warning' : 'ok');
+
+  // ── Status text ──
+  // si maps directly from severity: 0=Healthy, 1..UNWELL_STAGES=Unwell (mild→severe), MAX=Critical
+  const statuses = [
+    { text:'✓ Full health!',           col:'var(--accent)',   cs:'Healthy',          cc:'ok'      },
+    { text:'⚡ Unwell',                  col:'var(--bacteria)', cs:'Unwell',     cc:'warning' },
+    { text:'‼ Severe',                  col:'var(--bacteria)', cs:'Severe', cc:'warning' },
+    { text:'⚠ Dangerous',                  col:'var(--bacteria)', cs:'Dangerous',   cc:'warning' },
+    { text:'☣ Critical condition',      col:'var(--accent2)',  cs:'Critical',          cc:'danger'  },
+  ];
+  const s = statuses[severity];
+  const stEl = document.getElementById('status-text');
+  stEl.textContent = s.text; stEl.style.color = s.col;
+  const csEl = document.getElementById('c-status');
+  csEl.textContent = s.cs; csEl.className = 'chart-val ' + s.cc;
+
+  // ── Chart values ──
+  document.getElementById('c-cleared').textContent = totalCleared + ' / ' + AVAILABLE_GAMES.length;
+  document.getElementById('c-played').textContent  = played;
+  document.getElementById('c-active').textContent  = (AVAILABLE_GAMES.length - totalCleared) + ' active';
+
+
+
+  // ── Score on cards ──
+  if (scores.virus) {
+    document.getElementById('scorenum-virus').textContent   = scores.virus;
+  }
+  if (scores.stealth) {
+    document.getElementById('scorenum-stealth').textContent = scores.stealth;
+  }
+
+  // ── Virus card status ──
+  if (clearedVirus) {
+    document.getElementById('vstatus').textContent = '✓ Completed — play again';
+    document.getElementById('vstatus').className   = 'card-status complete';
+  }
+
+  // ── Stealth mode unlock ──
+  const stealthCard = document.getElementById('card-stealth');
+  if (stealthUnlocked) {
+    stealthCard.classList.remove('locked');
+    stealthCard.setAttribute('onclick','launchGame("stealth")');
+    stealthCard.setAttribute('onmouseenter','highlightBlob("stealth")');
+    stealthCard.setAttribute('onmouseleave','unhighlightBlob("stealth")');
+    const clearedStealth = localStorage.getItem('iq_cleared_stealth') === '1';
+    document.getElementById('stealth-status').textContent = clearedStealth ? '✓ Completed — play again' : '▶ Play';
+    document.getElementById('stealth-status').className   = clearedStealth ? 'card-status complete' : 'card-status available';
+
+    // Reveal the stealth pulse blob on the patient (other lung) now that it's unlocked
+    const stealthBlob = document.getElementById('blob-stealth');
+    if (stealthBlob && stealthBlob.classList.contains('locked')) {
+      stealthBlob.classList.remove('locked');
+      stealthBlob.setAttribute('onclick', "launchGame('stealth')");
+      positionBlobs(); // re-render connectors/pulse now that blob-stealth is unlocked
+    }
+  }
+
+  // ── Relapse system ──
+  const relapse = activeRelapseGame;
+  if (relapse) {
+    document.getElementById('relapse-banner').classList.add('visible');
+    // Mark the relevant card as relapsed
+    const card = document.getElementById('card-'+relapse);
+    if (card) {
+      const cs = card.querySelector('.card-status');
+      if (cs) { cs.textContent = '⚠ Relapse — treat now'; cs.className = 'card-status relapse'; }
+    }
+  } else {
+    // No active relapse — make sure the banner and any card markup from a previous
+    // relapse are cleared back to normal (otherwise a resolved relapse stays stuck visually)
+    document.getElementById('relapse-banner').classList.remove('visible');
+    AVAILABLE_GAMES.forEach(g => {
+      const card = document.getElementById('card-'+g);
+      if (card) {
+        const cs = card.querySelector('.card-status');
+        if (cs && cs.classList.contains('relapse')) {
+          cs.textContent = '✓ Completed — play again';
+          cs.className = 'card-status complete';
+        }
+      }
+    });
+  }
+
+  // ── Timestamp ──
+  const now = new Date();
+  document.getElementById('c-timestamp').textContent =
+    'Updated: ' + now.toLocaleDateString('en-GB') + ' ' +
+    now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+}
+
+loadProgress();
+</script>
+
+<script>
+function openMenu() {
+  const modal = document.getElementById('menu-modal');
+  modal.classList.add('open');
+  switchTab('about');
+  lockModalTabHeight(modal); // keeps the modal one fixed size across all 4 tabs — see games/shared/ui.js
+}
+function closeMenu() { document.getElementById('menu-modal').classList.remove('open'); }
+function closeMenuOutside(e) { if (e.target === document.getElementById('menu-modal')) closeMenu(); }
+
+function switchTab(name) {
+  document.querySelectorAll('.modal-tab').forEach((t,i) => {
+    const names = ['about','settings','share','feedback'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.modal-tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+function setTracking(on) {
+  localStorage.setItem('iq_no_track', on ? '0' : '1');
+}
+
+function resetProgress() {
+  Object.keys(localStorage).filter(k => k.startsWith('iq_')).forEach(k => localStorage.removeItem(k));
+  sessionStorage.removeItem('iq_relapse');
+  sessionStorage.removeItem('iq_relapse_resolved');
+  location.reload();
+}
+
+function shareTwitter() {
+  window.open('https://twitter.com/intent/tweet?text=Can+you+stop+the+spread%3F+Play+Immune+Quest+%E2%80%94+a+free+educational+game+about+viruses%2C+bacteria+%26+the+immune+system!&url='+encodeURIComponent(location.href), '_blank');
+}
+function shareWhatsApp() {
+  window.open('https://wa.me/?text=Can+you+stop+the+spread%3F+Play+Immune+Quest+%E2%80%94+'+encodeURIComponent(location.href), '_blank');
+}
+function shareEmail() {
+  location.href = 'mailto:?subject=Immune+Quest&body=Can+you+stop+the+spread%3F+Play+this+free+educational+game+about+viruses+and+the+immune+system%3A+'+encodeURIComponent(location.href);
+}
+function copyLink() {
+  navigator.clipboard.writeText(location.href).then(() => {
+    document.getElementById('copy-label').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('copy-label').textContent = 'Copy link', 2000);
+  });
+}
+function submitFeedback() {
+  const text = document.getElementById('feedback-text').value.trim();
+  if (!text) return;
+  // In production: send to your backend endpoint or email service
+  // For now: open a mailto as fallback
+  location.href = 'mailto:feedback@immunequest.org?subject=Feedback&body='+encodeURIComponent(text);
+  document.getElementById('feedback-text').value = '';
+  document.getElementById('feedback-confirm').style.display = 'block';
+}
+
+// Init tracking toggle from stored preference
+(function() {
+  const noTrack = localStorage.getItem('iq_no_track') === '1';
+  document.getElementById('toggle-tracking').checked = !noTrack;
+})();
+
+// ════════════════════════════════════════════════
+//  SHARED UI INITIALIZATION — Main Hub
+// ════════════════════════════════════════════════
+const HUB_CONFIG = {
+  gameTitle: 'IMMUNE QUEST',
+  gameLogo: 'IMMUNE<span>QUEST</span>',
+  gameLogoColor: 'var(--accent)',
+  gameLogoSpanColor: 'var(--accent2)',
+  gameAccentColor: 'var(--accent)',
+  showBackLink: false,
+  showHelpButton: true,
+  showMenuButton: true,
+  menuType: 'full' // Uses existing full menu modal in page HTML
+};
+</script>
+
+<script src="./games/shared/ui.js"></script>
+
+<script>
+// Initialize shared UI for main hub
+initUI(HUB_CONFIG);
+</script>
+
+</body>
+</html>
