@@ -159,23 +159,26 @@ const STEALTH_CONFIG = {
 
   // ── Spillover — infection can jump from an infected tissue into an
   //     adjacent one the player also has tropism for, row by row across the
-  //     shared boundary — a cell is only eligible if the tissue right next
-  //     to it has a virus at that exact row (same "no unconnected jumps"
-  //     rule normal spread already follows, just across the tissue
-  //     boundary). One Antibody/Cytokine blocking a single row doesn't seal
-  //     a tissue off from spillover entirely, since other rows can still
-  //     have virus facing them — but spillover can no longer land somewhere
-  //     with nothing infected directly across from it. See _runSpillover()
-  //     (game.js) for the full mechanic. ──────────────────────────────────
+  //     shared boundary — a row is only eligible if the SOURCE tissue's own
+  //     boundary-edge cell in that exact row is infected/dormant (not just
+  //     infected somewhere else in the row — see _spilloverCandidates(),
+  //     game.js, for why that distinction matters: a looser "anywhere in
+  //     the row" version let the virus visibly jump straight through a
+  //     cytokine-shielded border cell). Each eligible row gets its own
+  //     independent CHANCE roll every turn, so a wide, heavily infected
+  //     front can seed more than one row of the neighbour at once — this
+  //     is NOT one shared roll per tissue pair. One Antibody/Cytokine
+  //     blocking a single row doesn't seal a tissue off from spillover
+  //     entirely, since other rows can still have virus facing them — but
+  //     spillover can no longer land somewhere with nothing infected
+  //     directly across from it. See _runSpillover() (game.js) for the
+  //     full mechanic. ──────────────────────────────────────────────────
   SPILLOVER: {
     // Deliberately kept below SPREAD.WEIGHT_SIDE (same-tissue horizontal
     // spread) — crossing into another tissue should be rarer than
     // spreading within one, but still a real, regularly-occurring threat
-    // rather than a fluke. Bumped from 0.15 alongside loosening the
-    // eligibility check itself (see _runSpillover(), game.js) — the two
-    // together are what actually fixes "never seems to cross," not either
-    // alone.
-    CHANCE: 0.20,   // per adjacent-tissue pair, per turn
+    // rather than a fluke.
+    CHANCE: 0.20,   // independent roll per eligible border row, per turn
   },
 
   // ── Mutation table (phase 3, chance) — each non-'none' entry is either

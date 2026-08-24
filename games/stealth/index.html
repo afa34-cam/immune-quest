@@ -17,6 +17,19 @@
     --card-bg:#131c33; --card-border:#2f4270;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
+  /* Thinner header than shared/ui.css's own default (16px 20px / 7px 12px
+     button padding) — scoped to this page only, not the shared file
+     itself, since ui.css is shared across every game and other games'
+     headers weren't asked for. Stealth Mission's board is the tightest on
+     vertical space of the games (see fitGameStage(), game-ui.js, which
+     scales the whole board+banners+log stage to fit under whatever's left
+     below the header), so every pixel reclaimed here directly grows the
+     board. Later in the cascade than ui.css's own header rule (this
+     <style> block loads after that stylesheet link, and wins ties by
+     source order at equal specificity), so no !important needed. */
+  .header-outer header{ padding:8px 20px; }
+  .header-outer .help-btn, .header-outer .menu-btn{ padding:5px 12px; }
+  .header-outer .logo{ font-size:16px; }
   body{
     background:var(--bg); color:var(--text); font-family:'Nunito',sans-serif;
     min-height:100vh; overflow-x:hidden; display:flex; flex-direction:column;
@@ -929,6 +942,22 @@
      to whichever side it belongs to. */
   #immune-banner .card-face.power-up .card-face-art{
     border-color:var(--accent); box-shadow:0 0 10px rgba(0,229,255,.5);
+  }
+  /* The ONE card whose reveal step is what's actually resolving on the
+     board right now (see immune-banner-card-active, game-ui.js) — every
+     card played this turn stays visible here once revealed, so on a
+     multi-card turn this pulsing highlight is what tells the player which
+     one the board is showing at this exact moment, rather than them
+     reading an earlier (already-settled) card's still-visible face as
+     current. Pulsing, unlike power-up's static glow above, precisely
+     because this DOES want to draw attention to "happening right now". */
+  @keyframes immune-banner-card-active-pulse{
+    0%,100%{ box-shadow:0 0 8px rgba(0,229,255,.5); }
+    50%{ box-shadow:0 0 16px rgba(0,229,255,.95); }
+  }
+  .immune-banner-card-active .card-face-art{
+    border-color:var(--accent);
+    animation:immune-banner-card-active-pulse 1s ease-in-out infinite;
   }
   /* Scroll hint — shown next to a card row via JS when it overflows.
      Clickable too (see updateScrollArrow(), game-ui.js), not just a
@@ -1987,11 +2016,11 @@ const STEALTH_GAME_CONFIG = {
 <script src="../shared/ui.js"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=150"></script>
-<script src="board.js?cachebust=150"></script>
-<script src="cards.js?cachebust=150"></script>
-<script src="game.js?cachebust=150"></script>
-<script src="game-ui.js?cachebust=150"></script>
+<script src="config.js?cachebust=155"></script>
+<script src="board.js?cachebust=155"></script>
+<script src="cards.js?cachebust=155"></script>
+<script src="game.js?cachebust=155"></script>
+<script src="game-ui.js?cachebust=155"></script>
 
 <script>
 // Initialize shared UI with game config

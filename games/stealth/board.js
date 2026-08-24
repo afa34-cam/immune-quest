@@ -3,7 +3,8 @@
 //  Mirrors games/cancer/board.js structure, with the virus spreading
 //  top-down and the immune system placing individual antibody/cytokine
 //  cells strategically each turn — not a blind row-by-row sweep. See
-//  playImmuneTurn() for the immune card system.
+//  _runImmuneResponse() (game.js) for the immune card system — one shared
+//  deck/hand for the whole immune system, not a separate one per board.
 //
 //  Cell states:
 //    'healthy'   — normal tissue cell, infectable
@@ -517,16 +518,32 @@ class StealthBoard {
     return this._infect(cell);
   }
 
+  // Deepest (highest row index) cell that's actually infected — unlike
+  // _deepestInfectedRow() above, a dormant cell doesn't count here on
+  // purpose (see placeDormant() below, its only caller): a latent cell is
+  // itself invisible to the immune system and not yet spreading anything,
+  // so it shouldn't be able to anchor a SECOND latency play further out —
+  // only genuine, active infection should extend how far ahead of the
+  // front the virus can lie in wait.
+  _deepestActuallyInfectedRow() {
+    for (let r = this.rows - 1; r >= 0; r--) {
+      for (let c = 0; c < this.cols; c++) {
+        if (this.cells[r][c].state === 'infected') return r;
+      }
+    }
+    return -1;
+  }
+
   // "Latency" — place a dormant token on a healthy cell; it wakes and
   // auto-infects after a delay, invisible to immune response meanwhile.
   // Restricted to at most two rows past the current infection front (the
-  // deepest infected/dormant row + 2) — latency represents the virus lying
-  // low just ahead of where it already is, not seeding somewhere random
-  // and disconnected from the active infection.
+  // deepest ACTUALLY infected row + 2) — latency represents the virus
+  // lying low just ahead of where it already is, not seeding somewhere
+  // random and disconnected from the active infection.
   placeDormant(col, row, turns = 2) {
     const cell = this.getCell(col, row);
     if (!cell || cell.state !== 'healthy') return false;
-    const maxRow = this._deepestInfectedRow() + 2; // -1+2=1 if nothing infected yet
+    const maxRow = this._deepestActuallyInfectedRow() + 2; // -1+2=1 if nothing infected yet
     if (row > maxRow) return false;
     cell.state        = 'dormant';
     cell.dormantTurns = turns;
@@ -611,24 +628,6 @@ class StealthBoard {
 
   hasNoInfection() {
     return this.infectedCount() === 0;
-  }
-
-  // Wipes every infected/dormant cell back to plain healthy — used when a
-  // tropism_loss mutation deactivates this tissue outright (game.js): the
-  // tissue is just done, immediately available to be pre-fortified for
-  // whenever (if ever) the virus comes back.
-  clearAllInfection() {
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) {
-        const cell = this.cells[r][c];
-        if (cell.state === 'infected' || cell.state === 'dormant') {
-          cell.state = 'healthy';
-          cell.turnsInfected = 0;
-          cell.dormantTurns = 0;
-          cell.escapeImmune = 0;
-        }
-      }
-    }
   }
 
   // True if at least one infected OR dormant cell has a healthy cell it

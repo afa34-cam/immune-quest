@@ -35,7 +35,7 @@ function _cytokineNeutraliseDef(color) {
       const board = boards[target.tissue];
       const cell = board.getCell(target.col, target.row);
       if (!cell || cell.state !== 'immune' || cell.cytokineColor !== color) {
-        return { text: `${label}: target must be ${article} ${color} cytokine-shielded cell.`, count: 0, ok: false };
+        return { text: `Target must be ${article} ${color} cytokine-shielded cell.`, count: 0, ok: false };
       }
       const n = board.neutralizeCytokine(color, cell.cytokinePlacementId);
       return { text: label, count: 0, ok: n > 0 };
@@ -61,6 +61,10 @@ function _mhc1DownregDef(tissue) {
     tooltip: `Primes a hidden defence in ${tissue} for ${STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS} turns. The next T cell card the immune system plays here in that time is fully cancelled.`,
     targetType: 'none', requiresTissue: tissue,
     apply(boards, target, state) {
+      // Same "virus has to actually be there" restriction Antibody Escape
+      // already has — priming a defence against a T-Cell in a tissue the
+      // virus hasn't even reached doesn't make sense.
+      if (!state.activeTissues.includes(tissue)) return { text: `The virus hasn't reached the ${tissue} yet.`, count: 0, ok: false };
       state.mhcActive = state.mhcActive || {};
       state.mhcActive[tissue] = STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS;
       return { text: `T-Cell Evasion (${_capitalize(tissue)}) for ${STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS} turns`, count: 0, ok: true };
@@ -113,7 +117,7 @@ const STEALTH_CARD_DEFS = {
       return {
         text: ok
           ? `Horizontal Spread: infected [${target.col + 1},${target.row + 1}] in ${target.tissue}.`
-          : `Horizontal Spread: target must be healthy and beside an infected cell in its row (including across an adjacent tissue boundary).`,
+          : `Target must be healthy and beside an infected cell.`,
         count: ok ? 1 : 0, ok,
       };
     },
@@ -129,7 +133,7 @@ const STEALTH_CARD_DEFS = {
       return {
         text: ok
           ? `Vertical Spread: infected [${target.col + 1},${target.row + 1}] in ${target.tissue}.`
-          : `Vertical Spread: target must be healthy and directly below an infected cell.`,
+          : `Target must be healthy and directly below an infected cell.`,
         count: ok ? 1 : 0, ok,
       };
     },
@@ -156,7 +160,7 @@ const STEALTH_CARD_DEFS = {
       return {
         text: ok
           ? `Latency: dormant cell placed at [${target.col + 1},${target.row + 1}] in ${target.tissue}.`
-          : `Latency: target must be healthy and within two rows of the infection front.`,
+          : `Target must be healthy and within two rows of the infection front.`,
         count: 0, ok,
       };
     },
@@ -192,7 +196,7 @@ const STEALTH_CARD_DEFS = {
       // the immune side can pre-fortify one) — the real "is this usable"
       // check is whether the virus has actually reached lung yet, not
       // whether a board object exists there.
-      if (!state.activeTissues.includes('lung')) return { text: 'Antibody Escape: the virus hasn\'t reached lung yet.', count: 0, ok: false };
+      if (!state.activeTissues.includes('lung')) return { text: 'The virus hasn\'t reached lung yet.', count: 0, ok: false };
       const n = boards.lung.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
       const cleared = boards.lung.clearAntibodyProtection();
       const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
@@ -205,7 +209,7 @@ const STEALTH_CARD_DEFS = {
     tooltip: 'Remove all antibodies in Liver.',
     targetType: 'none', requiresTissue: 'liver',
     apply(boards, target, state) {
-      if (!state.activeTissues.includes('liver')) return { text: 'Antibody Escape: the virus hasn\'t reached liver yet.', count: 0, ok: false };
+      if (!state.activeTissues.includes('liver')) return { text: 'The virus hasn\'t reached liver yet.', count: 0, ok: false };
       const n = boards.liver.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
       const cleared = boards.liver.clearAntibodyProtection();
       const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
@@ -218,7 +222,7 @@ const STEALTH_CARD_DEFS = {
     tooltip: 'Remove all antibodies in Intestine.',
     targetType: 'none', requiresTissue: 'intestine',
     apply(boards, target, state) {
-      if (!state.activeTissues.includes('intestine')) return { text: 'Antibody Escape: the virus hasn\'t reached intestine yet.', count: 0, ok: false };
+      if (!state.activeTissues.includes('intestine')) return { text: 'The virus hasn\'t reached intestine yet.', count: 0, ok: false };
       const n = boards.intestine.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
       const cleared = boards.intestine.clearAntibodyProtection();
       const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';

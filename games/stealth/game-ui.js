@@ -1,5 +1,31 @@
 // ═══════════════════════════════════════════════════════════════════
-//  game-ui.js — Renders StealthGame and wires up player interaction.
+//  game-ui.js — Renders StealthGame (game.js) and wires up player
+//  interaction. game.js/board.js/cards.js never touch the DOM directly;
+//  everything here reads their state and renders it, or turns a click into
+//  a game.js method call. Roughly, top to bottom:
+//
+//    Card rendering    — renderCardFace(), getCardArtPath(), the card info
+//                         modal (openCardInfo()).
+//    Page layout        — renderGame() (the main per-frame entry point),
+//                         fitGameStage() and the align*() helpers that size
+//                         #game-stage to fit under the header, and
+//                         checkViewportGate() for the too-small/portrait
+//                         lockout.
+//    Turn narration      — runAutoPhase() steps through a phase's narration
+//                         one line at a time (buildVirusGrowthSteps()/
+//                         buildImmuneSteps()/buildMutationSteps() build the
+//                         step lists); boardRevealMask/primeBoardRevealMask()
+//                         keep not-yet-narrated board changes hidden until
+//                         their own step reveals them.
+//    Banners             — renderVirusTraits()/renderVirusInfoPanel() (the
+//                         virus's own Active Cards + identity panel) and
+//                         renderImmuneBanner() (the immune system's).
+//    Board               — renderBoards()/_applyCellVisual().
+//    Draft/Trade popups  — renderDraft()/renderTradeModal() and their
+//                         confirm*()/toggle*() handlers.
+//    Hand + play         — renderHand(), selectHandCard(), onCellClick(),
+//                         playSelectedCard() — the player's own turn.
+//    End screen           — renderEndScreen()/alignEndScreenBoard().
 // ═══════════════════════════════════════════════════════════════════
 
 let activeGame = null;
@@ -565,6 +591,19 @@ function checkViewportGate() {
 }
 window.addEventListener('resize', checkViewportGate);
 window.addEventListener('orientationchange', checkViewportGate);
+// Safety net for the "resizes itself a moment after starting" glitch —
+// fitGameStage() (called from checkViewportGate() above) measures
+// #game-stage's actual rendered size, but that size isn't final the
+// instant startMission() first renders: the Google Fonts stylesheet
+// (index.html <head>) loads with display:swap, so labels/titles briefly
+// render in a fallback font with different metrics until the real one
+// swaps in, and organ/card art images report their real intrinsic size
+// only once each has actually finished loading — either can quietly
+// change the stage's natural size AFTER the first fit already locked in a
+// transform based on the earlier (temporary) one. Re-fitting once each of
+// these actually settles catches both without needing to guess a delay.
+document.fonts.ready.then(checkViewportGate);
+window.addEventListener('load', checkViewportGate);
 
 // ── Virus top banner — identity/speed (the build from the start) plus
 //    whatever's currently active, kept live since replication/mutation can
@@ -780,6 +819,11 @@ const VIRUS_SPREAD_CELL_STAGGER_MS = 450;
 // banner, reading as "the board updated before the card was played" even
 // though all three come from the exact same step.
 const BOARD_REVEAL_DELAY_MS = 400;
+
+// Matches .cell-tcell-poof's own CSS animation length exactly (0.9s — see
+// cell-crumple-chip/cell-poof-cloud, index.html), used by runAutoPhase()
+// to guarantee the poof has fully finished before any later step starts.
+const POOF_ANIMATION_MS = 900;
 
 let narratedPhaseRef = null;
 let autoPhaseTimer = null;
@@ -1366,7 +1410,21 @@ function runAutoPhase() {
         // straight to the pick-cards popup underneath it read as the two
         // popups colliding. hideMutationToast() calls this once the toast
         // actually closes, whenever that is.
-        mutationAdvanceCallback = advance;
+        // The toast can close (auto-expire, or the player dismissing it
+        // early via ✕ or clicking outside) BEFORE this point is ever
+        // reached — narration steps after the mutation line can still take
+        // several more seconds to finish. hideMutationToast() had nothing
+        // to call back then (mutationAdvanceCallback wasn't set yet), so
+        // without this check the advance would just never happen — stuck
+        // waiting on a toast that's already gone. Checking here catches
+        // that: if it's already closed, advance right now instead of
+        // arming a callback nothing will ever trigger.
+        const toastEl = document.getElementById('mutation-toast');
+        if (toastEl && !toastEl.classList.contains('open')) {
+          autoPhaseTimer = setTimeout(advance, NARRATION_END_PAUSE);
+        } else {
+          mutationAdvanceCallback = advance;
+        }
       } else {
         autoPhaseTimer = setTimeout(advance, NARRATION_END_PAUSE);
       }
@@ -1434,7 +1492,19 @@ function runAutoPhase() {
     // staggered cell above has actually had its own moment on screen —
     // otherwise a big multi-cell spread would have the narration/phase
     // move on while cells were still trickling in.
-    const delay = Math.max(baseDelay, groupStaggerMs + NARRATION_STEP_DELAY);
+    // NK Cell/T-Cell's own crumple-into-cloud "poof" (see .cell-tcell-poof,
+    // index.html — a 0.9s CSS animation, plus the BOARD_REVEAL_DELAY_MS it
+    // waits before even starting) needs to fully finish playing on its
+    // cell before ANY later step starts touching the board — otherwise the
+    // next card's own reveal can land on that same cell mid-animation and
+    // stomp it, showing that later card's icon instead of letting the poof
+    // finish cleanly. NARRATION_IMMUNE_CARD_DELAY already comfortably
+    // covers this in practice, but this makes the guarantee explicit and
+    // exact rather than incidental, so it holds even if that constant ever
+    // changes.
+    const minPoofDelay = step.flashClass === 'cell-tcell-poof' && step.cells && step.cells.length
+      ? BOARD_REVEAL_DELAY_MS + POOF_ANIMATION_MS + 200 : 0;
+    const delay = Math.max(baseDelay, groupStaggerMs + NARRATION_STEP_DELAY, minPoofDelay);
     autoPhaseTimer = setTimeout(next, delay);
   }
   next();
@@ -1476,12 +1546,20 @@ function renderImmuneBanner() {
   cardsRow.id = 'immune-banner-cards';
 
   if (g.lastImmune) {
-    const addCard = (id, tissue, name, powerUp, badge) => {
+    const addCard = (id, tissue, name, powerUp, badge, active) => {
       const def = IMMUNE_CARD_DEFS[id];
       if (!def) return;
       const card = { ...def, name: name || def.name };
       const face = renderCardFace(card, { tissue, badge });
       if (powerUp) face.classList.add('power-up');
+      // The one card whose own reveal step is what's CURRENTLY playing out
+      // on the board right now (see .immune-banner-card-active, CSS) —
+      // every played card this turn stays visible here once revealed, not
+      // just the latest one, so on a multi-card turn it's easy to glance
+      // at an EARLIER card's still-showing face and read it as "what's
+      // happening now" when the board has actually already moved on to a
+      // later card. This highlight is the disambiguator.
+      if (active) face.classList.add('immune-banner-card-active');
       cardsRow.appendChild(face);
     };
 
@@ -1495,7 +1573,8 @@ function renderImmuneBanner() {
     g.lastImmune.played.forEach((p, idx) => {
       if (g.phase === 'immune_response' && idx >= immuneBannerRevealCount) return;
       const tissue = p.tissue || (p.cells[0] && p.cells[0].tissue);
-      addCard(p.id, tissue, p.name, false);
+      const active = g.phase === 'immune_response' && idx === immuneBannerRevealCount - 1;
+      addCard(p.id, tissue, p.name, false, undefined, active);
     });
 
     // A fresh play of one of these ids is already shown by the loop above
@@ -1888,13 +1967,11 @@ function renderHand() {
     hintEl.classList.remove('play-hint-error');
     hintEl.textContent = picking
       ? ''
-      : endingTurn
-        ? 'Ending turn…'
-        : !interactive
-          ? 'Waiting for your turn…'
-          : g.hand.length
-            ? 'Select a card to play it.'
-            : 'No cards in hand — ending turn…';
+      : !interactive
+        ? 'Waiting for your turn…'
+        : g.hand.length
+          ? 'Select a card to play it.'
+          : 'No cards in hand — ending turn…';
   }
 
   // No cards left to play — end the turn automatically instead of making
@@ -1912,13 +1989,9 @@ function selectHandCard(i) {
 
   if (card.targetType === 'none') {
     playSelectedCard({});
-  } else if (card.targetType === 'tissue') {
-    if (activeGame.activeTissues.length === 1) {
-      playSelectedCard({ tissue: activeGame.activeTissues[0] });
-    } else {
-      document.getElementById('play-hint').textContent = 'Click a tissue board to target it.';
-    }
   } else {
+    // Every targeted card in the deck is 'cell' or 'immune-cell' — no card
+    // ever needs just a tissue picked without a specific cell too.
     document.getElementById('play-hint').textContent = 'Click a cell on the board to target it.';
   }
 }

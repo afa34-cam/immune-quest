@@ -294,7 +294,13 @@ class StealthGame {
     const mrnaBoosted = this.mrnaBoostTurns > 0;
     if (this.mrnaBoostTurns > 0) this.mrnaBoostTurns--;
 
-    this.activeTissues.forEach(t => { this.boards[t].tickTimers(); });
+    // Every board, not just active tissues — a Cytokine shield's countdown
+    // (or Antibody Escape's brief window) keeps running on a tissue that's
+    // inactive because it lost tropism (see the tropism_loss mutation
+    // case below) or hasn't been reached yet at all (pre-fortification);
+    // it's a per-cell timer independent of whether the virus is currently
+    // spreading there.
+    Object.values(this.boards).forEach(board => board.tickTimers());
 
     // One-time cleanup once the early-dilution window closes — see
     // ImmuneDeck.pruneEarlyDilution() (cards.js). Cheap enough to just
@@ -570,19 +576,24 @@ class StealthGame {
 
       case 'tropism_loss': {
         // The exact opposite of tropism_gain below — deactivates one of
-        // the virus's own currently-active tissues (the immune system
-        // fully clears it), dropping it out of activeTissues. The board
-        // itself isn't destroyed (see the constructor's own comment) —
-        // it just goes back to sitting healthy and un-targeted, still
-        // available for the immune system to pre-fortify against a future
-        // re-infection. Its own roll weight is already scaled down hard
-        // whenever this leaves the virus with very few fronts left — see
-        // TROPISM_LOSS_MULT_BY_ACTIVE_TISSUES (config.js) — so no
-        // additional guard is needed here; the chance itself is the
-        // safety net.
+        // the virus's own currently-active tissues, dropping it out of
+        // activeTissues so it stops growing/spreading and can no longer
+        // be targeted by the player's own cards or count toward the win
+        // condition. Whatever infection is already sitting there is left
+        // exactly as it is, not cleared — this represents the virus lying
+        // dormant in a tissue the immune system has gotten the upper hand
+        // in, not the immune system sterilising it outright. It stays
+        // frozen in place (immune to further NK Cell/T-Cell/Antibody
+        // pressure too, same as any other inactive board) until a future
+        // tropism_gain mutation picks this tissue again, at which point
+        // it's back in activeTissues and starts spreading again right from
+        // where it was left off (plus whatever fresh seedInfection() adds
+        // on top — see tropism_gain below). Cytokine shields already
+        // placed here keep counting down regardless (tickTimers() below
+        // now runs on every board, not just active ones), same as any
+        // other inactive tissue.
         category = 'Tropism'; direction = 'loss';
         const t = this.activeTissues[Math.floor(Math.random() * this.activeTissues.length)];
-        this.boards[t].clearAllInfection();
         this.activeTissues = this.activeTissues.filter(x => x !== t);
         tissue = t;
         text = `Mutation - lost Tropism (${_capitalize(t)})`;
@@ -642,12 +653,12 @@ class StealthGame {
     this.lastMutation = { event, category, direction, text, tissue, color };
     this._addLog(`Mutation: ${text}`);
 
-    // tropism_loss can drop the virus's last active tissue, leaving
-    // activeTissues empty — previously this wasn't caught until the NEXT
-    // virus_growth phase (whose loop over activeTissues is a no-op, but
-    // still eventually hits _checkLoss()'s vacuous-truth case), leaving one
-    // dead play_cards turn in between where the player has nothing left to
-    // target. Checking right here catches it the instant it happens.
+    // tropism_loss can drop the virus's last active tissue (activeTissues
+    // empty) or its last surviving infection anywhere (allClear, see
+    // _checkLoss()) — checking right here catches either the instant it
+    // happens, rather than waiting a full dead play_cards turn (where the
+    // player would have nothing left to target) for the NEXT virus_growth
+    // phase to notice.
     this._checkWin() || this._checkLoss();
   }
 
@@ -765,21 +776,33 @@ class StealthGame {
   }
 
   _checkLoss() {
-    const allClear = this.activeTissues.every(t => this.boards[t].hasNoInfection());
+    // Every board, not just active tissues — a tropism_loss mutation
+    // leaves its infected cells frozen in place rather than clearing them
+    // (see that case, above), so a tissue can still genuinely hold virus
+    // while sitting inactive. "No infected cells remain anywhere" should
+    // mean exactly that.
+    const allClear = Object.values(this.boards).every(b => b.hasNoInfection());
     if (allClear) {
       this.state = 'lost';
       this._addLog(`✗ LOSS: no infected cells remain anywhere — the immune system won on turn ${this.turn}.`);
       this._saveScore();
       return true;
     }
-    // Boxed in — every infected cell on every board has no healthy cell
-    // left to spread into (horizontal or vertical), so the virus can never
-    // reach the bottom row from here.
+    // Boxed in — every infected cell on every ACTIVE board has no healthy
+    // cell left to spread into (horizontal or vertical), so the virus can
+    // never reach the bottom row from here.
     // "Boxed in" means no active tissue has a within-board spread target
     // AND there's no cross-tissue spillover opportunity either — a tissue
     // that's filled every reachable cell locally can still keep going by
-    // spilling into a clean, tropism-active neighbour.
-    const boxedIn = this.activeTissues.every(t => !this.boards[t].hasSpreadTarget())
+    // spilling into a clean, tropism-active neighbour. Requires at least
+    // one active tissue to even ask the question — a virus with ZERO
+    // active tissues (every one currently lost to tropism_loss) isn't
+    // "boxed in" so much as dormant, still holding frozen infection
+    // somewhere and waiting on a tropism_gain mutation to pick one of
+    // those tissues back up; that's the allClear check's call to make
+    // instead, not this one's.
+    const boxedIn = this.activeTissues.length > 0
+      && this.activeTissues.every(t => !this.boards[t].hasSpreadTarget())
       && this._spilloverCandidates().length === 0;
     if (boxedIn) {
       this.state = 'lost';
