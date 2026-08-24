@@ -936,14 +936,28 @@ function _applyCellVisual(el, cellData, tissue, col, row) {
 }
 
 // Un-hides one played card's cells at the moment its own narration step
-// fires — drops them from boardRevealMask and syncs that cell's DOM
-// straight to the live model, alongside that same step's highlightCells()
-// flash (see runAutoPhase()).
-function revealBoardCells(cells) {
+// fires — drops them from boardRevealMask and syncs that cell's DOM,
+// alongside that same step's highlightCells() flash (see runAutoPhase()).
+//
+// `afterStates` (when given — only immune_response steps have this, see
+// buildImmuneSteps()) is a snapshot of each cell taken RIGHT AFTER this
+// specific card's own effect resolved (see game.js _runImmuneResponse()),
+// and is what actually gets rendered here in preference to the board's
+// current LIVE state. Every card played this turn already resolved
+// synchronously before any of it is narrated, so if a LATER card this same
+// turn touched one of these same cells again (e.g. NK Cell clears the last
+// infected cell in a row, then Antibody protects that now-empty row a few
+// cards later), the live cell would already show THAT later result too —
+// reading as "the antibody appeared before its own turn" during what's
+// supposed to be NK's own reveal. Falls back to the live cell when there's
+// no afterStates entry for it (virus_growth/mutation reveals, which have
+// no such multi-card-same-cell conflict to guard against).
+function revealBoardCells(cells, afterStates) {
   cells.forEach(({ tissue, col, row }) => {
     delete boardRevealMask[`${tissue}|${col}|${row}`];
     const board = activeGame && activeGame.boards[tissue];
-    const cell = board && board.cells[row] && board.cells[row][col];
+    const snapshot = afterStates && afterStates.find(s => s.tissue === tissue && s.col === col && s.row === row);
+    const cell = snapshot || (board && board.cells[row] && board.cells[row][col]);
     const el = document.querySelector(`.tissue-cell[data-tissue="${tissue}"][data-col="${col}"][data-row="${row}"]`);
     if (!el || !cell) return;
     _applyCellVisual(el, cell, tissue, col, row);
@@ -1178,7 +1192,7 @@ function buildImmuneSteps(g) {
       ? `${name} — Replication Speed −${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT} for 3 turns` : name;
     const html = tissue ? `<span class="narration-tissue">${_cap(tissue)}</span> — ${label}` : label;
     steps.push({
-      html, cls: 'line-immune', tissue, cells: p.cells, flashClass: _immuneFlashClass(p.id), inGroup: true, slow: true,
+      html, cls: 'line-immune', tissue, cells: p.cells, afterStates: p.afterStates, flashClass: _immuneFlashClass(p.id), inGroup: true, slow: true,
       // Antiviral and Protein Vaccine both flash the effective-speed badge
       // the same way Replication Boost's own +1 does, just by their own
       // (different) magnitudes — see ANTIVIRAL_PENALTY_AMOUNT/
@@ -1438,7 +1452,7 @@ function runAutoPhase() {
       // moment to actually register before the board reacts.
       setTimeout(() => {
         highlightCells(step.tissue, step.cells, step.flashClass);
-        revealBoardCells(step.cells);
+        revealBoardCells(step.cells, step.afterStates);
       }, BOARD_REVEAL_DELAY_MS);
     }
     // A single line can span multiple tissues (e.g. "Virus spread in Lung,
@@ -1833,25 +1847,57 @@ function getTradeableCardIds() {
   return [...ids];
 }
 
-// Fixed order for the "receive" tab's grid — tissue-paired (Antibody
-// Escape next to that same tissue's T-Cell Evasion) rather than grouped
-// purely by card function, so the two rows of a typical 10-card pool read
-// as "Liver / Lung" then "Intestine / Cytokines" instead of every
-// Antibody Escape variant sitting apart from its T-Cell Evasion
-// counterpart. Whatever the deck/hand/discard actually contains (see
-// getTradeableCardIds()) is sorted into this order, not drawn from it —
-// latency/activate-tregs aren't itemised here since they weren't part of
-// the requested ordering, so they fall through to the "not listed" case
-// below and sort to the end rather than disappearing. Horizontal/Vertical
-// Spread are never offered here at all — see TRADE_EXCLUDED_IDS above.
+// Priority order for the "receive" tab's grid — tissue-paired (Antibody
+// Escape next to that same tissue's T-Cell Evasion), liver/lung/intestine,
+// then the non-tissue "filler" cards. This is a PRIORITY, not a literal
+// layout — arrangeTradeReceiveIds() below does the actual row placement,
+// keeping every tissue's own cards grouped and never split across the
+// two rows, using filler cards to top up whatever's left of a row. Cards
+// not itemised here (shouldn't happen) sort to the end rather than
+// disappearing. Horizontal/Vertical Spread are never offered here at all
+// — see TRADE_EXCLUDED_IDS above.
 const TRADE_RECEIVE_ORDER = [
   'antibody-escape-liver', 'mhc1-downreg-liver',
   'antibody-escape-lung', 'mhc1-downreg-lung',
-  'spread-speed-plus',
   'antibody-escape-intestine', 'mhc1-downreg-intestine',
+  'spread-speed-plus', 'latency', 'activate-tregs',
   'cytokine-neutralise-red', 'cytokine-neutralise-orange', 'cytokine-neutralise-blue',
-  'latency', 'activate-tregs',
 ];
+
+// Arranges the receive grid so each tissue's own cards always sit next to
+// each other and never get split across the two rows (see
+// renderTradeModal()'s own gridTemplateColumns, which always makes exactly
+// 2 rows) — a fixed order alone can't guarantee that once the actual pool
+// size varies per game, since a tissue's pair could land right on a row
+// boundary. Non-tissue cards (Replication Boost, Latency, Activate Tregs,
+// the 3 Cytokine Neutralisations) have no such pairing to protect, so they
+// act as flexible single-slot filler, backfilled onto whichever row still
+// has room after every tissue's own cards are placed — e.g. Replication
+// Boost sitting at the end of row 1 just to round it out.
+function arrangeTradeReceiveIds(ids) {
+  const sorted = [...ids].sort((a, b) => TRADE_RECEIVE_ORDER.indexOf(a) - TRADE_RECEIVE_ORDER.indexOf(b));
+  const tissueOf = id => (id.match(/-(liver|lung|intestine)$/) || [])[1] || null;
+
+  const byTissue = { liver: [], lung: [], intestine: [] };
+  const fillers = [];
+  sorted.forEach(id => {
+    const t = tissueOf(id);
+    if (t) byTissue[t].push(id); else fillers.push(id);
+  });
+  const tissueClusters = ['liver', 'lung', 'intestine'].map(t => byTissue[t]).filter(c => c.length);
+
+  const cols = Math.max(1, Math.ceil(ids.length / 2));
+  const rows = [[], []];
+  tissueClusters.forEach(cluster => {
+    const row = rows[0].length + cluster.length <= cols ? rows[0] : rows[1];
+    row.push(...cluster);
+  });
+  fillers.forEach(id => {
+    const row = rows[0].length < cols ? rows[0] : rows[1];
+    row.push(id);
+  });
+  return [...rows[0], ...rows[1]];
+}
 
 function renderTradeModal() {
   const giveWrap = document.getElementById('trade-give-cards');
@@ -1866,8 +1912,7 @@ function renderTradeModal() {
 
   const receiveWrap = document.getElementById('trade-receive-cards');
   receiveWrap.innerHTML = '';
-  const receiveIds = getTradeableCardIds()
-    .sort((a, b) => TRADE_RECEIVE_ORDER.indexOf(a) - TRADE_RECEIVE_ORDER.indexOf(b));
+  const receiveIds = arrangeTradeReceiveIds(getTradeableCardIds());
   receiveIds.forEach(id => {
     const def = STEALTH_CARD_DEFS[id];
     if (!def) return;

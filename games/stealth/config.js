@@ -258,6 +258,14 @@ const STEALTH_CONFIG = {
   // StealthDeck._buildFromLoadout.
   NOROVIRUS_VERTICAL_BONUS: 9,
   NOROVIRUS_HORIZONTAL_BONUS: 7,
+  // The opposite lean for Hepatitis — its whole identity is a slow,
+  // chronic, "silent" infection (see its own flavour text) rather than an
+  // aggressive spreader, and it already has other strengths to lean on
+  // instead (permanent Cytokine immunity, Latency, T-Cell Evasion — see
+  // its abilities). Vertical is already at INFECT_CARDS' own floor (1) for
+  // every band, so there's nothing left to cut there without removing the
+  // card outright; horizontal is what actually gets rarer for it.
+  HEPATITIS_HORIZONTAL_PENALTY: 1,
 
   // ── Cards / hand ─────────────────────────────────────────────────
   CARDS: {

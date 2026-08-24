@@ -637,7 +637,8 @@ class StealthDeck {
     includedTypes.add('infect-vertical');
     const infectCounts = STEALTH_CONFIG.INFECT_CARDS[difficultyName] || STEALTH_CONFIG.INFECT_CARDS.medium;
     const verticalBonus = virusId === 'norovirus' ? STEALTH_CONFIG.NOROVIRUS_VERTICAL_BONUS : 0;
-    const horizontalBonus = virusId === 'norovirus' ? STEALTH_CONFIG.NOROVIRUS_HORIZONTAL_BONUS : 0;
+    const horizontalBonus = virusId === 'norovirus' ? STEALTH_CONFIG.NOROVIRUS_HORIZONTAL_BONUS
+                           : virusId === 'hepatitis' ? -STEALTH_CONFIG.HEPATITIS_HORIZONTAL_PENALTY : 0;
 
     // Per-virus count overrides for cards every kit now includes by default
     // (see generateDeck(), index.html) but that should show up at
@@ -662,8 +663,11 @@ class StealthDeck {
     includedTypes.forEach(id => {
       const def = STEALTH_CARD_DEFS[id];
       if (!def) return;
-      const count = id === 'infect-horizontal' ? infectCounts.horizontal + horizontalBonus
-                  : id === 'infect-vertical'   ? infectCounts.vertical + verticalBonus
+      // Floored at 1 — a penalty (Hepatitis) should make the card RARE,
+      // not remove it outright; only a bonus should ever be able to push
+      // a count down to 0 or below on its own.
+      const count = id === 'infect-horizontal' ? Math.max(1, infectCounts.horizontal + horizontalBonus)
+                  : id === 'infect-vertical'   ? Math.max(1, infectCounts.vertical + verticalBonus)
                   : countOverrides[id] !== undefined ? countOverrides[id]
                   : def.count;
       for (let i = 0; i < count; i++) this.draw.push({ ...def });

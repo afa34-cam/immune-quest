@@ -397,7 +397,25 @@ class StealthGame {
           return snap ? { tissue: c.tissue, col: c.col, row: c.row, ...snap } : null;
         }).filter(Boolean);
 
-        played.push({ id: card.id, name: card.name, icon: card.icon, tissue: card.tissue, cells, beforeStates });
+        // Snapshot taken RIGHT NOW — immediately after THIS card's own
+        // apply() resolved, before the loop moves on to the next card in
+        // hand. Every card this turn resolves synchronously in one pass,
+        // well before any of it is narrated, so if a LATER card in this
+        // same loop touches one of these same cells again (e.g. NK Cell
+        // clears the last infected cell in a row, then Antibody protects
+        // that now-empty row a few cards later), the board's LIVE state by
+        // the time NK's own narration step finally reveals it would
+        // already show Antibody's result too — reading as "the antibody
+        // appeared before its own turn". afterStates is what THIS card's
+        // own reveal step actually renders instead (see revealBoardCells(),
+        // game-ui.js) — a clean freeze-frame of right after its own effect,
+        // regardless of what happens to these cells later this same turn.
+        const afterStates = cells.map(c => {
+          const cell = this.boards[c.tissue] && this.boards[c.tissue].cells[c.row] && this.boards[c.tissue].cells[c.row][c.col];
+          return cell ? { tissue: c.tissue, col: c.col, row: c.row, state: cell.state, cytokineColor: cell.cytokineColor, protectedTurns: cell.protectedTurns } : null;
+        }).filter(Boolean);
+
+        played.push({ id: card.id, name: card.name, icon: card.icon, tissue: card.tissue, cells, beforeStates, afterStates });
         this.immuneDeck.discardCard(card);
       });
       this.immuneHand = stillHeld;
