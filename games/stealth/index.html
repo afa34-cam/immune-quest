@@ -1349,11 +1349,13 @@
   }
   .trade-popup .trade-cards-grid .card-face{ flex:0 0 auto; width:70px; }
   /* Receive list is grouped by card function (see TRADE_RECEIVE_ORDER,
-     game-ui.js) — fixed 6-column grid instead of free-wrapping flex so
-     same-function cards consistently line up into clean rows (2 rows for
-     a typical 12-card pool) rather than reflowing arbitrarily. */
+     game-ui.js) — a grid instead of free-wrapping flex so same-function
+     cards consistently line up into clean rows rather than reflowing
+     arbitrarily. Column count is set inline by renderTradeModal()
+     (game-ui.js), not fixed here — always exactly 2 rows split as evenly
+     as possible, since the actual tradeable pool size varies per game. */
   .trade-popup #trade-receive-cards{
-    display:grid; grid-template-columns:repeat(6, 70px); gap:16px;
+    display:grid; gap:16px;
   }
   .draft-popup-footer{ display:flex; align-items:center; justify-content:flex-end; gap:10px; }
 
@@ -1693,6 +1695,7 @@
                hand-cards to shrink down to almost nothing). -->
           <div class="hand-panel-body">
             <div class="hand-panel-row">
+              <div class="scroll-arrow scroll-arrow-back" id="hand-cards-arrow-back">◂</div>
               <div class="hand-cards" id="hand-cards"></div>
               <div class="scroll-arrow" id="hand-cards-arrow">▸</div>
               <div class="panel-controls">
@@ -1784,6 +1787,7 @@
           <button class="modal-close" onclick="hideDraftPopup()" title="Minimise" aria-label="Minimise">▸</button>
         </div>
         <div class="panel-row">
+          <div class="scroll-arrow scroll-arrow-back" id="draft-cards-arrow-back">◂</div>
           <div class="draft-cards" id="draft-cards"></div>
           <div class="scroll-arrow" id="draft-cards-arrow">▸</div>
         </div>
@@ -1983,11 +1987,11 @@ const STEALTH_GAME_CONFIG = {
 <script src="../shared/ui.js"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=144"></script>
-<script src="board.js?cachebust=144"></script>
-<script src="cards.js?cachebust=144"></script>
-<script src="game.js?cachebust=144"></script>
-<script src="game-ui.js?cachebust=144"></script>
+<script src="config.js?cachebust=150"></script>
+<script src="board.js?cachebust=150"></script>
+<script src="cards.js?cachebust=150"></script>
+<script src="game.js?cachebust=150"></script>
+<script src="game-ui.js?cachebust=150"></script>
 
 <script>
 // Initialize shared UI with game config

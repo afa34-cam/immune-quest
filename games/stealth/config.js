@@ -16,11 +16,10 @@ const STEALTH_CONFIG = {
     // (only immediate neighbours in this list can spill into each other;
     // liver and intestine are NOT adjacent to each other).
     ADJACENCY_ORDER: ['liver', 'lung', 'intestine'],
-    // How many rows deep the initial seed infection reaches, straight down
-    // the centre column, when a tissue first gets infected — at game start
-    // (StealthGame constructor) and via tropism_gain — see seedInfection()
-    // (board.js). Was 1 (just the top row).
-    STARTING_SEED_ROWS: 2,
+    // Independent per-cell chance for each of the 5 non-guaranteed cells in
+    // the starting-seed block to end up infected — see seedInfection()
+    // (board.js) for the block shape and connectivity rule.
+    SEED_CELL_CHANCE: 0.5,
   },
 
   // ── Difficulty (driven by the virus's own replication stat, set at
@@ -28,18 +27,25 @@ const STEALTH_CONFIG = {
   DIFFICULTY: {
     // Keyed by replication speed band (1-10 slider from the builder).
     // cytokine_protect_turns: how long a Cytokine's protection lasts before
-    // the shielded cells revert to healthy — flat 3 turns at every
-    // difficulty now (was 2 — balance pass; cytokine protection scaling up
-    // to 5 turns at extreme was giving the immune system too durable a lock
-    // on top of Antibody/T-Cell's own row-level power, but 2 undershot).
+    // the shielded cells revert to healthy — 0 means permanent (same
+    // convention Antibody/Hepatitis already use, see protectRow()/
+    // protectShape(), board.js). The 3 named viruses (Influenza/Norovirus/
+    // Hepatitis) each have their own fixed duration instead, regardless of
+    // band — see effectiveCytokineProtectTurns(), game.js. This per-band
+    // scale is what a CUSTOM (builder) virus actually gets, keyed off its
+    // own chosen replication speed: 3 turns at the slowest up to permanent
+    // at the fastest. (Was flat 3 at every band — balance pass; cytokine
+    // protection scaling up to 5 turns at extreme was giving the immune
+    // system too durable a lock on top of Antibody/T-Cell's own row-level
+    // power, but flat 3 undershot for the fastest, most dangerous viruses.)
     // score_mult: applied to the whole final score (see _finalizeScore(),
     // game.js) — a faster-replicating virus faces a proportionally
     // stronger immune response (immune_response_strength above), so
     // beating one is worth more than an easy slow-band win.
     slow:   { speed: [1, 3],  immune_response_strength: 0.35, cytokine_protect_turns: 3, score_mult: 0.8 },
-    medium: { speed: [4, 6],  immune_response_strength: 0.50, cytokine_protect_turns: 3, score_mult: 1.0 },
-    fast:   { speed: [7, 8],  immune_response_strength: 0.65, cytokine_protect_turns: 3, score_mult: 1.2 },
-    extreme:{ speed: [9, 10], immune_response_strength: 0.80, cytokine_protect_turns: 3, score_mult: 1.4 },
+    medium: { speed: [4, 6],  immune_response_strength: 0.50, cytokine_protect_turns: 4, score_mult: 1.0 },
+    fast:   { speed: [7, 8],  immune_response_strength: 0.65, cytokine_protect_turns: 5, score_mult: 1.2 },
+    extreme:{ speed: [9, 10], immune_response_strength: 0.80, cytokine_protect_turns: 0, score_mult: 1.4 },
   },
 
   // ── Mutation frequency — keyed by the virus's own Low/Medium/High
@@ -107,6 +113,11 @@ const STEALTH_CONFIG = {
     // Cards drawn per turn — see _runImmuneResponse() (game.js). Flat,
     // not scaled by how many tissues are currently active.
     DRAW_PER_TURN: 2,
+    // How many turns cards.js's EARLY_DILUTION_BONUS (extra NK Cell/Blue
+    // Cytokine copies, protecting a fresh beachhead) stays in the deck —
+    // see ImmuneDeck.pruneEarlyDilution(), cards.js, called once turn
+    // exceeds this from _runImmuneResponse() below.
+    EARLY_DILUTION_TURNS: 5,
     // No cap on how many cards get played in one turn (removed — balance
     // pass) — held cards only get re-checked (not re-drawn) each turn, so
     // several can become useful on the same turn at once (e.g. a big
@@ -129,11 +140,12 @@ const STEALTH_CONFIG = {
     // _runImmuneResponse() (game.js). Was indefinite (stayed primed
     // forever until it actually blocked a T-Cell).
     MHC_EVASION_TURNS: 3,
-    // Single-turn, unlike Protein Vaccine's own (longer-lasting) -1 —
-    // Antiviral is a quick knockdown, not a sustained suppressant, and
-    // shouldn't still be in effect by the time a later Replication Boost
-    // gets played.
+    // Single-turn, unlike Protein Vaccine's own (longer-lasting, and
+    // stronger — see PROTEIN_SPEED_PENALTY_AMOUNT below) debuff — Antiviral
+    // is a quick knockdown, not a sustained suppressant, and shouldn't
+    // still be in effect by the time a later Replication Boost gets played.
     ANTIVIRAL_PENALTY_TURNS: 1,
+    ANTIVIRAL_PENALTY_AMOUNT: 1,
   },
 
   // ── Vaccines — part of the one shared immune deck now (cards.js
@@ -141,7 +153,8 @@ const STEALTH_CONFIG = {
   VACCINE: {
     MRNA_BOOST_TURNS: 3,     // boosts T-Cell row-size + Cytokine shape tier for N turns
     MRNA_TCELL_EXTRA_ROWS: 1, // extra row cleared while boosted
-    PROTEIN_SPEED_PENALTY_TURNS: 3, // Protein Vaccine's replication-speed-1 debuff duration
+    PROTEIN_SPEED_PENALTY_TURNS: 3,  // Protein Vaccine's replication-speed debuff duration
+    PROTEIN_SPEED_PENALTY_AMOUNT: 2, // stronger than Antiviral's -1 — a sustained, deeper suppressant
   },
 
   // ── Spillover — infection can jump from an infected tissue into an

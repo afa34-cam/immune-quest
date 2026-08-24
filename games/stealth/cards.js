@@ -148,7 +148,7 @@ const STEALTH_CARD_DEFS = {
 
   'latency': {
     id: 'latency', name: 'Latency', icon: '😴', count: 4,
-    tooltip: 'Place a dormant cell. This is invisible to the immune system and wakes and infects nearby cells in the spread phase of a later turn. Must be placed within one row of the current infection front.',
+    tooltip: 'Place a dormant cell. This is invisible to the immune system and wakes and infects nearby cells in the spread phase of a later turn. Must be placed within two rows of the current infection front.',
     targetType: 'cell',
     apply(boards, target, state) {
       const board = boards[target.tissue];
@@ -156,7 +156,7 @@ const STEALTH_CARD_DEFS = {
       return {
         text: ok
           ? `Latency: dormant cell placed at [${target.col + 1},${target.row + 1}] in ${target.tissue}.`
-          : `Latency: target must be healthy and within one row of the infection front.`,
+          : `Latency: target must be healthy and within two rows of the infection front.`,
         count: 0, ok,
       };
     },
@@ -245,10 +245,11 @@ const TROPISM_CARD_IDS = ['lung-tropism', 'liver-tropism', 'intestine-tropism'];
 //  Every other card (NK Cells, Cytokines, Sensing) picks its own target
 //  tissue at play time; the vaccines and Antiviral have none (whole-body
 //  effects). isUseful(game) → bool, apply(game, ctx) → { ...effect info }.
-//  ctx = { protectTurns, mrnaBoosted } — protectTurns is the difficulty
-//  band's cytokine_protect_turns; mrnaBoosted is whether the mRNA
-//  Vaccine's boost is currently active (T-Cell extra row, bigger Cytokine
-//  shield) — NK Cells is deliberately NEVER affected by it, unlike T-Cell.
+//  ctx = { protectTurns, mrnaBoosted } — protectTurns is this game's
+//  effectiveCytokineProtectTurns() (game.js), the current virus's own
+//  Cytokine shield duration; mrnaBoosted is whether the mRNA Vaccine's
+//  boost is currently active (T-Cell extra row, bigger Cytokine shield) —
+//  NK Cells is deliberately NEVER affected by it, unlike T-Cell.
 // ═══════════════════════════════════════════════════════════════════
 
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -341,7 +342,7 @@ function _cytokineDef(color, baseTier) {
   const cellWord = ({ 0: '1 healthy cell', 1: '5 healthy cells', 2: '9 healthy cells' })[baseTier];
   return {
     id: `immune-cytokine-${color}`, name: `Cytokine (${_capitalize(color)})`, icon: { blue: '🔵', orange: '🟠', red: '🔴' }[color], tier: baseTier,
-    tooltip: `Shields ${cellWord} from infection for 3 turns. Against Hepatitis, shields don't expire — only Cytokine Neutralisation removes them.`,
+    tooltip: `Shields ${cellWord} from infection. Duration depends on the virus: 3 turns against Norovirus, 4 against Influenza, and permanently against Hepatitis (only Cytokine Neutralisation removes it). A custom virus's own duration scales with its replication speed, from 3 turns at the slowest up to permanent at the fastest.`,
     isUseful(game) { return _cytokinePickTarget(game) !== null; },
     apply(game, ctx) {
       const target = _cytokinePickTarget(game);
@@ -353,13 +354,9 @@ function _cytokineDef(color, baseTier) {
         : color === 'red' ? CYTOKINE_RED_BOOST_SHAPE
         : CYTOKINE_SHAPE_TIERS[baseTier + 1];
       const board = game.boards[target.tissue];
-      // Against Hepatitis specifically, Cytokine shields never expire on
-      // their own (0 = permanent — same convention Antibody already uses,
-      // see protectRow()/tickTimers(), board.js) — only Cytokine
-      // Neutralisation can remove them, matching Hepatitis's own "chronic,
-      // persistent infection" identity instead of the usual
-      // band.cytokine_protect_turns countdown every other virus faces.
-      const turns = game.loadout.id === 'hepatitis' ? 0 : ctx.protectTurns;
+      // Per-virus duration (0 = permanent) — see
+      // effectiveCytokineProtectTurns(), game.js.
+      const turns = ctx.protectTurns;
       const protectedCells = board.protectShape(target.col, target.row, shape, turns, color)
         .map(cell => ({ ...cell, tissue: target.tissue }));
       return { protectedCells };
@@ -460,7 +457,7 @@ const IMMUNE_CARD_DEFS = {
   },
   'vaccine-protein': {
     id: 'vaccine-protein', name: 'Protein-based Vaccine', icon: '🧪',
-    tooltip: 'Grants 1 random bonus antibody card and reduces the virus\'s replication speed by -1 for 3 turns.',
+    tooltip: 'Grants 1 random bonus antibody card and reduces the virus\'s replication speed by -2 for 3 turns.',
     isUseful() { return true; }, // free value, no target required — always play it
     apply(game) {
       // Returned rather than pushed straight onto game.immuneHand here —
@@ -472,8 +469,11 @@ const IMMUNE_CARD_DEFS = {
       const grantedCards = [{ ...IMMUNE_CARD_DEFS[`immune-antibody-${tissue}`] }];
       // Temporary, like Antiviral — not a permanent loadout change — and
       // shares the same speedPenaltyTurns counter (see game.js), so the
-      // two stack the same way Replication Boost stacks with itself.
+      // two stack the same way Replication Boost stacks with itself. Its
+      // own penalty AMOUNT (-2, vs Antiviral's -1) is tracked separately
+      // via speedPenaltyAmount — see effectiveReplicationSpeed(), game.js.
       game.speedPenaltyTurns = (game.speedPenaltyTurns || 0) + STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS;
+      game.speedPenaltyAmount = STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT;
       game.lastSpeedPenaltySource = 'vaccine-protein';
       return { bonusGranted: true, speedPenaltyApplied: true, grantedCards };
     },
@@ -494,16 +494,8 @@ const IMMUNE_CARD_DEFS = {
 // or the other per named preset below — Norovirus stays neutral between
 // the two (also just "yes"/"yes"), so no override needed for it.
 function buildImmuneDeckCounts(loadout) {
-  // NK Cells and blue Cytokine (both single-cell effects) doubled relative
-  // to their old baseline — T-Cell/Antibody's own counts stay the same,
-  // but a bigger deck means their SHARE of it (and so how often the
-  // immune system actually draws the row-clearer that matters) drops
-  // substantially. Row-clears from a fresh mission's very first few turns
-  // were wiping out a beachhead the virus hadn't had time to establish —
-  // this dilutes that without touching Influenza/Hepatitis's own
-  // favoured-type bonus below, which is about virus identity, not this.
   const counts = {
-    'immune-nkcell': 4,
+    'immune-nkcell': 2,
     // Matches Antibody's own base count below — the other big row-clearer,
     // no reason it should be three times rarer.
     'immune-tcell-lung': 3, 'immune-tcell-liver': 3, 'immune-tcell-intestine': 3,
@@ -514,7 +506,7 @@ function buildImmuneDeckCounts(loadout) {
     // Equal odds across all 3 colours now (was 6/3/2, blue-heavy) — balance
     // pass: no reason the immune system should draw the weakest shield
     // (Blue, 1 cell) three times as often as the strongest (Red, 9 cells).
-    'immune-cytokine-blue': 4, 'immune-cytokine-orange': 4, 'immune-cytokine-red': 4,
+    'immune-cytokine-blue': 2, 'immune-cytokine-orange': 4, 'immune-cytokine-red': 4,
     'immune-sensing': 2, 'immune-antiviral': 2,
     'vaccine-mrna': 1, 'vaccine-protein': 1,
   };
@@ -555,6 +547,19 @@ function buildImmuneDeckCounts(loadout) {
   return counts;
 }
 
+// Extra NK Cell / Blue Cytokine copies (both single-cell effects), on top
+// of buildImmuneDeckCounts()'s own baseline — a bigger deck means T-Cell/
+// Antibody's SHARE of it (and so how often the immune system actually
+// draws the row-clearer that matters) drops, which is the point: row-
+// clears from a fresh mission's very first few turns were wiping out a
+// beachhead the virus hadn't had time to establish. But that's only a
+// risk early on — ImmuneDeck tags these specific copies (see below) so
+// StealthGame can prune whichever ones are still unplayed once EARLY_
+// DILUTION_TURNS has passed (see game.js _runImmuneResponse()), restoring
+// T-Cell/Antibody's normal draw share for the rest of the game rather than
+// diluting it for the whole match.
+const EARLY_DILUTION_BONUS = { 'immune-nkcell': 2, 'immune-cytokine-blue': 2 };
+
 class ImmuneDeck {
   constructor(loadout) {
     this.draw    = [];
@@ -563,6 +568,10 @@ class ImmuneDeck {
     Object.entries(counts).forEach(([id, count]) => {
       const def = IMMUNE_CARD_DEFS[id];
       for (let i = 0; i < count; i++) this.draw.push({ ...def });
+    });
+    Object.entries(EARLY_DILUTION_BONUS).forEach(([id, count]) => {
+      const def = IMMUNE_CARD_DEFS[id];
+      for (let i = 0; i < count; i++) this.draw.push({ ...def, __earlyDilution: true });
     });
     this._shuffle(this.draw);
   }
@@ -592,6 +601,17 @@ class ImmuneDeck {
   }
 
   discardCard(card) { this.discard.push(card); }
+
+  // Strips any still-unplayed EARLY_DILUTION_BONUS copies from both the
+  // draw pile and the discard pile (a discarded one can still be reshuffled
+  // back into draw later otherwise) — called once by _runImmuneResponse()
+  // (game.js) the first turn past EARLY_DILUTION_TURNS. Copies already in
+  // the immune system's HAND are left alone; this only stops MORE of them
+  // from being drawn going forward, it doesn't claw back one already dealt.
+  pruneEarlyDilution() {
+    this.draw = this.draw.filter(c => !c.__earlyDilution);
+    this.discard = this.discard.filter(c => !c.__earlyDilution);
+  }
 }
 
 // ── Deck: draft-based (offer N, pick M) rather than blind draw ──────

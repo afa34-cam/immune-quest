@@ -66,12 +66,20 @@ class StealthGame {
     // resets it), independent of the (now permanent) effect itself.
     this.showReplicationBoostBadge = false;
     this.speedPenaltyTurns    = 0;   // Antiviral / Protein Vaccine (immune-favourable): the exact opposite of the above
+    // How much effectiveReplicationSpeed() currently subtracts while
+    // speedPenaltyTurns is active — Antiviral's -1 vs Protein Vaccine's
+    // deeper -2 (see ANTIVIRAL_PENALTY_AMOUNT/PROTEIN_SPEED_PENALTY_AMOUNT,
+    // config.js). The two share one pooled DURATION counter (see
+    // vaccine-protein's apply(), cards.js) rather than stacking, so
+    // whichever effect most recently (re)applied also sets the amount for
+    // the remainder of that pooled countdown — same "most recent wins"
+    // relationship lastSpeedPenaltySource already has with the badge shown.
+    this.speedPenaltyAmount = 0;
     // Whichever of Antiviral/Protein Vaccine most recently topped up
     // speedPenaltyTurns — the two share one pooled counter (see
-    // vaccine-protein's apply(), cards.js), so this just picks which
-    // card face the still-active countdown badge shows (see
-    // renderImmuneBanner(), game-ui.js); it doesn't affect the penalty
-    // itself, which stacks regardless of source.
+    // vaccine-protein's apply(), cards.js), so this picks which card face
+    // the still-active countdown badge shows (see renderImmuneBanner(),
+    // game-ui.js) and, via speedPenaltyAmount above, the actual magnitude.
     this.lastSpeedPenaltySource = null;
     this.immuneSkipTurns      = 0;   // turns remaining where the immune system's whole turn is skipped — Activate Tregs (virus-favourable)
     this.mhcActive            = {};  // { tissue: turnsRemaining } — T-Cell Evasion primed (virus-favourable): cancels the next T-Cell there, expires after MHC_EVASION_TURNS unused
@@ -81,7 +89,6 @@ class StealthGame {
     this.lastGrowth  = null;  // { totalNew, perTissue: {tissue: {count, cells}}, spillovers }
     this.lastImmune  = null;  // { totalCleared, played: [{id, name, icon, cells}], handSize }
     this.lastMutation = null; // { event, text } | null
-    this.lastMHCBlocks = [];  // [{tissue}] — T-Cells auto-cancelled by a primed T-Cell Evasion this turn
 
     // Score — only ever finalized on a win, see _finalizeScore().
     this.score = 0;
@@ -111,6 +118,24 @@ class StealthGame {
     return { name: 'medium', ...STEALTH_CONFIG.DIFFICULTY.medium };
   }
 
+  // How long a freshly-placed Cytokine shield lasts before it expires on
+  // its own (0 = permanent, only removable via Cytokine Neutralisation —
+  // same convention Antibody already uses). Each named virus has its own
+  // fixed duration, identity-driven rather than tied to its replication
+  // band: Norovirus's fast reinfection cycle means the immune system can't
+  // afford to let shields sit for long; Influenza sits a bit longer;
+  // Hepatitis's whole "chronic, persistent infection" identity is that
+  // shields never lapse at all. A custom (builder) virus has no such
+  // identity to key off, so it falls back to difficultyBand's own
+  // cytokine_protect_turns, which scales with the replication speed chosen
+  // at build time (config.js DIFFICULTY).
+  effectiveCytokineProtectTurns() {
+    if (this.loadout.id === 'hepatitis') return 0;
+    if (this.loadout.id === 'influenza') return 4;
+    if (this.loadout.id === 'norovirus') return 3;
+    return this.difficultyBand.cytokine_protect_turns;
+  }
+
   // Base replication speed (Replication Boost/speed_gain mutation already
   // baked permanently into loadout.replication) adjusted by Antiviral or
   // Protein Vaccine's temporary penalty, if currently active — the
@@ -120,7 +145,7 @@ class StealthGame {
   // badge (renderVirusInfoPanel()).
   effectiveReplicationSpeed() {
     let speed = this.loadout.replication;
-    if (this.speedPenaltyTurns > 0) speed = Math.max(1, speed - 1);
+    if (this.speedPenaltyTurns > 0) speed = Math.max(1, speed - this.speedPenaltyAmount);
     return speed;
   }
 
@@ -174,35 +199,34 @@ class StealthGame {
 
   // Infection can jump from an infected tropism tissue into an ADJACENT
   // tropism tissue (board order: liver-lung-intestine — liver and
-  // intestine aren't adjacent to each other) — row for row, same as any
-  // other spread: a candidate cell in `to`'s edge column at row R is only
-  // eligible if `from` has a virus SOMEWHERE in that same row R (anywhere
-  // across the board, not just its own facing edge column — see below for
-  // why). Both boards' facing columns are whichever side physically
-  // touches the other (leftmost/rightmost — lung faces liver on its left
-  // edge and intestine on its right, since it sits between them).
+  // intestine aren't adjacent to each other) — row for row: a candidate
+  // in `to`'s edge column at row R is only eligible if `from`'s OWN edge
+  // cell in that same row R (the actual cell physically touching the
+  // border, not just anywhere in the row) is infected or dormant. Both
+  // boards' facing columns are whichever side physically touches the
+  // other (leftmost/rightmost — lung faces liver on its left edge and
+  // intestine on its right, since it sits between them).
   //
-  // Checking the whole row, not just `from`'s own boundary-edge column,
-  // is deliberate: seedInfection() (board.js) always starts a tissue's
-  // infection at its CENTRE column, so requiring it to have already
-  // spread sideways all the way out to the specific edge cell touching
-  // the neighbour — on top of the chance roll below — made this trigger
-  // so rarely in practice it read as never crossing at all. A virus
-  // that's clearly taken over most of a row is a believable enough threat
-  // to the tissue next door without needing to have reached that literal
-  // edge cell first; the new infection still lands right at the shared
-  // border (entryCol), spreading inward from there like any other tissue.
-  // Every currently-eligible cross-tissue spillover opportunity, one entry
-  // per adjacent-tissue pair that has at least one landable row right now
-  // (see the comment above for what "eligible" means). Shared by
-  // _runSpillover() (which rolls each pair's own chance and picks one
-  // candidate if it hits) and _checkLoss() (which only needs to know
-  // whether any exist at all, so a tissue that's exhausted its normal
-  // within-tissue spread isn't declared boxed in while a spillover
+  // Deliberately keyed off that one specific boundary cell, not "virus
+  // somewhere in the row": an earlier looser version allowed a hit as long
+  // as ANY cell in the row was infected, which meant the virus could
+  // appear to spread straight through a cytokine-shielded (or otherwise
+  // still-healthy) border cell just because something infected sat further
+  // back in that same row — visually indistinguishable from jumping the
+  // shield. Each eligible border cell gets its own independent roll (see
+  // _runSpillover()), rather than one roll per tissue pair picking among
+  // several candidate rows — a wide, heavily infected front can now seed
+  // more than one row of the neighbour in the same turn, same as a wide
+  // front spreads across multiple cells within its own tissue.
+  //
+  // Shared by _runSpillover() (which rolls each candidate's own chance)
+  // and _checkLoss() (via _hasSpilloverTarget(), which only needs to know
+  // whether any candidate exists at all, so a tissue that's exhausted its
+  // normal within-tissue spread isn't declared boxed in while a spillover
   // opportunity into a neighbour is still on the table).
-  _spilloverCandidatePairs() {
+  _spilloverCandidates() {
     const order = STEALTH_CONFIG.BOARD.ADJACENCY_ORDER;
-    const pairs = [];
+    const candidates = [];
     order.forEach((from, i) => {
       if (!this.activeTissues.includes(from)) return;
       const fromBoard = this.boards[from];
@@ -217,29 +241,28 @@ class StealthGame {
         const toIndex = order.indexOf(to);
         // Mirror-image columns: whichever side of EACH board faces the
         // other tissue.
-        const entryCol = toIndex < i ? toBoard.cols - 1 : 0;
-        const candidates = [];
+        const toEntryCol = toIndex < i ? toBoard.cols - 1 : 0;
+        const fromEdgeCol = toIndex < i ? 0 : fromBoard.cols - 1;
         for (let r = 0; r < toBoard.rows; r++) {
-          const targetCell = toBoard.getCell(entryCol, r);
-          const rowHasVirus = fromBoard.cells[r].some(c => c.state === 'infected' || c.state === 'dormant');
-          if (targetCell && targetCell.state === 'healthy' && rowHasVirus) {
-            candidates.push({ col: entryCol, row: r });
+          const sourceCell = fromBoard.getCell(fromEdgeCol, r);
+          const targetCell = toBoard.getCell(toEntryCol, r);
+          const sourceInfected = sourceCell && (sourceCell.state === 'infected' || sourceCell.state === 'dormant');
+          if (sourceInfected && targetCell && targetCell.state === 'healthy') {
+            candidates.push({ from, to, toBoard, col: toEntryCol, row: r });
           }
         }
-        if (candidates.length) pairs.push({ from, to, toBoard, candidates });
       });
     });
-    return pairs;
+    return candidates;
   }
 
   _runSpillover() {
     const results = [];
-    this._spilloverCandidatePairs().forEach(({ from, to, toBoard, candidates }) => {
+    this._spilloverCandidates().forEach(({ from, to, toBoard, col, row }) => {
       if (Math.random() < STEALTH_CONFIG.SPILLOVER.CHANCE) {
-        const pick = candidates[Math.floor(Math.random() * candidates.length)];
-        toBoard._infect(toBoard.getCell(pick.col, pick.row));
+        toBoard._infect(toBoard.getCell(col, row));
         this.tissuesReached.add(to);
-        results.push({ from, to, col: pick.col, row: pick.row });
+        results.push({ from, to, col, row });
       }
     });
     return results;
@@ -260,10 +283,6 @@ class StealthGame {
   // pause/popup needed, since the player already made that call earlier.
   _runImmuneResponse() {
     this.phase = 'immune_response';
-    const band = this.difficultyBand;
-    // Reset each turn — reported alongside lastImmune; see
-    // buildImmuneSteps() (game-ui.js) for the narration.
-    this.lastMHCBlocks = [];
 
     // mRNA Vaccine's boost is checked BEFORE ticking down, so a boost that
     // was activated last turn is still in effect this turn; a freshly-
@@ -276,6 +295,12 @@ class StealthGame {
     if (this.mrnaBoostTurns > 0) this.mrnaBoostTurns--;
 
     this.activeTissues.forEach(t => { this.boards[t].tickTimers(); });
+
+    // One-time cleanup once the early-dilution window closes — see
+    // ImmuneDeck.pruneEarlyDilution() (cards.js). Cheap enough to just
+    // re-run (a no-op after the first successful prune) rather than track
+    // a separate "already pruned" flag.
+    if (this.turn > STEALTH_CONFIG.IMMUNE.EARLY_DILUTION_TURNS) this.immuneDeck.pruneEarlyDilution();
 
     const skipped = this.immuneSkipTurns > 0;
     const played = [];
@@ -298,7 +323,7 @@ class StealthGame {
         overflow.forEach(c => this.immuneDeck.discardCard(c));
       }
 
-      const ctx = { protectTurns: band.cytokine_protect_turns, mrnaBoosted };
+      const ctx = { protectTurns: this.effectiveCytokineProtectTurns(), mrnaBoosted };
 
       // Per-tissue cell snapshot taken BEFORE any of this turn's cards
       // resolve — every card below applies its board effect immediately
@@ -332,12 +357,13 @@ class StealthGame {
 
         // T-Cell Evasion, if primed on this exact tissue, auto-cancels
         // a T-Cell here instead of letting it apply — consumes the priming
-        // (the immune system got nothing for this attempt).
+        // (the immune system got nothing for this attempt), but the T-Cell
+        // card itself was never actually played, just deflected, so it
+        // stays in hand for a future attempt rather than being discarded.
         if (card.id.startsWith('immune-tcell-') && this.mhcActive[card.tissue] > 0) {
           this.mhcActive[card.tissue] = 0;
-          this.lastMHCBlocks.push({ tissue: card.tissue });
+          stillHeld.push(card);
           this._addLog(`T-Cell Evasion: blocked a T-Cell play in ${card.tissue}.`);
-          this.immuneDeck.discardCard(card);
           return;
         }
 
@@ -356,6 +382,7 @@ class StealthGame {
         // Vaccine's own longer -1.
         if (card.id === 'immune-antiviral') {
           this.speedPenaltyTurns = (this.speedPenaltyTurns || 0) + STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_TURNS;
+          this.speedPenaltyAmount = STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT;
           this.lastSpeedPenaltySource = 'immune-antiviral';
         }
 
@@ -753,7 +780,7 @@ class StealthGame {
     // that's filled every reachable cell locally can still keep going by
     // spilling into a clean, tropism-active neighbour.
     const boxedIn = this.activeTissues.every(t => !this.boards[t].hasSpreadTarget())
-      && this._spilloverCandidatePairs().length === 0;
+      && this._spilloverCandidates().length === 0;
     if (boxedIn) {
       this.state = 'lost';
       this._addLog(`✗ LOSS: the virus has nowhere left to spread on turn ${this.turn}.`);

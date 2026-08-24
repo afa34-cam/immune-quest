@@ -80,27 +80,42 @@ class StealthBoard {
     return this.cells[row][col];
   }
 
-  // ── Seed initial infection at the top, up to STARTING_SEED_ROWS deep ──
+  // ── Seed initial infection: a random blob within a fixed 3-column x
+  //     2-row block at the centre top ──────────────────────────────
+  // Layout (centreCol = c, block spans c-1..c+1, rows 0-1):
+  //     [ tl][ TOP ][ tr]   row 0 — TOP (centre) is guaranteed infected;
+  //     [ bl][ mid ][ br]   row 1 — every other cell is a coin flip.
   // Same blocking rule as spillover into an already-fortified entry cell
   // (see game.js _runSpillover) — now that a tissue can be pre-fortified
   // with Antibody/Cytokine before the virus ever arrives (see the
-  // StealthGame constructor), the very first seed has to respect that too,
-  // not just later spread attempts. Straight down the centre column, row
-  // by row from the top — stops at the first non-healthy cell (e.g. a
-  // pre-fortified row) rather than skipping over it, so the seed is always
-  // a single unbroken column, never a healthy row 1 sitting isolated below
-  // a blocked row 0. Returns true if at least the top cell was seeded.
+  // StealthGame constructor), the very first seed has to respect that too:
+  // a fortified cell just stays whatever it already was, same as any other
+  // cell that loses its coin flip.
+  //
+  // bl/br (the row-1 corners) are NOT plain independent coin flips like
+  // the other four — each is only ELIGIBLE to roll at all if it has a
+  // direct (non-diagonal) connection back to the guaranteed TOP cell:
+  // either mid (the row-1 centre, directly below TOP) is infected, or the
+  // corner's own directly-above neighbour (tl for bl, tr for br) is
+  // infected. Without this, a corner could end up infected while diagonally
+  // isolated from the rest of the blob — connected to nothing by a shared
+  // edge, only by a shared corner — which would read as the infection
+  // having somehow jumped there instead of grown into it.
   seedInfection(col = Math.floor(this.cols / 2)) {
-    let seededAny = false;
-    for (let row = 0; row < STEALTH_CONFIG.BOARD.STARTING_SEED_ROWS; row++) {
-      const cell = this.getCell(col, row);
-      if (!cell || cell.state !== 'healthy') break;
-      cell.state         = 'infected';
-      cell.turnsInfected = 1;
-      seededAny = true;
-    }
-    if (seededAny) this.justSeeded = true;
-    return seededAny;
+    const top = this.getCell(col, 0);
+    if (!top || top.state !== 'healthy') return false; // blocked before it can even start
+    const infect = cell => { if (cell && cell.state === 'healthy') { cell.state = 'infected'; cell.turnsInfected = 1; return true; } return false; };
+    const roll = () => Math.random() < STEALTH_CONFIG.BOARD.SEED_CELL_CHANCE;
+
+    infect(top);
+    const tlInfected  = roll() && infect(this.getCell(col - 1, 0));
+    const trInfected  = roll() && infect(this.getCell(col + 1, 0));
+    const midInfected = roll() && infect(this.getCell(col, 1));
+    if ((midInfected || tlInfected) && roll()) infect(this.getCell(col - 1, 1));
+    if ((midInfected || trInfected) && roll()) infect(this.getCell(col + 1, 1));
+
+    this.justSeeded = true;
+    return true;
   }
 
   // ── Phase 1: autonomous virus spread ───────────────────────────
@@ -261,16 +276,19 @@ class StealthBoard {
   // deck/hand for the whole immune system instead of one per tissue — see
   // _runImmuneResponse() (game.js).
 
-  // T-Cell targets the row with the MOST clearable infected cells — the
-  // most impactful row available. Returns null if no row has any (no
-  // minimum floor — any row with at least one infected cell qualifies).
+  // T-Cell targets the DEEPEST row with a clearable infected cell — the
+  // front line closest to the bottom row (the win condition), same "defend
+  // the front" logic NK Cell's own _pickDeepestInfectedCell() and Antibody/
+  // Cytokine's targeting already use, rather than whichever row happens to
+  // have the most infected cells (which could be near the top, well behind
+  // the actual front, if it just happened to fill up completely). Returns
+  // null if no row has any (no minimum floor — any row with at least one
+  // infected cell qualifies).
   _pickTCellRow() {
-    let best = null, bestCount = 0;
-    for (let r = 0; r < this.rows; r++) {
-      const count = this.cells[r].filter(c => c.state === 'infected' && c.escapeImmune <= 0).length;
-      if (count > bestCount) { bestCount = count; best = r; }
+    for (let r = this.rows - 1; r >= 0; r--) {
+      if (this.cells[r].some(c => c.state === 'infected' && c.escapeImmune <= 0)) return r;
     }
-    return bestCount > 0 ? best : null;
+    return null;
   }
 
   // NK Cells' own target on this board — the single infected cell that's
@@ -501,14 +519,14 @@ class StealthBoard {
 
   // "Latency" — place a dormant token on a healthy cell; it wakes and
   // auto-infects after a delay, invisible to immune response meanwhile.
-  // Restricted to at most one row past the current infection front (the
-  // deepest infected/dormant row + 1) — latency represents the virus lying
+  // Restricted to at most two rows past the current infection front (the
+  // deepest infected/dormant row + 2) — latency represents the virus lying
   // low just ahead of where it already is, not seeding somewhere random
   // and disconnected from the active infection.
   placeDormant(col, row, turns = 2) {
     const cell = this.getCell(col, row);
     if (!cell || cell.state !== 'healthy') return false;
-    const maxRow = this._deepestInfectedRow() + 1; // -1+1=0 if nothing infected yet
+    const maxRow = this._deepestInfectedRow() + 2; // -1+2=1 if nothing infected yet
     if (row > maxRow) return false;
     cell.state        = 'dormant';
     cell.dormantTurns = turns;

@@ -16,15 +16,46 @@ const STATE_LABEL  = { healthy: 'Healthy', infected: 'Infected', dormant: 'Dorma
 
 function _cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-// Shows/hides a small pulsing arrow next to a horizontally-scrollable card
-// row, whenever there are more cards than currently fit — and wires it up
-// to actually scroll the row on click, one roughly-a-page nudge at a time,
-// rather than being a purely visual hint while dragging/the wheel were the
-// only real ways to move the row.
-function updateScrollArrow(rowEl, arrowEl) {
-  if (!rowEl || !arrowEl) return;
-  arrowEl.classList.toggle('visible', rowEl.scrollWidth > rowEl.clientWidth + 2);
-  arrowEl.onclick = () => rowEl.scrollBy({ left: rowEl.clientWidth * 0.8, behavior: 'smooth' });
+// Shows/hides a pair of small pulsing arrows flanking a horizontally-
+// scrollable card row, whenever there are more cards than currently fit —
+// and wires each up to actually scroll the row on click, one roughly-a-
+// page nudge at a time (back or forward), rather than being a purely
+// visual hint while dragging/the wheel were the only real ways to move
+// the row. Both arrows show together whenever the row overflows at all
+// (not just once you've actually scrolled toward one end) — same simple
+// "there's more here" hint the single forward arrow already gave, just
+// now offered in both directions since a row can be scrolled back too.
+// backArrowEl is optional — the few callers that don't have one yet
+// (a future addition) just get the forward-only behavior this always had.
+function updateScrollArrows(rowEl, backArrowEl, forwardArrowEl) {
+  if (!rowEl) return;
+  const overflowing = rowEl.scrollWidth > rowEl.clientWidth + 2;
+  if (forwardArrowEl) {
+    forwardArrowEl.classList.toggle('visible', overflowing);
+    forwardArrowEl.onclick = () => rowEl.scrollBy({ left: rowEl.clientWidth * 0.8, behavior: 'smooth' });
+  }
+  if (backArrowEl) {
+    backArrowEl.classList.toggle('visible', overflowing);
+    backArrowEl.onclick = () => rowEl.scrollBy({ left: -rowEl.clientWidth * 0.8, behavior: 'smooth' });
+  }
+}
+
+// Builds and wires up a back/forward scroll-arrow pair for a dynamically
+// rebuilt card row (Active Cards / Immune System banners — the hand and
+// draft popup rows have their own static HTML arrows instead, see
+// index.html). Inserts the back arrow BEFORE cardsRow and the forward
+// arrow after, so they flank it left/right in the flex row.
+function appendScrollArrowPair(wrap, cardsRow) {
+  const back = document.createElement('div');
+  back.className = 'scroll-arrow scroll-arrow-back';
+  back.textContent = '◂';
+  wrap.appendChild(back);
+  wrap.appendChild(cardsRow);
+  const forward = document.createElement('div');
+  forward.className = 'scroll-arrow';
+  forward.textContent = '▸';
+  wrap.appendChild(forward);
+  updateScrollArrows(cardsRow, back, forward);
 }
 
 // ── Card art ─────────────────────────────────────────────────────
@@ -601,13 +632,7 @@ function renderVirusTraits() {
   });
   if (!cardsRow.children.length) cardsRow.innerHTML = '<span class="banner-empty">— none —</span>';
 
-  wrap.appendChild(cardsRow);
-
-  const arrow = document.createElement('div');
-  arrow.className = 'scroll-arrow';
-  arrow.textContent = '▸';
-  wrap.appendChild(arrow);
-  updateScrollArrow(cardsRow, arrow);
+  appendScrollArrowPair(wrap, cardsRow);
 }
 
 // ── Virus identity panel — right of Cards In Hand, same row: name,
@@ -979,10 +1004,27 @@ function appendTurnMarker(turn) {
 // synced with its narration line. `flashClass` picks the animation so
 // virus growth (green pop) reads differently from immune plays (cyan
 // flash) at a glance.
+// Every transient per-cell flash class any play can add — see
+// _immuneFlashClass() and playSelectedCard()'s own cell-antibody-escape-poof
+// call below.
+const ALL_CELL_FLASH_CLASSES = [
+  'cell-tcell-poof', 'cell-antibody-flash', 'cell-immune-flash', 'cell-antibody-escape-poof',
+];
+
 function highlightCells(tissue, cells, flashClass = 'cell-immune-flash') {
   cells.forEach(({ col, row }) => {
     const el = document.querySelector(`.tissue-cell[data-tissue="${tissue}"][data-col="${col}"][data-row="${row}"]`);
     if (!el) return;
+    // If an earlier step's flash is still mid-animation on this same cell
+    // — two different immune plays landing on it within one turn, e.g. NK
+    // Cell clearing it and then Cytokine re-protecting it a moment later —
+    // drop that stale class first. Each flash only self-removes on its own
+    // 1s timer, and _applyCellVisual()'s preserved-class carry-over would
+    // otherwise stack it alongside this step's own flash/state, which
+    // visually read as this step's animation glitching into whatever the
+    // earlier one was showing (e.g. NK's crumple/poof replaced mid-flight
+    // by a cytokine's bell icon).
+    ALL_CELL_FLASH_CLASSES.forEach(c => el.classList.remove(c));
     el.classList.add(flashClass);
     setTimeout(() => el.classList.remove(flashClass), 1000);
   });
@@ -1084,25 +1126,32 @@ function buildImmuneSteps(g) {
     // "colon tissue" suffix.
     const suffix = tissue ? `: ${_cap(tissue)}` : null;
     const name = suffix && p.name.endsWith(suffix) ? p.name.slice(0, -suffix.length) : p.name;
-    // Protein Vaccine gets an explicit "-1" in its own narration line (not
-    // just the badge flash) so the effect is clearly spelled out, not
-    // just implied.
-    const label = p.id === 'vaccine-protein' ? `${name} — Replication Speed −1 for 3 turns` : name;
+    // Protein Vaccine gets an explicit magnitude in its own narration line
+    // (not just the badge flash) so the effect is clearly spelled out, not
+    // just implied — its penalty is deeper than Antiviral's (see
+    // PROTEIN_SPEED_PENALTY_AMOUNT, config.js).
+    const label = p.id === 'vaccine-protein'
+      ? `${name} — Replication Speed −${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT} for 3 turns` : name;
     const html = tissue ? `<span class="narration-tissue">${_cap(tissue)}</span> — ${label}` : label;
     steps.push({
       html, cls: 'line-immune', tissue, cells: p.cells, flashClass: _immuneFlashClass(p.id), inGroup: true, slow: true,
-      // Antiviral and Protein Vaccine are both -1 to the same effective-speed
-      // badge — flash it the same way Replication Boost's own +1 does.
-      speedDelta: (p.id === 'immune-antiviral' || p.id === 'vaccine-protein') ? -1 : undefined,
+      // Antiviral and Protein Vaccine both flash the effective-speed badge
+      // the same way Replication Boost's own +1 does, just by their own
+      // (different) magnitudes — see ANTIVIRAL_PENALTY_AMOUNT/
+      // PROTEIN_SPEED_PENALTY_AMOUNT, config.js.
+      speedDelta: p.id === 'immune-antiviral' ? -STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT
+                : p.id === 'vaccine-protein' ? -STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT
+                : undefined,
       revealImmuneCard: true,
     });
   });
-  if (g.lastImmune.traded) {
-    steps.push({
-      html: `Traded 3 cards for ${g.lastImmune.traded.received}`,
-      cls: 'line-immune', inGroup: true, slow: true,
-    });
-  }
+  // Deliberately no narration step for g.lastImmune.traded — trading is
+  // the immune system reshuffling its OWN hand, something the player has
+  // no visibility into for their own hand either, so revealing it (even
+  // without naming the card received) would leak hidden information. If
+  // trading was the only thing that happened this immune turn, the
+  // fallback below ("No cards played this turn") is exactly the right
+  // cover — nothing observable on the board did happen.
   if (!steps.length) {
     steps.push({
       html: g.lastImmune.skipped ? 'Suppressed by Activate Tregs — turn skipped' : 'No cards played this turn',
@@ -1113,17 +1162,12 @@ function buildImmuneSteps(g) {
   // reads the same way every time — it and every card below it share one
   // highlight line on the left instead of each getting its own.
   steps.unshift({ html: 'Immune System', cls: 'line-immune line-immune-header', groupCls: 'line-immune', idle: true, startGroup: true });
-  // T-Cell Evasion blocks are the virus's own counter-play, not an immune
-  // action — deliberately standalone lines (no inGroup/startGroup) rather
-  // than folded into the Immune System group above, and pushed on last so
-  // they land above that group once narrated (steps later in this array
-  // end up higher in the feed — see runAutoPhase()/appendNarrationLine()).
-  g.lastMHCBlocks.forEach(b => {
-    steps.push({
-      html: `<span class="narration-tissue">${_cap(b.tissue)}</span> — T-Cell Evasion blocked a T-Cell play`,
-      cls: 'line-player',
-    });
-  });
+  // Deliberately no narration for a T-Cell Evasion block (see game.js
+  // _runImmuneResponse()) — same "don't leak the immune system's hidden
+  // hand contents" reasoning as the trade case above: the T-Cell being
+  // deflected reveals the immune system was holding one for this tissue,
+  // and it stays in their hand afterward (only the priming is consumed),
+  // so nothing observable actually changed on the board this turn either.
   return steps;
 }
 
@@ -1465,10 +1509,10 @@ function renderImmuneBanner() {
     if (g.mrnaBoostTurns > 0 && !playedThisTurn('vaccine-mrna')) {
       addCard('vaccine-mrna', null, null, true, g.mrnaBoostTurns);
     }
-    // Antiviral/Protein Vaccine's shared -1 speed penalty (see
-    // lastSpeedPenaltySource, game.js) — same "still active" treatment
-    // as mRNA above, showing whichever of the two most recently topped
-    // the counter up.
+    // Antiviral/Protein Vaccine's shared speed penalty (see
+    // lastSpeedPenaltySource/speedPenaltyAmount, game.js) — same
+    // "still active" treatment as mRNA above, showing whichever of the
+    // two most recently topped the counter up.
     if (g.speedPenaltyTurns > 0 && g.lastSpeedPenaltySource && !playedThisTurn(g.lastSpeedPenaltySource)) {
       addCard(g.lastSpeedPenaltySource, null, null, true, g.speedPenaltyTurns);
     }
@@ -1493,13 +1537,7 @@ function renderImmuneBanner() {
 
   if (!cardsRow.children.length) cardsRow.innerHTML = '<span class="banner-empty">— none —</span>';
 
-  wrap.appendChild(cardsRow);
-
-  const arrow = document.createElement('div');
-  arrow.className = 'scroll-arrow';
-  arrow.textContent = '▸';
-  wrap.appendChild(arrow);
-  updateScrollArrow(cardsRow, arrow);
+  appendScrollArrowPair(wrap, cardsRow);
 }
 
 // ── Boards — always all 3 tissues; inactive ones render greyed out ──
@@ -1633,7 +1671,7 @@ function renderDraft() {
     el.id = 'draft-card-' + i;
     list.appendChild(el);
   });
-  updateScrollArrow(list, document.getElementById('draft-cards-arrow'));
+  updateScrollArrows(list, document.getElementById('draft-cards-arrow-back'), document.getElementById('draft-cards-arrow'));
 }
 
 function toggleDraftPick(i, pickCount) {
@@ -1716,19 +1754,24 @@ function getTradeableCardIds() {
   return [...ids];
 }
 
-// Fixed function-grouped order for the "receive" tab's grid — Tregs first,
-// then each tissue-scoped ability's 3 variants kept together, rather than
-// whatever arbitrary order the deck's own draw/discard/hand happened to
-// yield them in (see getTradeableCardIds()). Anything not listed here
-// (shouldn't happen) sorts to the end rather than disappearing. Horizontal/
-// Vertical Spread are never offered here at all — see TRADE_EXCLUDED_IDS
-// above.
+// Fixed order for the "receive" tab's grid — tissue-paired (Antibody
+// Escape next to that same tissue's T-Cell Evasion) rather than grouped
+// purely by card function, so the two rows of a typical 10-card pool read
+// as "Liver / Lung" then "Intestine / Cytokines" instead of every
+// Antibody Escape variant sitting apart from its T-Cell Evasion
+// counterpart. Whatever the deck/hand/discard actually contains (see
+// getTradeableCardIds()) is sorted into this order, not drawn from it —
+// latency/activate-tregs aren't itemised here since they weren't part of
+// the requested ordering, so they fall through to the "not listed" case
+// below and sort to the end rather than disappearing. Horizontal/Vertical
+// Spread are never offered here at all — see TRADE_EXCLUDED_IDS above.
 const TRADE_RECEIVE_ORDER = [
-  'spread-speed-plus', 'latency',
-  'activate-tregs',
-  'cytokine-neutralise-blue', 'cytokine-neutralise-orange', 'cytokine-neutralise-red',
-  'antibody-escape-lung', 'antibody-escape-liver', 'antibody-escape-intestine',
-  'mhc1-downreg-lung', 'mhc1-downreg-liver', 'mhc1-downreg-intestine',
+  'antibody-escape-liver', 'mhc1-downreg-liver',
+  'antibody-escape-lung', 'mhc1-downreg-lung',
+  'spread-speed-plus',
+  'antibody-escape-intestine', 'mhc1-downreg-intestine',
+  'cytokine-neutralise-red', 'cytokine-neutralise-orange', 'cytokine-neutralise-blue',
+  'latency', 'activate-tregs',
 ];
 
 function renderTradeModal() {
@@ -1754,6 +1797,12 @@ function renderTradeModal() {
     if (tradeReceiveSelected === id) el.classList.add('selected');
     receiveWrap.appendChild(el);
   });
+  // Always exactly 2 rows, split as evenly as possible, rather than a
+  // fixed column count — the tradeable pool size varies per game (which
+  // cards this virus's deck/hand/discard actually contain right now, see
+  // getTradeableCardIds()), so a fixed grid left ragged/uneven rows
+  // whenever the count wasn't a clean multiple of it.
+  receiveWrap.style.gridTemplateColumns = `repeat(${Math.max(1, Math.ceil(receiveIds.length / 2))}, 70px)`;
 
   document.getElementById('trade-tab-give').classList.toggle('active', tradeActiveTab === 'give');
   document.getElementById('trade-tab-give').classList.toggle('complete', tradeGiveSelected.length === 3);
@@ -1816,7 +1865,7 @@ function renderHand() {
     if (!interactive) el.classList.add('inactive');
     list.appendChild(el);
   });
-  updateScrollArrow(list, document.getElementById('hand-cards-arrow'));
+  updateScrollArrows(list, document.getElementById('hand-cards-arrow-back'), document.getElementById('hand-cards-arrow'));
 
   const endTurnBtn = document.getElementById('end-turn-btn');
   endTurnBtn.disabled = !interactive;
@@ -2017,6 +2066,19 @@ function renderEndScreen() {
   // rows got clipped by #game-stage-viewport's own overflow:hidden.
   alignEndScreenBoard();
   fitGameStage();
+  // alignEndScreenBoard()'s panel scale/margin above used whatever
+  // gameStageScale held from the last NORMAL-gameplay frame — the
+  // end screen hides every banner around the board (see above), which
+  // changes #game-stage's natural shape, so that scale is usually stale by
+  // the time this end screen is the thing actually being fit. The
+  // fitGameStage() call just above computed a fresh, correct scale for
+  // THIS (end-screen) stage shape; re-running alignEndScreenBoard() now
+  // re-applies the panel scale and board push-down margin against that
+  // corrected value, same as checkViewportGate()'s resize handler already
+  // does on every later resize — without this, the gap only fixed itself
+  // the moment the player first resized the window, not on the initial
+  // win/lose paint.
+  alignEndScreenBoard();
 }
 
 function alignEndScreenBoard() {
