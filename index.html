@@ -826,6 +826,9 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+          <div style="font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px;">
+            We use <a href="https://www.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent3);">GoatCounter</a>, a privacy-first analytics tool, to count which games are opened and how often. It uses no cookies and never stores IP addresses or any other personal data — every visit is completely anonymous. These numbers help us show evidence of public engagement when reporting to the University and our funders, which helps keep Immune Quest free.
+          </div>
         </div>
         <div class="modal-section">
           <div class="modal-section-title">Progress (this device)</div>
@@ -1190,18 +1193,72 @@ function unhighlightBlob(type) {
 }
 
 // ════════════════════════════════════════════════
-//  ANALYTICS (unchanged from original)
+//  ANALYTICS — GoatCounter (privacy-first: no cookies, no IP storage, no
+//  persistent visitor ID — see the Settings tab copy for what it does
+//  record). This is a single-page hub whose URL never actually changes as
+//  players move between games, so we don't use GoatCounter's automatic
+//  on-load pageview — instead trackPlay(game) fires one manual count()
+//  per virtual "page": once for the hub itself (below) and once per game
+//  launch (see launchGame()). Each is tagged with its own `path`, so
+//  GoatCounter's own dashboard already breaks totals down per game
+//  (Pages report) alongside the site-wide total — no need for a separate
+//  site/account per game.
 // ════════════════════════════════════════════════
-async function trackPlay(game) {
-  // Analytics: only track if user has not opted out
+const GOATCOUNTER_ENDPOINT = 'https://immune-quest.goatcounter.com/count';
+const TRACK_PATHS = {
+  pageview: { path: '/', title: 'Immune Quest' },
+  virus:    { path: '/games/virus', title: 'Virus' },
+  stealth:  { path: '/games/stealth', title: 'Stealth Mission' },
+};
+
+let _goatcounterQueue = [];
+let _goatcounterLoading = false;
+
+// Loaded lazily, on first non-opted-out trackPlay() call, rather than as a
+// static <script> tag — so an opted-out visitor's browser never contacts
+// GoatCounter's servers at all, not even to fetch the counting script.
+function _loadGoatcounter() {
+  if (_goatcounterLoading || window.goatcounter?.count) return;
+  _goatcounterLoading = true;
+  // no_onload: we fire our own count() calls (above); allow_local: false
+  // so testing on localhost doesn't pollute real stats.
+  window.goatcounter = { no_onload: true, allow_local: false };
+  const s = document.createElement('script');
+  s.async = true;
+  s.src = 'https://gc.zgo.at/count.js';
+  s.dataset.goatcounter = GOATCOUNTER_ENDPOINT;
+  s.onload = () => {
+    _goatcounterQueue.forEach(job => window.goatcounter.count(job));
+    _goatcounterQueue = [];
+  };
+  document.head.appendChild(s);
+}
+
+// Shared by trackPlay() (below) and trackEvent() — opted-out visitors
+// never even trigger the lazy script load, let alone a count() call.
+function _sendGoatcounter(job) {
   if (localStorage.getItem('iq_no_track') === '1') return;
-  try {
-    // Uses goatcounter.com free self-hosted pixel or countapi.xyz
-    // Replace 'immune-quest' with your actual namespace after signing up at countapi.xyz
-    await fetch(`https://api.countapi.xyz/hit/immune-quest-game/${game}`, { mode:'cors' }).catch(()=>{});
-  } catch(e) {}
+  _loadGoatcounter();
+  if (window.goatcounter?.count) window.goatcounter.count(job);
+  else _goatcounterQueue.push(job);
+}
+
+function trackPlay(game) {
+  const entry = TRACK_PATHS[game] || { path: '/games/' + game, title: game };
+  _sendGoatcounter({ path: entry.path, title: entry.title, event: false });
 }
 trackPlay('pageview');
+
+// Funnel events (mission started / won / lost) — GoatCounter has no custom
+// dimensions, so the outcome is encoded straight into the path (e.g.
+// /games/stealth/win) and shows up as its own row in GoatCounter's
+// "Events" report, separate from the plain pageview counts above. Unique
+// visitors need no extra call here — GoatCounter derives that automatically
+// from the pageview hits already being sent (see the Settings tab copy:
+// it's a same-day session estimate, not a persistent identity, by design).
+function trackEvent(path, title) {
+  _sendGoatcounter({ path, title, event: true });
+}
 
 // ════════════════════════════════════════════════
 //  LAUNCH GAME
@@ -1305,6 +1362,18 @@ window.addEventListener('message', (e) => {
     return;
   }
 
+  // ── Mission actually begun — distinct from just opening the game (see
+  //    trackPlay(), fired by launchGame() the moment the modal opens).
+  //    Not every game sends this (only ones with a real pre-mission setup
+  //    screen to click past, e.g. Stealth's virus picker) — games that
+  //    don't are simply absent from the "started" event in the dashboard,
+  //    same as they're absent from win/loss if they never call
+  //    iq_game_result either. ──
+  if (data.type === 'iq_mission_started' && currentGameType) {
+    trackEvent(`/games/${currentGameType}/started`, `${currentGameType} — Mission started`);
+    return;
+  }
+
   // ── Fullscreen/Exit requested from a game's own in-iframe header (see
   //    OWN_HEADER_GAMES) — these controls only work from the parent, since
   //    the fullscreen target and modal itself live outside the iframe. ──
@@ -1353,6 +1422,11 @@ window.addEventListener('message', (e) => {
 //  below (used now, since the current compiled build doesn't call it).
 // ════════════════════════════════════════════════
 function recordGameResult(type, won, score) {
+  // Analytics fires regardless of outcome — everything below this point is
+  // progress-persistence (unlocks, high scores, relapse state), which only
+  // ever matters for a win, but a loss is just as worth counting for
+  // engagement reporting.
+  trackEvent(`/games/${type}/${won ? 'win' : 'loss'}`, `${type} — ${won ? 'Won' : 'Lost'}`);
   if (!won) return;
 
   const stealthWasLocked = document.getElementById('card-stealth')?.classList.contains('locked');

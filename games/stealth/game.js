@@ -13,6 +13,21 @@
 //  Lose: the virus has no infected cells left anywhere.
 // ═══════════════════════════════════════════════════════════════════
 
+// Resolution order for the immune system's hand each turn (lower = earlier).
+// mRNA Vaccine goes first so its boost (ctx.mrnaBoosted, set by its own
+// apply() in cards.js) is already active for any T-Cell/Cytokine ALSO
+// played this same turn; NK Cell/T-Cell go before Cytokine/Antibody so a
+// row they just cleared is already virus-free by the time the protector
+// cards pick where to shield, letting the block land the same turn instead
+// of reacting a turn late. Cards not covered by an explicit tier keep the
+// old (arbitrary hand-order) behaviour, sorted last.
+function _immunePlayPriority(id) {
+  if (id === 'vaccine-mrna') return 0;
+  if (id === 'immune-nkcell' || id.startsWith('immune-tcell-')) return 1;
+  if (id.startsWith('immune-antibody-') || id.startsWith('immune-cytokine-')) return 2;
+  return 3;
+}
+
 class StealthGame {
   constructor(loadout) {
     this.loadout = loadout;   // { name, icon, tissue, replication, mutation, abilities, deck }
@@ -65,22 +80,21 @@ class StealthGame {
     // it's played until the next pick-cards phase starts (_runDraftPhase()
     // resets it), independent of the (now permanent) effect itself.
     this.showReplicationBoostBadge = false;
-    this.speedPenaltyTurns    = 0;   // Antiviral / Protein Vaccine (immune-favourable): the exact opposite of the above
-    // How much effectiveReplicationSpeed() currently subtracts while
-    // speedPenaltyTurns is active — Antiviral's -1 vs Protein Vaccine's
-    // deeper -2 (see ANTIVIRAL_PENALTY_AMOUNT/PROTEIN_SPEED_PENALTY_AMOUNT,
-    // config.js). The two share one pooled DURATION counter (see
-    // vaccine-protein's apply(), cards.js) rather than stacking, so
-    // whichever effect most recently (re)applied also sets the amount for
-    // the remainder of that pooled countdown — same "most recent wins"
-    // relationship lastSpeedPenaltySource already has with the badge shown.
-    this.speedPenaltyAmount = 0;
-    // Whichever of Antiviral/Protein Vaccine most recently topped up
-    // speedPenaltyTurns — the two share one pooled counter (see
-    // vaccine-protein's apply(), cards.js), so this picks which card face
-    // the still-active countdown badge shows (see renderImmuneBanner(),
-    // game-ui.js) and, via speedPenaltyAmount above, the actual magnitude.
-    this.lastSpeedPenaltySource = null;
+    // Antiviral (immune-favourable): the exact opposite of Replication
+    // Boost above — a PERMANENT -1 to effective replication speed, not a
+    // temporary timer. Every successful Antiviral play adds ANOTHER -1 on
+    // top (see ANTIVIRAL_PENALTY_AMOUNT, config.js) — a running total that
+    // only ever grows, never decrements. Independent of Protein Vaccine's
+    // own (separately tracked) temporary penalty below; both apply
+    // together in effectiveReplicationSpeed().
+    this.antiviralPenalty = 0;
+    // Protein Vaccine (immune-favourable): a TEMPORARY -2, unlike
+    // Antiviral's permanent -1 above — turns remaining before it wears
+    // off (see PROTEIN_SPEED_PENALTY_TURNS/PROTEIN_SPEED_PENALTY_AMOUNT,
+    // config.js), decremented once per turn in _runVirusGrowth(). A fresh
+    // play tops this counter back up rather than stacking a second -2 on
+    // top of an already-active one.
+    this.proteinVaccineTurns = 0;
     this.immuneSkipTurns      = 0;   // turns remaining where the immune system's whole turn is skipped — Activate Tregs (virus-favourable)
     this.mhcActive            = {};  // { tissue: turnsRemaining } — T-Cell Evasion primed (virus-favourable): cancels the next T-Cell there, expires after MHC_EVASION_TURNS unused
 
@@ -137,16 +151,18 @@ class StealthGame {
   }
 
   // Base replication speed (Replication Boost/speed_gain mutation already
-  // baked permanently into loadout.replication) adjusted by Antiviral or
-  // Protein Vaccine's temporary penalty, if currently active — the
-  // immune system "counteracting" the boost for the duration of that
-  // penalty rather than erasing it outright. Single source of truth for
-  // both the actual spread calc (_runVirusGrowth()) and the UI's speed
-  // badge (renderVirusInfoPanel()).
+  // baked permanently into loadout.replication) adjusted by Antiviral's
+  // permanent penalty and/or Protein Vaccine's temporary one, both applied
+  // together rather than one overriding the other — the immune system
+  // "counteracting" the boost, on top of whatever permanent ground
+  // Antiviral has already won. Floored at 1 once, on the combined total,
+  // not on each penalty separately. Single source of truth for both the
+  // actual spread calc (_runVirusGrowth()) and the UI's speed badge
+  // (renderVirusInfoPanel()).
   effectiveReplicationSpeed() {
-    let speed = this.loadout.replication;
-    if (this.speedPenaltyTurns > 0) speed = Math.max(1, speed - this.speedPenaltyAmount);
-    return speed;
+    let speed = this.loadout.replication - this.antiviralPenalty;
+    if (this.proteinVaccineTurns > 0) speed -= STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT;
+    return Math.max(1, speed);
   }
 
   // ── Start game ────────────────────────────────────────────────
@@ -169,11 +185,13 @@ class StealthGame {
   _runVirusGrowth() {
     this.phase = 'virus_growth';
     // Penalty nudges the actual spread CHANCE, not just the attempt count
-    // — see board.js _rollSpreadTargets(). Replication Boost no longer has
-    // an equivalent temporary bonus of its own here: it's a permanent +1
-    // to loadout.replication now (cards.js), which already raises
-    // effectiveReplicationSpeed()'s attempt count on its own.
-    const penalized = this.speedPenaltyTurns > 0;
+    // — see board.js _rollSpreadTargets(). True for the rest of the game
+    // once Antiviral has ever landed even once (permanent), or while
+    // Protein Vaccine's own temporary window is still open. Replication
+    // Boost has no equivalent temporary bonus of its own here: it's a
+    // permanent +1 to loadout.replication now (cards.js), which already
+    // raises effectiveReplicationSpeed()'s attempt count on its own.
+    const penalized = this.antiviralPenalty > 0 || this.proteinVaccineTurns > 0;
     const effectiveSpeed = this.effectiveReplicationSpeed();
 
     const perTissue = {};
@@ -185,7 +203,9 @@ class StealthGame {
       totalNew += newCells.cells.length;
     });
 
-    if (this.speedPenaltyTurns > 0) this.speedPenaltyTurns--;
+    // Only Protein Vaccine's own penalty is temporary — Antiviral's never
+    // decrements, it's permanent.
+    if (this.proteinVaccineTurns > 0) this.proteinVaccineTurns--;
 
     const spillovers = this._runSpillover();
     this.cellsInfectedTotal += totalNew + spillovers.length;
@@ -340,8 +360,14 @@ class StealthGame {
       // narration step fires, instead of every card played this turn
       // appearing to resolve on the board all at once the moment the phase
       // starts.
+      // Every board, not just active tissues — Antibody/Cytokine can
+      // pre-fortify an inactive tissue ahead of a tropism_gain mutation
+      // (see the constructor's own comment), and that play needs a valid
+      // "before" snapshot too or its cells have nothing to mask against
+      // (see beforeStates below) and show their final protected state on
+      // the very first paint instead of waiting for their own reveal step.
       const preTurnBoardState = {};
-      this.activeTissues.forEach(t => {
+      Object.keys(this.boards).forEach(t => {
         preTurnBoardState[t] = this.boards[t].cells.map(row =>
           row.map(c => ({ state: c.state, cytokineColor: c.cytokineColor, protectedTurns: c.protectedTurns })));
       });
@@ -351,7 +377,19 @@ class StealthGame {
       // via its own return value, and those need to survive being folded
       // into stillHeld below rather than getting silently dropped by a
       // .filter() reassignment that only knows about the pre-turn hand.
-      const handSnapshot = [...this.immuneHand];
+      //
+      // Sorted by _immunePlayPriority() (stable — same-tier cards keep
+      // their original relative order) rather than played in whatever
+      // order they happen to sit in hand: mRNA Vaccine first, so
+      // ctx.mrnaBoosted (mutated by its own apply() below) is already true
+      // for any T-Cell/Cytokine ALSO played this same turn instead of only
+      // boosting next turn's plays; then NK Cell/T-Cell before Cytokine/
+      // Antibody, so a row NK Cell/T-Cell just cleared is already
+      // virus-free by the time Cytokine/Antibody's own targeting
+      // (_pickStrategicAntibodyTarget()/_pickAntibodyRow(), board.js) looks
+      // for somewhere to protect — letting the block actually reach that
+      // row the same turn instead of waiting until next turn to react.
+      const handSnapshot = [...this.immuneHand].sort((a, b) => _immunePlayPriority(a.id) - _immunePlayPriority(b.id));
       const stillHeld = [];
       handSnapshot.forEach(card => {
         // No play-count cap (removed — balance pass): every useful card in
@@ -381,15 +419,15 @@ class StealthGame {
         if (result.grantedCards) stillHeld.push(...result.grantedCards);
 
         // Antiviral isn't tissue-specific — wherever it's played, it's the
-        // exact mirror of the virus's own Replication Boost: -1 effective
-        // speed and reduced spread chance across EVERY active tissue.
-        // Single turn only (see ANTIVIRAL_PENALTY_TURNS) — a quick
-        // knockdown rather than a sustained suppressant like Protein
-        // Vaccine's own longer -1.
+        // exact mirror of the virus's own Replication Boost: a PERMANENT
+        // -1 effective speed and reduced spread chance across EVERY active
+        // tissue, for the rest of the game. Stacks on every successful
+        // play — a second Antiviral later in the game adds another -1 on
+        // top rather than being wasted — unlike Protein Vaccine's own
+        // temporary, non-stacking -2 (see vaccine-protein's apply(),
+        // cards.js).
         if (card.id === 'immune-antiviral') {
-          this.speedPenaltyTurns = (this.speedPenaltyTurns || 0) + STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_TURNS;
-          this.speedPenaltyAmount = STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT;
-          this.lastSpeedPenaltySource = 'immune-antiviral';
+          this.antiviralPenalty = (this.antiviralPenalty || 0) + STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT;
         }
 
         const beforeStates = cells.map(c => {
@@ -847,6 +885,17 @@ class StealthGame {
       const played = parseInt(localStorage.getItem('iq_played') || '0');
       localStorage.setItem('iq_played', String(played + 1));
     } catch (e) { /* localStorage may not be available */ }
+
+    // Reports the final result to the hub for the win/loss analytics event
+    // (see recordGameResult(), index.html). Placed here rather than in the
+    // end-screen render path (game-ui.js) because _checkWin()/_checkLoss()
+    // guarantee _saveScore() runs exactly once per completed mission — the
+    // end-screen render can re-run multiple times for the same finished
+    // game (e.g. other UI updates while the win/loss screen stays up),
+    // which would double- or triple-report the same result from there.
+    if (window.self !== window.top) {
+      window.parent.postMessage({ type: 'iq_game_result', win: this.state === 'won', score: this.score }, '*');
+    }
   }
 
   // Computes the run's score, once, on a win only — never on a loss (see

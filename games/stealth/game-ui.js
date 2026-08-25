@@ -229,6 +229,15 @@ function startMission() {
   try { payload = JSON.parse(localStorage.getItem('iq_stealth_loadout')); } catch (e) { payload = null; }
   if (!payload) return;
 
+  // Tells the hub a mission has actually begun, distinct from just opening
+  // Stealth from the game grid (that's already counted separately, as a
+  // pageview, the moment the hub's iframe loads — see trackPlay(),
+  // index.html). Only meaningful when embedded in the hub; a standalone
+  // load (window.self === window.top) has no parent to tell.
+  if (window.self !== window.top) {
+    window.parent.postMessage({ type: 'iq_mission_started' }, '*');
+  }
+
   document.getElementById('select-screen').style.display = 'none';
   document.getElementById('game-screen').classList.add('visible');
   document.body.classList.add('in-game');
@@ -713,7 +722,7 @@ function renderVirusInfoPanel() {
     valueEl = speedEl.querySelector('.virus-info-panel-speed-value');
   }
   valueEl.querySelector('.speed-num').textContent = g.effectiveReplicationSpeed();
-  valueEl.classList.toggle('speed-penalized', g.speedPenaltyTurns > 0);
+  valueEl.classList.toggle('speed-penalized', g.antiviralPenalty > 0 || g.proteinVaccineTurns > 0);
 }
 
 // A short staggered STREAM of floating "+1"/"-1" (was a single one-shot
@@ -1184,12 +1193,18 @@ function buildImmuneSteps(g) {
     // "colon tissue" suffix.
     const suffix = tissue ? `: ${_cap(tissue)}` : null;
     const name = suffix && p.name.endsWith(suffix) ? p.name.slice(0, -suffix.length) : p.name;
-    // Protein Vaccine gets an explicit magnitude in its own narration line
-    // (not just the badge flash) so the effect is clearly spelled out, not
-    // just implied — its penalty is deeper than Antiviral's (see
+    // Both of the speed-penalty cards get an explicit magnitude in their
+    // own narration line (not just the badge flash) so the effect is
+    // clearly spelled out, not just implied — and specifically call out
+    // Antiviral's permanence vs Protein Vaccine's temporary window, since
+    // that's the actual difference between them now (same -ish idea,
+    // different durations — see ANTIVIRAL_PENALTY_AMOUNT/
     // PROTEIN_SPEED_PENALTY_AMOUNT, config.js).
     const label = p.id === 'vaccine-protein'
-      ? `${name} — Replication Speed −${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT} for 3 turns` : name;
+      ? `${name} — Replication Speed −${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT} for ${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS} turns`
+      : p.id === 'immune-antiviral'
+      ? `${name} — Replication Speed −${STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT} (permanent)`
+      : name;
     const html = tissue ? `<span class="narration-tissue">${_cap(tissue)}</span> — ${label}` : label;
     steps.push({
       html, cls: 'line-immune', tissue, cells: p.cells, afterStates: p.afterStates, flashClass: _immuneFlashClass(p.id), inGroup: true, slow: true,
@@ -1286,12 +1301,12 @@ function _mutationCardId(m) {
 const MUTATION_CATEGORY_ICON = { 'Replication Speed': '⚡', 'Tropism': '🧬' };
 
 let mutationToastTimer = null;
-// Was 8000 (before that, 5000), then cut to 3000 for a snappier auto-
-// dismiss — bumped back up by 2s since 3s wasn't quite enough to read.
-// Still easy to bring back on demand (click its mission-log line to
-// reopen it, see the narration-line-clickable wiring below) and easy to
-// dismiss early (✕, or clicking anywhere outside it).
-const MUTATION_TOAST_DURATION = 5000;
+// Was 8000, then 3000 (too snappy, not enough time to read), then 5000 —
+// trimmed slightly since 5s ran a bit long. Still easy to bring back on
+// demand (click its mission-log line to reopen it, see the
+// narration-line-clickable wiring below) and easy to dismiss early (✕, or
+// clicking anywhere outside it).
+const MUTATION_TOAST_DURATION = 4000;
 
 // .mutation-toast is positioned against .game-left-col (its nearest
 // position:relative ancestor), but that box spans both the phase-panel
@@ -1359,7 +1374,14 @@ function showMutationToast(m) {
   const dirEl = document.getElementById('mutation-toast-direction');
   dirEl.textContent = m.direction === 'gain' ? 'GAINED' : m.direction === 'loss' ? 'LOST' : 'NO CHANGE';
   dirEl.className = 'mutation-toast-direction ' + (isNeutral ? 'neutral' : m.direction);
-  document.getElementById('mutation-toast-category').textContent = m.category || 'No Mutation';
+  // No category line at all when there's nothing to categorise (the
+  // no-mutation case, m.category null) — "NO CHANGE" (direction, above)
+  // and m.text ("The virus did not mutate", below) already say this;
+  // a third line ("No Mutation") just repeated it a third time, and in
+  // the brightest colour of the three (var(--text)) at that.
+  const categoryEl = document.getElementById('mutation-toast-category');
+  categoryEl.textContent = m.category || '';
+  categoryEl.style.display = m.category ? '' : 'none';
   document.getElementById('mutation-toast-text').textContent = m.text;
 
   toast.classList.remove('gain', 'loss', 'neutral', 'open');
@@ -1602,29 +1624,36 @@ function renderImmuneBanner() {
     if (g.mrnaBoostTurns > 0 && !playedThisTurn('vaccine-mrna')) {
       addCard('vaccine-mrna', null, null, true, g.mrnaBoostTurns);
     }
-    // Antiviral/Protein Vaccine's shared speed penalty (see
-    // lastSpeedPenaltySource/speedPenaltyAmount, game.js) — same
-    // "still active" treatment as mRNA above, showing whichever of the
-    // two most recently topped the counter up.
-    if (g.speedPenaltyTurns > 0 && g.lastSpeedPenaltySource && !playedThisTurn(g.lastSpeedPenaltySource)) {
-      addCard(g.lastSpeedPenaltySource, null, null, true, g.speedPenaltyTurns);
+    // Protein Vaccine's own temporary speed penalty — same "still active"
+    // treatment as mRNA above. Antiviral has no equivalent entry here: its
+    // penalty is now PERMANENT (see antiviralPenalty, game.js), same as
+    // the virus's own Replication Boost, which likewise only shows in the
+    // "just played" loop above for the one turn it's played, not as an
+    // ongoing badge afterward.
+    if (g.proteinVaccineTurns > 0 && !playedThisTurn('vaccine-protein')) {
+      addCard('vaccine-protein', null, null, true, g.proteinVaccineTurns);
     }
     // Cytokine shields — stays shown for as long as ANY cell it protected
     // is still guarded (protectedTurns ticks down per-cell, see board.js
     // tickTimers()), not just the turn it was played; the shield routinely
-    // outlasts that single-turn "played" entry above. Badge is the longest
-    // remaining timer among that colour's protected cells — how long
-    // until the LAST of them wears off.
+    // outlasts that single-turn "played" entry above. One card per DISTINCT
+    // remaining-turn count among that colour's protected cells, not one
+    // card per cell — most of the time every cell shares one timer and
+    // collapses to a single card, but a fresh same-colour play landing
+    // while an earlier one is still counting down leaves two genuinely
+    // different countdowns live at once, and collapsing those into a
+    // single "longest" badge would hide that the shorter one is about to
+    // expire.
     ['blue', 'orange', 'red'].forEach(color => {
       const id = `immune-cytokine-${color}`;
       if (playedThisTurn(id)) return;
-      let maxTurns = 0;
+      const turnsSet = new Set();
       g.activeTissues.forEach(t => {
         g.boards[t].cells.forEach(row => row.forEach(c => {
-          if (c.cytokineColor === color && c.protectedTurns > maxTurns) maxTurns = c.protectedTurns;
+          if (c.cytokineColor === color && c.protectedTurns > 0) turnsSet.add(c.protectedTurns);
         }));
       });
-      if (maxTurns > 0) addCard(id, null, null, true, maxTurns);
+      [...turnsSet].sort((a, b) => b - a).forEach(turns => addCard(id, null, null, true, turns));
     });
   }
 

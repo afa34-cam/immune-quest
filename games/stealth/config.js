@@ -140,11 +140,10 @@ const STEALTH_CONFIG = {
     // _runImmuneResponse() (game.js). Was indefinite (stayed primed
     // forever until it actually blocked a T-Cell).
     MHC_EVASION_TURNS: 3,
-    // Single-turn, unlike Protein Vaccine's own (longer-lasting, and
-    // stronger — see PROTEIN_SPEED_PENALTY_AMOUNT below) debuff — Antiviral
-    // is a quick knockdown, not a sustained suppressant, and shouldn't
-    // still be in effect by the time a later Replication Boost gets played.
-    ANTIVIRAL_PENALTY_TURNS: 1,
+    // Permanent, unlike Protein Vaccine's own temporary (if deeper — see
+    // PROTEIN_SPEED_PENALTY_AMOUNT below) -2 — every successful Antiviral
+    // play knocks another ANTIVIRAL_PENALTY_AMOUNT off replication speed
+    // for the rest of the game (see effectiveReplicationSpeed(), game.js).
     ANTIVIRAL_PENALTY_AMOUNT: 1,
   },
 

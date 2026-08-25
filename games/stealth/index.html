@@ -1477,7 +1477,7 @@
   }
   .mutation-toast-direction.gain{ color:var(--stealth); }
   .mutation-toast-direction.loss{ color:var(--accent2); }
-  .mutation-toast-direction.neutral{ color:var(--muted); }
+  .mutation-toast-direction.neutral{ color:var(--text); }
   .mutation-toast-category{ font-size:15px; color:var(--text); font-weight:600; }
   .mutation-toast-text{ font-size:15px; color:var(--muted); line-height:1.45; }
 
@@ -2016,11 +2016,11 @@ const STEALTH_GAME_CONFIG = {
 <script src="../shared/ui.js"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=157"></script>
-<script src="board.js?cachebust=157"></script>
-<script src="cards.js?cachebust=157"></script>
-<script src="game.js?cachebust=157"></script>
-<script src="game-ui.js?cachebust=157"></script>
+<script src="config.js?cachebust=163"></script>
+<script src="board.js?cachebust=163"></script>
+<script src="cards.js?cachebust=163"></script>
+<script src="game.js?cachebust=163"></script>
+<script src="game-ui.js?cachebust=163"></script>
 
 <script>
 // Initialize shared UI with game config
@@ -2423,6 +2423,18 @@ function renderViruses(){
   }
   newCard.innerHTML = `<span class="vcard-compact-icon">+</span> Design New`;
   customRow.appendChild(newCard);
+
+  // Keep the detail banner (replication speed/mutation rate/deck preview)
+  // in sync with selectedVirus every time the grid re-renders, rather than
+  // requiring every caller that clears selectedVirus to also remember to
+  // hide it separately — backToSelect() used to null selectedVirus (and
+  // correctly cleared every card's own .selected class via the fresh
+  // createVirusCard()/createCompactVirusCard() calls above) without ever
+  // hiding this banner, so it stayed showing the last-picked virus's
+  // details with no card marked selected underneath it — and since
+  // deploy() bails out on `if(!selectedVirus) return;`, Start Mission
+  // silently did nothing from that state.
+  document.getElementById('virus-detail').classList.toggle('visible', !!selectedVirus);
 }
 
 // Compact button-style tile for a custom-built virus — just an icon, name
@@ -2516,8 +2528,7 @@ function deleteVirus(id, e){
   saved = saved.filter(v => v.id !== id);
   localStorage.setItem('iq_saved_viruses', JSON.stringify(saved));
   selectedVirus = null;
-  document.getElementById('virus-detail').classList.remove('visible');
-  renderViruses();
+  renderViruses(); // also syncs #virus-detail's visibility to selectedVirus — see renderViruses()
 }
 
 function findVirusById(id){

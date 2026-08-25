@@ -436,14 +436,15 @@ const IMMUNE_CARD_DEFS = {
     },
   },
 
-  // The exact opposite of the virus's own Replication Boost — the effect
-  // (-1 effective speed, reduced spread chance, for 1 turn) is applied at
-  // the game level in game.js _runImmuneResponse()/_runVirusGrowth(),
-  // since an antiviral response circulates through the whole body, not
-  // just wherever it happened to be drawn.
+  // The exact opposite of the virus's own Replication Boost — a PERMANENT
+  // -1 effective speed (and reduced spread chance) for the rest of the
+  // game, stacking on every successful play. Applied at the game level in
+  // game.js _runImmuneResponse()/effectiveReplicationSpeed(), since an
+  // antiviral response circulates through the whole body, not just
+  // wherever it happened to be drawn.
   'immune-antiviral': {
     id: 'immune-antiviral', name: 'Antiviral', icon: '💊',
-    tooltip: 'Reduces the replication speed -1 for 1 turn.',
+    tooltip: 'Permanently reduces the replication speed by -1. Stacks if played more than once.',
     isUseful(game) { return game.activeTissues.some(t => game.boards[t].infectedCount() > 0); },
     apply() {
       return { blocked: true };
@@ -454,8 +455,15 @@ const IMMUNE_CARD_DEFS = {
     id: 'vaccine-mrna', name: 'mRNA Vaccine', icon: '💉',
     tooltip: 'Powerup that increases the power of cytokines and T cells (clears 2 rows instead of 1).',
     isUseful(game) { return game.mrnaBoostTurns === 0; },
-    apply(game) {
+    // Mutates ctx.mrnaBoosted directly (not just game.mrnaBoostTurns) so
+    // that if the immune system draws mRNA Vaccine and a T-Cell/Cytokine
+    // in the SAME turn, the priority ordering in game.js
+    // (_immunePlayPriority — mRNA resolves first) means that later card's
+    // own apply(game, ctx) call already sees the boost, instead of it only
+    // taking effect starting next turn.
+    apply(game, ctx) {
       game.mrnaBoostTurns = STEALTH_CONFIG.VACCINE.MRNA_BOOST_TURNS;
+      if (ctx) ctx.mrnaBoosted = true;
       return { activated: true };
     },
   },
@@ -471,14 +479,14 @@ const IMMUNE_CARD_DEFS = {
       // get discarded when that rebuilt hand replaces the live array.
       const tissue = game.activeTissues[Math.floor(Math.random() * game.activeTissues.length)];
       const grantedCards = [{ ...IMMUNE_CARD_DEFS[`immune-antibody-${tissue}`] }];
-      // Temporary, like Antiviral — not a permanent loadout change — and
-      // shares the same speedPenaltyTurns counter (see game.js), so the
-      // two stack the same way Replication Boost stacks with itself. Its
-      // own penalty AMOUNT (-2, vs Antiviral's -1) is tracked separately
-      // via speedPenaltyAmount — see effectiveReplicationSpeed(), game.js.
-      game.speedPenaltyTurns = (game.speedPenaltyTurns || 0) + STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS;
-      game.speedPenaltyAmount = STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT;
-      game.lastSpeedPenaltySource = 'vaccine-protein';
+      // Temporary — not a permanent loadout change, unlike Antiviral's own
+      // (see immune-antiviral above) — tracked independently in its own
+      // proteinVaccineTurns counter (game.js), so it stacks ADDITIVELY
+      // with Antiviral's permanent penalty rather than sharing one pooled
+      // counter with it. A fresh play tops this back up to the full
+      // duration rather than stacking a second -2 on top of an
+      // already-active one.
+      game.proteinVaccineTurns = (game.proteinVaccineTurns || 0) + STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS;
       return { bonusGranted: true, speedPenaltyApplied: true, grantedCards };
     },
   },

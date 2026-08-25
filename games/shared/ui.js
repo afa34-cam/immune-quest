@@ -322,6 +322,9 @@ function setupSimpleMenu(config) {
                 <span class="toggle-slider"></span>
               </label>
             </div>
+            <div style="font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px;">
+              We use <a href="https://www.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent3);">GoatCounter</a>, a privacy-first analytics tool, to count which games are opened and how often. It uses no cookies and never stores IP addresses or any other personal data — every visit is completely anonymous. These numbers help us show evidence of public engagement when reporting to the University and our funders, which helps keep Immune Quest free.
+            </div>
           </div>
           <div class="modal-section">
             <div class="modal-section-title">Progress (this device)</div>
