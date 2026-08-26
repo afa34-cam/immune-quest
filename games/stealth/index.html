@@ -587,13 +587,18 @@
     padding:1px 8px; background:rgba(255,255,255,.05);
     transition:color .3s, border-color .3s, background .3s;
   }
-  /* Penalized (Antiviral / Protein Vaccine's temporary speed reduction) —
-     Replication Boost no longer has an equivalent "currently boosted"
-     badge state of its own, since it's a permanent addition to the base
-     speed now rather than a temporary lift above it (see
-     renderVirusInfoPanel(), game-ui.js). */
+  /* Penalized (Antiviral / Protein Vaccine's temporary speed reduction). */
   .virus-info-panel-speed-value.speed-penalized{
     color:var(--accent2); border-color:var(--accent2); background:rgba(224,34,122,.12);
+  }
+  /* Boosted (Replication Boost's own temporary speed increase — see
+     replicationBoostTurns, game.js) — the virus's own theme colour, set as
+     --virus-color on this panel's wrapper (renderVirusInfoPanel(),
+     game-ui.js), rather than a fixed hue, so it reads as "more of this
+     virus" regardless of which one is active. */
+  .virus-info-panel-speed-value.speed-boosted{
+    color:var(--virus-color, var(--stealth)); border-color:var(--virus-color, var(--stealth));
+    background:color-mix(in srgb, var(--virus-color, var(--stealth)) 12%, transparent);
   }
   /* --rise-distance is set per-element by flashSpeedDelta() (game-ui.js),
      measured live from the badge up to the phase panel's own bottom edge
@@ -2016,11 +2021,11 @@ const STEALTH_GAME_CONFIG = {
 <script src="../shared/ui.js"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=163"></script>
-<script src="board.js?cachebust=163"></script>
-<script src="cards.js?cachebust=163"></script>
-<script src="game.js?cachebust=163"></script>
-<script src="game-ui.js?cachebust=163"></script>
+<script src="config.js?cachebust=172"></script>
+<script src="board.js?cachebust=172"></script>
+<script src="cards.js?cachebust=172"></script>
+<script src="game.js?cachebust=172"></script>
+<script src="game-ui.js?cachebust=172"></script>
 
 <script>
 // Initialize shared UI with game config
@@ -2033,20 +2038,20 @@ const VIRUS_CARDS = {
   'lung-tropism': { icon: '🫁', name: 'Lung Tropism', desc: 'Virus infects cells in the lung.' },
   'liver-tropism': { icon: '🟢', name: 'Liver Tropism', desc: 'Virus infects cells in the liver.' },
   'intestine-tropism': { icon: '💩', name: 'Intestine Tropism', desc: 'Virus infects cells in the intestine.' },
-  'infect-horizontal': { icon: '↔️', name: 'Horizontal Spread', desc: 'Infect a healthy cell of choice next to an already-infected cell in the same row.' },
-  'infect-vertical': { icon: '⬇️', name: 'Vertical Spread', desc: 'Infect a healthy cell of choice directly below an already-infected cell.' },
-  'spread-speed-plus': { icon: '⚡', name: 'Replication Boost +1', desc: 'Increase the replication speed by +1.' },
+  'infect-horizontal': { icon: '↔️', name: 'Horizontal Spread', desc: 'Infect a random healthy cell next to an already-infected cell in the same row.' },
+  'infect-vertical': { icon: '⬇️', name: 'Vertical Spread', desc: 'Infect a random healthy cell directly below an already-infected cell.' },
+  'spread-speed-plus': { icon: '⚡', name: 'Replication Boost +1', desc: 'Increases the replication speed by +1 for 1 turn.' },
   'latency': { icon: '😴', name: 'Latency', desc: 'Place a dormant cell. This is invisible to the immune system and wakes and infects nearby cells in the spread phase of a later turn. Must be placed within one row of the current infection front.' },
   'cytokine-neutralise-blue': { icon: '🔕', name: 'Cytokine Neutralisation (Blue)', desc: 'Remove a block of Blue cytokines from cells.' },
   'cytokine-neutralise-orange': { icon: '🔕', name: 'Cytokine Neutralisation (Orange)', desc: 'Remove a block of Orange cytokines from cells.' },
   'cytokine-neutralise-red': { icon: '🔕', name: 'Cytokine Neutralisation (Red)', desc: 'Remove a block of Red cytokines from cells.' },
-  'activate-tregs': { icon: '🤐', name: 'Activate Tregs', desc: 'The immune system has to skip the next turn.' },
+  'activate-tregs': { icon: '🤐', name: 'Activate Tregs', desc: 'The immune system can only play 1 card on its next turn.' },
   'antibody-escape-lung': { icon: '🛡️', name: 'Antibody Escape: Lung', desc: 'Remove all antibodies in Lung.' },
   'antibody-escape-liver': { icon: '🛡️', name: 'Antibody Escape: Liver', desc: 'Remove all antibodies in Liver.' },
   'antibody-escape-intestine': { icon: '🛡️', name: 'Antibody Escape: Intestine', desc: 'Remove all antibodies in Intestine.' },
-  'mhc1-downreg-lung': { icon: '🚫', name: 'T-Cell Evasion: Lung', desc: 'Primes a hidden defence in Lung for 3 turns. The next T cell card the immune system plays here in that time is fully cancelled.' },
-  'mhc1-downreg-liver': { icon: '🚫', name: 'T-Cell Evasion: Liver', desc: 'Primes a hidden defence in Liver for 3 turns. The next T cell card the immune system plays here in that time is fully cancelled.' },
-  'mhc1-downreg-intestine': { icon: '🚫', name: 'T-Cell Evasion: Intestine', desc: 'Primes a hidden defence in Intestine for 3 turns. The next T cell card the immune system plays here in that time is fully cancelled.' },
+  'mhc1-downreg-lung': { icon: '🚫', name: 'T-Cell Evasion: Lung', desc: 'Primes a hidden defence in Lung for 1 turn. The next T cell card the immune system plays here in that time is fully cancelled.' },
+  'mhc1-downreg-liver': { icon: '🚫', name: 'T-Cell Evasion: Liver', desc: 'Primes a hidden defence in Liver for 1 turn. The next T cell card the immune system plays here in that time is fully cancelled.' },
+  'mhc1-downreg-intestine': { icon: '🚫', name: 'T-Cell Evasion: Intestine', desc: 'Primes a hidden defence in Intestine for 1 turn. The next T cell card the immune system plays here in that time is fully cancelled.' },
   'antigenic-drift': { icon: '🧬', name: 'Antigenic Drift', desc: 'The virus\'s surface proteins mutate often. Gain Antibody Escape cards more frequently.' },
   // Builder-only marker, same as Tropism/Antigenic Drift above — a
   // speed_loss mutation (game.js _runMutationPhase()) is a pure stat
@@ -2057,7 +2062,7 @@ const VIRUS_CARDS = {
   // Builder-only marker, standing in for all 3 T-Cell Evasion tissue
   // variants at once — see generateDeck(), which expands it into the real
   // mhc1-downreg-lung/liver/intestine cards rather than pushing this id.
-  'mhc1-downreg': { icon: '🚫', name: 'T-Cell Evasion', desc: 'Increased chance of a T cell Evasion card. This card primes a hidden defence for 3 turns. The next T cell card the immune system plays in that time is fully cancelled.' },
+  'mhc1-downreg': { icon: '🚫', name: 'T-Cell Evasion', desc: 'Increased chance of a T cell Evasion card. This card primes a hidden defence for 1 turn. The next T cell card the immune system plays in that time is fully cancelled.' },
 };
 
 function getCard(cardId){ return VIRUS_CARDS[cardId]; }

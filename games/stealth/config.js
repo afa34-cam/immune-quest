@@ -138,8 +138,10 @@ const STEALTH_CONFIG = {
     // T-Cell Evasion (MHC-I Downregulation) stays primed for this many
     // immune_response phases before it expires unused — see mhcActive,
     // _runImmuneResponse() (game.js). Was indefinite (stayed primed
-    // forever until it actually blocked a T-Cell).
-    MHC_EVASION_TURNS: 3,
+    // forever until it actually blocked a T-Cell), then 3 (balance pass —
+    // virus was winning far too consistently; see stealthDebugStats(),
+    // game.js).
+    MHC_EVASION_TURNS: 1,
     // Permanent, unlike Protein Vaccine's own temporary (if deeper — see
     // PROTEIN_SPEED_PENALTY_AMOUNT below) -2 — every successful Antiviral
     // play knocks another ANTIVIRAL_PENALTY_AMOUNT off replication speed
@@ -265,6 +267,16 @@ const STEALTH_CONFIG = {
   // every band, so there's nothing left to cut there without removing the
   // card outright; horizontal is what actually gets rarer for it.
   HEPATITIS_HORIZONTAL_PENALTY: 1,
+
+  // Replication Boost — TEMPORARY now, not a permanent stacking +1 (balance
+  // pass: virus was winning far too consistently — see stealthDebugStats(),
+  // game.js). Mirrors Protein Vaccine's own temporary-turns pattern
+  // (VACCINE.PROTEIN_SPEED_PENALTY_*), just the virus's own side of it —
+  // see effectiveReplicationSpeed(), game.js.
+  REPLICATION_BOOST: {
+    AMOUNT: 1,
+    TURNS: 1,
+  },
 
   // ── Cards / hand ─────────────────────────────────────────────────
   CARDS: {

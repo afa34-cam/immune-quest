@@ -652,13 +652,12 @@ function renderVirusTraits() {
   };
 
   g.activeTissues.forEach(t => addCard(`${t}-tropism`, false));
-  // Shows for one turn cycle only (cleared at the next pick-cards phase —
-  // see showReplicationBoostBadge, game.js), unlike the permanent +1 speed
-  // effect itself, which stays regardless of whether this badge is showing.
-  // Not a countdown (no turns-remaining number tracked for it), so no badge.
-  if (g.showReplicationBoostBadge) addCard('spread-speed-plus', true);
+  // Both temporary now (balance pass — see replicationBoostTurns/
+  // immuneCardCapTurns, game.js), so both get a real turns-remaining
+  // badge, same treatment as Latency/T-Cell Evasion below.
+  if (g.replicationBoostTurns > 0) addCard('spread-speed-plus', true, g.replicationBoostTurns);
   // Global (not per-tissue) — shown once, not inside the tissue loop below.
-  if (g.immuneSkipTurns > 0) addCard('activate-tregs', true, g.immuneSkipTurns);
+  if (g.immuneCardCapTurns > 0) addCard('activate-tregs', true, g.immuneCardCapTurns);
   g.activeTissues.forEach(t => {
     const board = g.boards[t];
     // No countdown badge — ESCAPE_IMMUNITY_TURNS is just 1 turn, so in
@@ -703,11 +702,10 @@ function renderVirusInfoPanel() {
   // Its own emphasised badge, not plain text — replication speed can
   // change mid-game (mutations, Replication Boost, Antiviral/Protein
   // Vaccine), unlike mutation rate. Shows the EFFECTIVE speed (matching
-  // game.js _runVirusGrowth()'s own calc exactly). Replication Boost is a
-  // permanent addition to loadout.replication now, not a temporary lift
-  // above it, so there's no "currently boosted" state left to colour
-  // differently — only Antiviral/Protein Vaccine's temporary penalty still
-  // pulls the effective speed below the base.
+  // game.js _runVirusGrowth()'s own calc exactly). Replication Boost is
+  // temporary (see replicationBoostTurns, game.js) and gets its own
+  // "currently boosted" colour below, same treatment as Antiviral/Protein
+  // Vaccine's temporary penalty already gets.
   const speedEl = document.getElementById('virus-info-panel-speed');
   // Built once, then only the number itself is touched on later renders —
   // flashSpeedDelta() appends its floating +1/-1 stream as children of
@@ -723,6 +721,7 @@ function renderVirusInfoPanel() {
   }
   valueEl.querySelector('.speed-num').textContent = g.effectiveReplicationSpeed();
   valueEl.classList.toggle('speed-penalized', g.antiviralPenalty > 0 || g.proteinVaccineTurns > 0);
+  valueEl.classList.toggle('speed-boosted', g.replicationBoostTurns > 0);
 }
 
 // A short staggered STREAM of floating "+1"/"-1" (was a single one-shot
@@ -883,14 +882,16 @@ function primeBoardRevealMask(g) {
 // cell's pre-turn state doesn't need a captured snapshot the way an
 // immune play's does (arbitrary prior cytokine/antibody state): it's
 // always knowable just from which list the cell came from. Normal spread
-// and spillover cells were always plain healthy immediately before;
-// dormant-wake "explosion" cells were always dormant. Primed once when a
-// new virus_growth phase instance starts narrating (see renderGame()),
-// same timing as the immune_response version — without this, every new
-// cell for the turn would already show live (infected) on the very first
-// paint, and the staggered reveal in runAutoPhase()'s next() would just be
-// replaying pop animations on cells already visible instead of actually
-// revealing them one at a time.
+// and spillover cells were always plain healthy immediately before; a
+// woken dormant cell (in `awoken`) was always dormant — it no longer
+// force-infects a neighbour on waking (balance pass — see spreadVirus(),
+// board.js), so every awoken entry really was dormant, nothing else.
+// Primed once when a new virus_growth phase instance starts narrating (see
+// renderGame()), same timing as the immune_response version — without
+// this, every new cell for the turn would already show live (infected) on
+// the very first paint, and the staggered reveal in runAutoPhase()'s
+// next() would just be replaying pop animations on cells already visible
+// instead of actually revealing them one at a time.
 function primeVirusGrowthRevealMask(g) {
   boardRevealMask = {};
   if (!g.lastGrowth) return;
@@ -1195,15 +1196,14 @@ function buildImmuneSteps(g) {
     const name = suffix && p.name.endsWith(suffix) ? p.name.slice(0, -suffix.length) : p.name;
     // Both of the speed-penalty cards get an explicit magnitude in their
     // own narration line (not just the badge flash) so the effect is
-    // clearly spelled out, not just implied — and specifically call out
-    // Antiviral's permanence vs Protein Vaccine's temporary window, since
-    // that's the actual difference between them now (same -ish idea,
-    // different durations — see ANTIVIRAL_PENALTY_AMOUNT/
-    // PROTEIN_SPEED_PENALTY_AMOUNT, config.js).
+    // clearly spelled out, not just implied. Protein Vaccine also states
+    // its duration since it wears off; Antiviral doesn't (it's permanent —
+    // see ANTIVIRAL_PENALTY_AMOUNT/PROTEIN_SPEED_PENALTY_AMOUNT, config.js
+    // — but the tooltip already says so, no need to repeat it here too).
     const label = p.id === 'vaccine-protein'
       ? `${name} — Replication Speed −${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT} for ${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS} turns`
       : p.id === 'immune-antiviral'
-      ? `${name} — Replication Speed −${STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT} (permanent)`
+      ? `${name} — Replication Speed −${STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT}`
       : name;
     const html = tissue ? `<span class="narration-tissue">${_cap(tissue)}</span> — ${label}` : label;
     steps.push({
@@ -1227,7 +1227,7 @@ function buildImmuneSteps(g) {
   // cover — nothing observable on the board did happen.
   if (!steps.length) {
     steps.push({
-      html: g.lastImmune.skipped ? 'Suppressed by Activate Tregs — turn skipped' : 'No cards played this turn',
+      html: 'No cards played this turn',
       cls: 'line-immune', idle: true, inGroup: true,
     });
   }
@@ -1655,6 +1655,20 @@ function renderImmuneBanner() {
       });
       [...turnsSet].sort((a, b) => b - a).forEach(turns => addCard(id, null, null, true, turns));
     });
+    // Antibody shields — permanent (no protectedTurns countdown, unlike
+    // Cytokine above), so there's no "turns left" badge to show, but it
+    // still needs its own "still active" entry here or (like Antiviral/
+    // Replication Boost, which really ARE meant to only flash for the one
+    // turn played) it would vanish from the banner the moment the turn it
+    // was played on ends, despite the shield itself still visibly guarding
+    // cells on the board. !c.cytokineColor excludes cells a Cytokine (not
+    // plain Antibody) protected — those already get their own card above.
+    g.activeTissues.forEach(t => {
+      const id = `immune-antibody-${t}`;
+      if (playedThisTurn(id)) return;
+      const stillProtected = g.boards[t].cells.some(row => row.some(c => c.state === 'immune' && !c.cytokineColor));
+      if (stillProtected) addCard(id, t, null, true, undefined, false);
+    });
   }
 
   if (!cardsRow.children.length) cardsRow.innerHTML = '<span class="banner-empty">— none —</span>';
@@ -2063,9 +2077,13 @@ function selectHandCard(i) {
 
   if (card.targetType === 'none') {
     playSelectedCard({});
+  } else if (card.targetType === 'tissue') {
+    // Horizontal/Vertical Spread — the player picks WHICH tissue, not the
+    // exact cell (balance pass: guaranteed player-chosen precision was too
+    // strong — see stealthDebugStats(), game.js) — any cell click within
+    // that tissue's board works, onCellClick() below only reads the tissue.
+    document.getElementById('play-hint').textContent = 'Click anywhere in the tissue you want to target.';
   } else {
-    // Every targeted card in the deck is 'cell' or 'immune-cell' — no card
-    // ever needs just a tissue picked without a specific cell too.
     document.getElementById('play-hint').textContent = 'Click a cell on the board to target it.';
   }
 }
@@ -2097,7 +2115,7 @@ function formatCardPlayText(card, target, result) {
       // These target the tissue baked into the card itself (requiresTissue),
       // not a player-picked target — targetType is 'none' for this card.
       return `Played antibody escape (${card.requiresTissue || target.tissue})`;
-    case 'activate-tregs': return 'Played T reg activation - immune system will skip its next turn';
+    case 'activate-tregs': return 'Played T reg activation - immune system limited to 1 card next turn';
     default: return result.text;
   }
 }

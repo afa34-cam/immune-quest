@@ -123,10 +123,10 @@ class StealthBoard {
   // `penalized` comes from the game-level Antiviral-or-Protein-Vaccine
   // timer — beyond just changing replicationSpeed's attempt count, it also
   // directly shifts the actual per-attempt spread CHANCE (see
-  // _rollSpreadTargets()). Replication Boost has no equivalent bonus of
-  // its own any more — it's a permanent +1 to loadout.replication (see
-  // cards.js 'spread-speed-plus'), which already raises replicationSpeed
-  // itself rather than needing a separate flag here.
+  // _rollSpreadTargets()). Replication Boost has no equivalent chance
+  // bonus of its own here — its own (temporary — see replicationBoostTurns,
+  // game.js) bonus only raises replicationSpeed's attempt count, same as
+  // before it became temporary.
   spreadVirus(replicationSpeed, penalized = false) {
     // Higher replication speed = more spread attempts per turn. Thresholds
     // lowered (was >=9/>=6) — Hepatitis in particular starts at speed 4 and
@@ -164,6 +164,38 @@ class StealthBoard {
     // before normal growth (and cascading) begins on the NEXT phase.
     const maxDepth = this.justSeeded ? 0 : STEALTH_CONFIG.SPREAD.CASCADE_MAX_DEPTH;
     this.justSeeded = false;
+
+    // Wake any dormant cells whose timer has elapsed BEFORE building this
+    // phase's spread queue below — a balance-pass change (guaranteed
+    // auto-infect was too strong; see stealthDebugStats(), game.js) means
+    // a woken cell no longer force-infects a neighbour on waking. Instead
+    // it just becomes a normal infected cell going into the SAME queue as
+    // every pre-existing one, with its own attemptsPerSource rolls through
+    // the ordinary _rollSpreadTargets() chance below — same pattern, same
+    // odds as any other cell, not a guaranteed "explosion". awoken is
+    // still tracked separately, purely for the UI's own "Latent cell(s)
+    // became active" narration line (buildVirusGrowthSteps(), game-ui.js)
+    // and its transparent-then-bright reveal (primeVirusGrowthRevealMask()).
+    const awoken = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state === 'dormant') {
+          cell.dormantTurns--;
+          if (cell.dormantTurns <= 0) {
+            cell.state = 'infected';
+            // Left at 0, not 1 — the snapshot loop below bumps every
+            // 'infected' cell's turnsInfected by 1 as it builds this
+            // phase's queue, this one included, same as a pre-existing
+            // cell would be. Setting it here too would double-count.
+            cell.turnsInfected = 0;
+            newlyInfected.push({ col: c, row: r });
+            awoken.push({ col: c, row: r });
+          }
+        }
+      }
+    }
+
     const queue = [];
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
@@ -186,35 +218,6 @@ class StealthBoard {
             queue.push({ col: target.col, row: target.row, depth: depth + 1 });
           }
         });
-      }
-    }
-
-    // Wake any dormant cells whose timer has elapsed — tracked separately
-    // from newlyInfected's other entries so the UI can give this its own
-    // "exploding" narration/animation instead of blending into the
-    // ordinary spread line.
-    const awoken = [];
-    for (let r = 0; r < this.rows; r++) {
-      for (let c = 0; c < this.cols; c++) {
-        const cell = this.cells[r][c];
-        if (cell.state === 'dormant') {
-          cell.dormantTurns--;
-          if (cell.dormantTurns <= 0) {
-            cell.state = 'infected';
-            cell.turnsInfected = 1;
-            newlyInfected.push({ col: c, row: r });
-            awoken.push({ col: c, row: r });
-            // Dormant cells auto-infect one adjacent cell on waking — a
-            // guaranteed single pick among whatever's open, not a chance
-            // roll (this is the "explosion," it should always land).
-            const candidates = this._spreadCandidates(c, r);
-            if (candidates.length) {
-              const pick = candidates[Math.floor(Math.random() * candidates.length)];
-              const t = this.cells[pick.row][pick.col];
-              if (this._infect(t)) { newlyInfected.push({ col: pick.col, row: pick.row }); awoken.push({ col: pick.col, row: pick.row }); }
-            }
-          }
-        }
       }
     }
 
@@ -373,17 +376,39 @@ class StealthBoard {
   // _nextCytokinePlacementId below), so Cytokine Neutralisation can later
   // strip just this one block instead of every same-coloured cell
   // anywhere on the board.
+  //
+  // The anchor is nudged inward first so the FULL shape lands on-board
+  // whenever the board is large enough to fit it (always true here — even
+  // the widest shape, Red's boosted 4x2 rectangle, comfortably fits a
+  // 5-wide board) — the immune system should get its full blocked
+  // frontage out of every Cytokine play, not lose cells off the edge just
+  // because the strategic target (_pickStrategicAntibodyTarget()) happened
+  // to land near one. Every shape here includes [0, 0] (the target cell
+  // itself), and the nudge never moves further than the shape's own
+  // bounding box requires, so the target stays covered either way — this
+  // only recovers cells that would otherwise be wasted, never sacrifices
+  // the actual entry point being guarded.
   protectShape(centerCol, centerRow, offsets, turns, color = null) {
+    const dxs = offsets.map(([dx]) => dx);
+    const dys = offsets.map(([, dy]) => dy);
+    const minDx = Math.min(...dxs), maxDx = Math.max(...dxs);
+    const minDy = Math.min(...dys), maxDy = Math.max(...dys);
+    let col = centerCol, row = centerRow;
+    if (col + minDx < 0) col = -minDx;
+    if (col + maxDx > this.cols - 1) col = this.cols - 1 - maxDx;
+    if (row + minDy < 0) row = -minDy;
+    if (row + maxDy > this.rows - 1) row = this.rows - 1 - maxDy;
+
     const protectedCells = [];
     const placementId = color ? _nextCytokinePlacementId++ : null;
     offsets.forEach(([dx, dy]) => {
-      const cell = this.getCell(centerCol + dx, centerRow + dy);
+      const cell = this.getCell(col + dx, row + dy);
       if (cell && cell.state === 'healthy') {
         cell.state = 'immune';
         cell.protectedTurns = turns;
         cell.cytokineColor = color;
         cell.cytokinePlacementId = placementId;
-        protectedCells.push({ col: centerCol + dx, row: centerRow + dy });
+        protectedCells.push({ col: col + dx, row: row + dy });
       }
     });
     return protectedCells;
@@ -495,27 +520,40 @@ class StealthBoard {
 
   // ── Player card effects ─────────────────────────────────────────
 
-  // "Horizontal Spread" — infect a healthy cell directly beside an
-  // already-infected cell in the same row (sideways only).
-  infectHorizontal(col, row) {
-    const cell = this.getCell(col, row);
-    if (!cell || cell.state !== 'healthy') return false;
-    const left  = this.getCell(col - 1, row);
-    const right = this.getCell(col + 1, row);
-    const adjacentInfected = (left && left.state === 'infected') || (right && right.state === 'infected');
-    if (!adjacentInfected) return false;
-    return this._infect(cell);
+  // "Horizontal Spread" — every healthy cell directly beside an
+  // already-infected cell in the same row (sideways only). Returns
+  // candidates rather than infecting one directly — the player no longer
+  // picks the exact cell (balance pass: guaranteed precision was too
+  // strong — see stealthDebugStats(), game.js), the card's own apply()
+  // (cards.js) picks randomly among these instead.
+  horizontalSpreadCandidates() {
+    const candidates = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state !== 'healthy') continue;
+        const left  = this.getCell(c - 1, r);
+        const right = this.getCell(c + 1, r);
+        if ((left && left.state === 'infected') || (right && right.state === 'infected')) candidates.push({ col: c, row: r });
+      }
+    }
+    return candidates;
   }
 
-  // "Vertical Spread" — infect a healthy cell directly below an
-  // already-infected cell in the same column (progresses toward the
-  // bottom row — the win condition).
-  infectVertical(col, row) {
-    const cell = this.getCell(col, row);
-    if (!cell || cell.state !== 'healthy') return false;
-    const above = this.getCell(col, row - 1);
-    if (!above || above.state !== 'infected') return false;
-    return this._infect(cell);
+  // "Vertical Spread" — every healthy cell directly below an
+  // already-infected cell in the same column. See horizontalSpreadCandidates()
+  // above for why this returns candidates instead of infecting directly.
+  verticalSpreadCandidates() {
+    const candidates = [];
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
+        const cell = this.cells[r][c];
+        if (cell.state !== 'healthy') continue;
+        const above = this.getCell(c, r - 1);
+        if (above && above.state === 'infected') candidates.push({ col: c, row: r });
+      }
+    }
+    return candidates;
   }
 
   // Deepest (highest row index) cell that's actually infected — unlike

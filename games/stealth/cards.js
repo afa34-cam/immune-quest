@@ -64,7 +64,7 @@ function _mhc1DownregDef(tissue) {
       // Same "virus has to actually be there" restriction Antibody Escape
       // already has — priming a defence against a T-Cell in a tissue the
       // virus hasn't even reached doesn't make sense.
-      if (!state.activeTissues.includes(tissue)) return { text: `The virus hasn't reached the ${tissue} yet.`, count: 0, ok: false };
+      if (!state.activeTissues.includes(tissue)) return { text: `The virus is not active in the ${tissue}.`, count: 0, ok: false };
       state.mhcActive = state.mhcActive || {};
       state.mhcActive[tissue] = STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS;
       return { text: `T-Cell Evasion (${_capitalize(tissue)}) for ${STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS} turns`, count: 0, ok: true };
@@ -100,24 +100,58 @@ function _crossTissueInfectedNeighbor(boards, tissue, col, row) {
   });
 }
 
+// Every healthy edge cell of `tissue` that a neighbouring tissue's own
+// infection could spread sideways into (see _crossTissueInfectedNeighbor
+// above) — collected as candidates rather than checked against one
+// player-picked cell, since Horizontal Spread no longer lets the player
+// choose the exact cell (see infect-horizontal below — balance pass, virus
+// was winning far too consistently; stealthDebugStats(), game.js).
+function _crossTissueSpreadCandidates(boards, tissue) {
+  const board = boards[tissue];
+  const candidates = [];
+  for (let r = 0; r < board.rows; r++) {
+    [0, board.cols - 1].forEach(c => {
+      const cell = board.getCell(c, r);
+      if (cell && cell.state === 'healthy' && _crossTissueInfectedNeighbor(boards, tissue, c, r)) {
+        candidates.push({ col: c, row: r });
+      }
+    });
+  }
+  return candidates;
+}
+
 const STEALTH_CARD_DEFS = {
 
   'infect-horizontal': {
     id: 'infect-horizontal', name: 'Horizontal Spread', icon: '↔️', count: 0, // count set per-difficulty, see StealthDeck
-    tooltip: 'Infect a healthy cell of choice next to an already-infected cell in the same row.',
-    targetType: 'cell',
+    tooltip: 'Infect a random healthy cell next to an already-infected cell in the same row.',
+    // 'tissue' not 'cell' — the player picks WHICH tissue, not the exact
+    // cell within it (balance pass: guaranteed player-chosen precision was
+    // too strong — see stealthDebugStats(), game.js). apply() below picks
+    // randomly among every valid candidate, same "no chosen cell" principle
+    // passive spread and Latency's own wake-up already follow.
+    targetType: 'tissue',
     apply(boards, target, state) {
       const board = boards[target.tissue];
-      let ok = board.infectHorizontal(target.col, target.row);
-      if (!ok && state.activeTissues.includes(target.tissue)
-        && _crossTissueInfectedNeighbor(boards, target.tissue, target.col, target.row)) {
-        const cell = board.getCell(target.col, target.row);
-        ok = !!cell && board._infect(cell);
-      }
+      const inTissue = board.horizontalSpreadCandidates();
+      // Cross-tissue edge candidates folded into the SAME random pool
+      // (deduped against inTissue) rather than only a fallback once no
+      // in-tissue candidate exists — otherwise they'd be systematically
+      // under-picked relative to in-tissue ones. Restricted to tissues the
+      // virus already actively infects, same as spillover itself (see
+      // _crossTissueInfectedNeighbor's own comment) — this only lets the
+      // virus spread sideways between fronts it already has.
+      const crossTissue = state.activeTissues.includes(target.tissue)
+        ? _crossTissueSpreadCandidates(boards, target.tissue).filter(cand => !inTissue.some(c => c.col === cand.col && c.row === cand.row))
+        : [];
+      const candidates = [...inTissue, ...crossTissue];
+      if (!candidates.length) return { text: 'No valid horizontal spread target in that tissue.', count: 0, ok: false };
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      const ok = board._infect(board.getCell(pick.col, pick.row));
       return {
         text: ok
-          ? `Horizontal Spread: infected [${target.col + 1},${target.row + 1}] in ${target.tissue}.`
-          : `Target must be healthy and beside an infected cell.`,
+          ? `Horizontal Spread: infected [${pick.col + 1},${pick.row + 1}] in ${target.tissue}.`
+          : `No valid horizontal spread target in that tissue.`,
         count: ok ? 1 : 0, ok,
       };
     },
@@ -125,15 +159,19 @@ const STEALTH_CARD_DEFS = {
 
   'infect-vertical': {
     id: 'infect-vertical', name: 'Vertical Spread', icon: '⬇️', count: 0, // count set per-difficulty, see StealthDeck
-    tooltip: 'Infect a healthy cell of choice directly below an already-infected cell.',
-    targetType: 'cell',
+    tooltip: 'Infect a random healthy cell directly below an already-infected cell.',
+    // See infect-horizontal above for why this targets a tissue, not a cell.
+    targetType: 'tissue',
     apply(boards, target, state) {
       const board = boards[target.tissue];
-      const ok = board.infectVertical(target.col, target.row);
+      const candidates = board.verticalSpreadCandidates();
+      if (!candidates.length) return { text: 'No valid vertical spread target in that tissue.', count: 0, ok: false };
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      const ok = board._infect(board.getCell(pick.col, pick.row));
       return {
         text: ok
-          ? `Vertical Spread: infected [${target.col + 1},${target.row + 1}] in ${target.tissue}.`
-          : `Target must be healthy and directly below an infected cell.`,
+          ? `Vertical Spread: infected [${pick.col + 1},${pick.row + 1}] in ${target.tissue}.`
+          : `No valid vertical spread target in that tissue.`,
         count: ok ? 1 : 0, ok,
       };
     },
@@ -141,12 +179,15 @@ const STEALTH_CARD_DEFS = {
 
   'spread-speed-plus': {
     id: 'spread-speed-plus', name: 'Replication Boost +1', icon: '⚡', count: 4,
-    tooltip: 'Increase the replication speed by +1.',
+    tooltip: `Increases the replication speed by +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT} for ${STEALTH_CONFIG.REPLICATION_BOOST.TURNS} turn.`,
     targetType: 'none',
     apply(boards, target, state) {
-      state.replication = Math.min(10, state.replication + 1);
-      state.showReplicationBoostBadge = true;
-      return { text: `Replication Boost +1: replication speed permanently increased to ${state.replication}.`, count: 0, ok: true };
+      // Tops up rather than stacks — same non-stacking convention as
+      // Protein Vaccine's own temporary speed change (vaccine-protein,
+      // below) — a second Boost while one's already active just refreshes
+      // the timer instead of extending it further.
+      state.replicationBoostTurns = STEALTH_CONFIG.REPLICATION_BOOST.TURNS;
+      return { text: `Replication Boost +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT}: replication speed increased for ${STEALTH_CONFIG.REPLICATION_BOOST.TURNS} turn.`, count: 0, ok: true };
     },
   },
 
@@ -179,11 +220,11 @@ const STEALTH_CARD_DEFS = {
 
   'activate-tregs': {
     id: 'activate-tregs', name: 'Activate Tregs', icon: '🤐', count: 3,
-    tooltip: 'The immune system has to skip the next turn.',
+    tooltip: 'The immune system can only play 1 card on its next turn.',
     targetType: 'none',
     apply(boards, target, state) {
-      state.immuneSkipTurns = 1;
-      return { text: 'Activate Tregs: the immune system will skip its next turn.', count: 0, ok: true };
+      state.immuneCardCapTurns = 1;
+      return { text: 'Activate Tregs: the immune system is limited to 1 card next turn.', count: 0, ok: true };
     },
   },
 
@@ -196,7 +237,7 @@ const STEALTH_CARD_DEFS = {
       // the immune side can pre-fortify one) — the real "is this usable"
       // check is whether the virus has actually reached lung yet, not
       // whether a board object exists there.
-      if (!state.activeTissues.includes('lung')) return { text: 'The virus hasn\'t reached lung yet.', count: 0, ok: false };
+      if (!state.activeTissues.includes('lung')) return { text: 'The virus is not active in the lung.', count: 0, ok: false };
       const n = boards.lung.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
       const cleared = boards.lung.clearAntibodyProtection();
       const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
@@ -209,7 +250,7 @@ const STEALTH_CARD_DEFS = {
     tooltip: 'Remove all antibodies in Liver.',
     targetType: 'none', requiresTissue: 'liver',
     apply(boards, target, state) {
-      if (!state.activeTissues.includes('liver')) return { text: 'The virus hasn\'t reached liver yet.', count: 0, ok: false };
+      if (!state.activeTissues.includes('liver')) return { text: 'The virus is not active in the liver.', count: 0, ok: false };
       const n = boards.liver.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
       const cleared = boards.liver.clearAntibodyProtection();
       const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
@@ -222,7 +263,7 @@ const STEALTH_CARD_DEFS = {
     tooltip: 'Remove all antibodies in Intestine.',
     targetType: 'none', requiresTissue: 'intestine',
     apply(boards, target, state) {
-      if (!state.activeTissues.includes('intestine')) return { text: 'The virus hasn\'t reached intestine yet.', count: 0, ok: false };
+      if (!state.activeTissues.includes('intestine')) return { text: 'The virus is not active in the intestine.', count: 0, ok: false };
       const n = boards.intestine.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
       const cleared = boards.intestine.clearAntibodyProtection();
       const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
