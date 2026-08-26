@@ -73,15 +73,18 @@ class StealthGame {
     this.mrnaBoostTurns = 0;
 
     // Turn-state flags (mutable each turn via card effects)
-    // Replication Boost (virus-favourable): a TEMPORARY +1 effective speed
-    // — was a permanent stacking bonus, changed in a balance pass (virus
-    // was winning far too consistently — see stealthDebugStats() at the
-    // bottom of this file) to mirror Protein Vaccine's own temporary-turns
-    // pattern instead (REPLICATION_BOOST.AMOUNT/TURNS, config.js). A fresh
-    // play tops this back up rather than stacking a second turn on top of
-    // an already-active one — same non-stacking convention Protein Vaccine
-    // itself uses.
-    this.replicationBoostTurns = 0;
+    // Replication Boost (virus-favourable): a TEMPORARY effective-speed
+    // bonus — was a permanent stacking bonus, changed in a balance pass
+    // (virus was winning far too consistently — see stealthDebugStats() at
+    // the bottom of this file) to a per-phase one instead. Unlike Protein
+    // Vaccine's own turns-remaining countdown, this isn't a duration at
+    // all — it's cleared to 0 the moment the next virus_growth phase uses
+    // it (see _runVirusGrowth()), always exactly one phase, never more.
+    // Playing a second copy the SAME turn stacks the AMOUNT (each play adds
+    // its own +REPLICATION_BOOST.AMOUNT, config.js), unlike Protein
+    // Vaccine's non-stacking top-up — two Boosts this turn means +2 next
+    // spread phase, not just a refreshed +1.
+    this.replicationBoostAmount = 0;
     // Antiviral (immune-favourable): the exact opposite of Replication
     // Boost above — a PERMANENT -1 to effective replication speed, not a
     // temporary timer. Every successful Antiviral play adds ANOTHER -1 on
@@ -165,8 +168,7 @@ class StealthGame {
   // separately. Single source of truth for both the actual spread calc
   // (_runVirusGrowth()) and the UI's speed badge (renderVirusInfoPanel()).
   effectiveReplicationSpeed() {
-    let speed = this.loadout.replication - this.antiviralPenalty;
-    if (this.replicationBoostTurns > 0) speed += STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT;
+    let speed = this.loadout.replication - this.antiviralPenalty + this.replicationBoostAmount;
     if (this.proteinVaccineTurns > 0) speed -= STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT;
     return Math.max(1, speed);
   }
@@ -194,8 +196,8 @@ class StealthGame {
     // — see board.js _rollSpreadTargets(). True for the rest of the game
     // once Antiviral has ever landed even once (permanent), or while
     // Protein Vaccine's own temporary window is still open. Replication
-    // Boost has no equivalent chance bonus of its own here — its (now
-    // temporary — see replicationBoostTurns, constructor) bonus only
+    // Boost has no equivalent chance bonus of its own here — its own
+    // (temporary — see replicationBoostAmount, constructor) bonus only
     // raises effectiveReplicationSpeed()'s attempt count, same as before.
     const penalized = this.antiviralPenalty > 0 || this.proteinVaccineTurns > 0;
     const effectiveSpeed = this.effectiveReplicationSpeed();
@@ -209,11 +211,13 @@ class StealthGame {
       totalNew += newCells.cells.length;
     });
 
-    // Temporary modifiers both decrement here, right after this phase
-    // actually used effectiveReplicationSpeed() for the turn — Antiviral's
-    // own penalty never decrements, it's permanent.
+    // Protein Vaccine counts down (a real duration, same value ticking
+    // toward 0 turn by turn) — Replication Boost isn't a duration at all,
+    // it's fully spent the moment this ONE phase used it, whatever amount
+    // it added up to (see replicationBoostAmount, constructor); Antiviral's
+    // own penalty never changes here at all, it's permanent.
     if (this.proteinVaccineTurns > 0) this.proteinVaccineTurns--;
-    if (this.replicationBoostTurns > 0) this.replicationBoostTurns--;
+    this.replicationBoostAmount = 0;
 
     const spillovers = this._runSpillover();
     this.cellsInfectedTotal += totalNew + spillovers.length;
@@ -788,7 +792,7 @@ class StealthGame {
 
     const card = this.hand[handIndex];
     const state = {
-      replicationBoostTurns: this.replicationBoostTurns,
+      replicationBoostAmount: this.replicationBoostAmount,
       immuneCardCapTurns: this.immuneCardCapTurns,
       mhcActive: this.mhcActive,
       activeTissues: this.activeTissues,
@@ -796,7 +800,7 @@ class StealthGame {
 
     const result = card.apply(this.boards, target, state);
 
-    this.replicationBoostTurns = state.replicationBoostTurns;
+    this.replicationBoostAmount = state.replicationBoostAmount;
     this.immuneCardCapTurns    = state.immuneCardCapTurns;
     this.mhcActive             = state.mhcActive;
 

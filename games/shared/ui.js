@@ -261,27 +261,31 @@ function setupSimpleMenu(config) {
   }
 
   const embedded = window.self !== window.top;
+  // Every landing button carries its own icon span now (font-size set by
+  // .menu-item-icon, ui.css) instead of a same-size character inline with
+  // the label text — lets the icon read bigger without also blowing up
+  // the label's own font size.
   let landingHtml = '';
   if(config.showHelpButton) {
-    landingHtml += `<button class="menu-item" onclick="openHelp && openHelp(); closeMenu();">Tutorial</button>`;
+    landingHtml += `<button class="menu-item" onclick="openHelp && openHelp(); closeMenu();"><span class="menu-item-icon">?</span> Tutorial</button>`;
   }
   if(config.showFullscreenButton) {
-    landingHtml += `<button class="menu-item" onclick="toggleGameFullscreen()">⛶ Fullscreen</button>`;
+    landingHtml += `<button class="menu-item" onclick="toggleGameFullscreen()"><span class="menu-item-icon">⛶</span> Fullscreen</button>`;
   }
   // Not every game defines a restart/exit-to-select flow — only offer it
   // for ones that do (currently exitMission(), from stealth's game-ui.js).
   if(typeof exitMission === 'function') {
-    landingHtml += `<button class="menu-item" onclick="exitMission(); closeMenu();">↺ Restart</button>`;
+    landingHtml += `<button class="menu-item" onclick="exitMission(); closeMenu();"><span class="menu-item-icon">↺</span> Restart</button>`;
   }
   if(config.showBackLink) {
     const backAction = embedded ? 'exitEmbeddedGame()' : `window.location.href='${config.backLinkHref}'`;
-    landingHtml += `<button class="menu-item" onclick="${backAction}">← Back to Patient</button>`;
+    landingHtml += `<button class="menu-item" onclick="${backAction}"><span class="menu-item-icon">←</span> Back to Patient</button>`;
   }
 
   const landingLabel = (config.gameTitle || 'Game').split(' ')[0];
 
   modal.innerHTML = `
-    <div class="modal" style="max-width:400px;">
+    <div class="modal" style="max-width:520px;">
       <div class="modal-header">
         <div class="modal-title">Menu</div>
         <button class="modal-close" onclick="closeMenu()">✕</button>

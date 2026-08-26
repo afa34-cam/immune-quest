@@ -131,12 +131,19 @@ footer a{
   border:1px solid var(--border); color:var(--text); cursor:pointer;
   font-size:11px; font-family:'Orbitron',monospace; letter-spacing:1px;
   transition:border-color .2s, background .2s; text-decoration:none;
-  display:block; text-align:left;
+  display:flex; align-items:center; gap:10px; text-align:left;
 }
 
 .menu-item:hover{
   border-color:var(--accent); background:rgba(0,229,255,.06);
 }
+
+/* Own font-size, independent of the label's — lets the icon read bigger
+   without also blowing up the (Orbitron, already-wide-tracking) label
+   text next to it. Matches width/centering with .modal-btn-icon below so
+   every icon in this menu (landing tab here, Settings/Share tabs there)
+   lines up the same regardless of which tab it's in. */
+.menu-item-icon{ font-size:20px; width:20px; text-align:center; flex-shrink:0; }
 
 /* ──────────────────────────────────────────────────────────────
    TABBED MENU (game pages) — mirrors the main hub's own menu modal
@@ -168,9 +175,15 @@ footer a{
 
 .modal-section{ display:flex; flex-direction:column; gap:8px; }
 .modal-section-title{ font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+/* Divider BETWEEN sections (e.g. Settings tab's Privacy/Progress), not
+   inside one — was previously a border-bottom on .toggle-row itself
+   (below), which put the line mid-Privacy-section (between the toggle and
+   its own explanatory text) instead of actually separating the two
+   sections, since that text sits after the toggle-row as a sibling within
+   the SAME section, not after it. */
+.modal-section + .modal-section{ border-top:1px solid var(--border); padding-top:12px; }
 
-.toggle-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
-.toggle-row:last-child{ border-bottom:none; }
+.toggle-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; }
 .toggle-label{ font-size:12px; color:var(--text); }
 .toggle-sub{ font-size:10px; color:var(--muted); margin-top:2px; }
 .toggle-switch{ position:relative; width:40px; height:22px; flex-shrink:0; }
@@ -195,7 +208,7 @@ footer a{
   text-decoration:none; font-family:'Nunito',sans-serif;
 }
 .modal-btn:hover{ border-color:var(--accent); background:rgba(0,229,255,.06); }
-.modal-btn-icon{ font-size:16px; width:20px; text-align:center; }
+.modal-btn-icon{ font-size:20px; width:20px; text-align:center; }
 
 .share-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 

@@ -58,7 +58,7 @@ function _mhc1DownregDef(tissue) {
   return {
     id: `mhc1-downreg-${tissue}`, name: `T-Cell Evasion: ${_capitalize(tissue)}`, icon: '🚫',
     count: 2,
-    tooltip: `Primes a hidden defence in ${tissue} for ${STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS} turns. The next T cell card the immune system plays here in that time is fully cancelled.`,
+    tooltip: `Primes a hidden defence in ${tissue} for ${_pluralTurns(STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS)}. The next T cell card the immune system plays here in that time is fully cancelled.`,
     targetType: 'none', requiresTissue: tissue,
     apply(boards, target, state) {
       // Same "virus has to actually be there" restriction Antibody Escape
@@ -67,7 +67,7 @@ function _mhc1DownregDef(tissue) {
       if (!state.activeTissues.includes(tissue)) return { text: `The virus is not active in the ${tissue}.`, count: 0, ok: false };
       state.mhcActive = state.mhcActive || {};
       state.mhcActive[tissue] = STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS;
-      return { text: `T-Cell Evasion (${_capitalize(tissue)}) for ${STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS} turns`, count: 0, ok: true };
+      return { text: `T-Cell Evasion (${_capitalize(tissue)}) for ${_pluralTurns(STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS)}`, count: 0, ok: true };
     },
   };
 }
@@ -179,15 +179,18 @@ const STEALTH_CARD_DEFS = {
 
   'spread-speed-plus': {
     id: 'spread-speed-plus', name: 'Replication Boost +1', icon: '⚡', count: 4,
-    tooltip: `Increases the replication speed by +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT} for ${STEALTH_CONFIG.REPLICATION_BOOST.TURNS} turn.`,
+    tooltip: `Increases the replication speed by +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT} for the next spread phase. Stacks if played more than once in the same turn.`,
     targetType: 'none',
     apply(boards, target, state) {
-      // Tops up rather than stacks — same non-stacking convention as
-      // Protein Vaccine's own temporary speed change (vaccine-protein,
-      // below) — a second Boost while one's already active just refreshes
-      // the timer instead of extending it further.
-      state.replicationBoostTurns = STEALTH_CONFIG.REPLICATION_BOOST.TURNS;
-      return { text: `Replication Boost +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT}: replication speed increased for ${STEALTH_CONFIG.REPLICATION_BOOST.TURNS} turn.`, count: 0, ok: true };
+      // STACKS, unlike Protein Vaccine's own temporary speed change
+      // (vaccine-protein, below) — a second Boost played the same turn
+      // adds its own +AMOUNT on top rather than just refreshing a single
+      // +AMOUNT. Duration doesn't stack though — however many are played
+      // this turn, they're ALL spent together the moment the next
+      // virus_growth phase uses them (see replicationBoostAmount reset,
+      // game.js), not extended across multiple phases.
+      state.replicationBoostAmount = (state.replicationBoostAmount || 0) + STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT;
+      return { text: `Replication Boost +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT}: replication speed increased for the next spread phase.`, count: 0, ok: true };
     },
   },
 
@@ -298,6 +301,12 @@ const TROPISM_CARD_IDS = ['lung-tropism', 'liver-tropism', 'intestine-tropism'];
 // ═══════════════════════════════════════════════════════════════════
 
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// "N turn"/"N turns" — several tooltips/narration lines interpolate a
+// config-driven turn count (MHC_EVASION_TURNS etc.) directly; grammar
+// breaks ("for 1 turns") if that count is ever just 1, so anything built
+// from a variable duration goes through this instead of hardcoding "turns".
+function _pluralTurns(n) { return `${n} turn${n === 1 ? '' : 's'}`; }
 
 // Shape tiers used by the Cytokine cards — lists of [dx, dy] offsets from a
 // centre cell. Blue/Orange start at tiers 0/1 (1/5 cells); an active mRNA

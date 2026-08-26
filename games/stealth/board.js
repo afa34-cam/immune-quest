@@ -124,7 +124,7 @@ class StealthBoard {
   // timer — beyond just changing replicationSpeed's attempt count, it also
   // directly shifts the actual per-attempt spread CHANCE (see
   // _rollSpreadTargets()). Replication Boost has no equivalent chance
-  // bonus of its own here — its own (temporary — see replicationBoostTurns,
+  // bonus of its own here — its own (temporary — see replicationBoostAmount,
   // game.js) bonus only raises replicationSpeed's attempt count, same as
   // before it became temporary.
   spreadVirus(replicationSpeed, penalized = false) {

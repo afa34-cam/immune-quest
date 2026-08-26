@@ -652,11 +652,17 @@ function renderVirusTraits() {
   };
 
   g.activeTissues.forEach(t => addCard(`${t}-tropism`, false));
-  // Both temporary now (balance pass — see replicationBoostTurns/
-  // immuneCardCapTurns, game.js), so both get a real turns-remaining
-  // badge, same treatment as Latency/T-Cell Evasion below.
-  if (g.replicationBoostTurns > 0) addCard('spread-speed-plus', true, g.replicationBoostTurns);
-  // Global (not per-tissue) — shown once, not inside the tissue loop below.
+  // No badge — the card face alone is the signal. Stays showing from the
+  // moment it's played through the NEXT virus_growth phase (whichever
+  // turn that lands on), then disappears the instant that phase clears
+  // replicationBoostAmount back to 0 (see game.js) — this condition
+  // already tracks that exactly, no separate "still within range" check
+  // needed.
+  if (g.replicationBoostAmount > 0) addCard('spread-speed-plus', true);
+  // Activate Tregs' cap IS still a real turns-remaining count (balance
+  // pass — see immuneCardCapTurns, game.js), unlike Replication Boost
+  // above. Global (not per-tissue) — shown once, not inside the tissue
+  // loop below.
   if (g.immuneCardCapTurns > 0) addCard('activate-tregs', true, g.immuneCardCapTurns);
   g.activeTissues.forEach(t => {
     const board = g.boards[t];
@@ -703,7 +709,7 @@ function renderVirusInfoPanel() {
   // change mid-game (mutations, Replication Boost, Antiviral/Protein
   // Vaccine), unlike mutation rate. Shows the EFFECTIVE speed (matching
   // game.js _runVirusGrowth()'s own calc exactly). Replication Boost is
-  // temporary (see replicationBoostTurns, game.js) and gets its own
+  // temporary (see replicationBoostAmount, game.js) and gets its own
   // "currently boosted" colour below, same treatment as Antiviral/Protein
   // Vaccine's temporary penalty already gets.
   const speedEl = document.getElementById('virus-info-panel-speed');
@@ -721,7 +727,7 @@ function renderVirusInfoPanel() {
   }
   valueEl.querySelector('.speed-num').textContent = g.effectiveReplicationSpeed();
   valueEl.classList.toggle('speed-penalized', g.antiviralPenalty > 0 || g.proteinVaccineTurns > 0);
-  valueEl.classList.toggle('speed-boosted', g.replicationBoostTurns > 0);
+  valueEl.classList.toggle('speed-boosted', g.replicationBoostAmount > 0);
 }
 
 // A short staggered STREAM of floating "+1"/"-1" (was a single one-shot
@@ -835,6 +841,27 @@ const POOF_ANIMATION_MS = 900;
 
 let narratedPhaseRef = null;
 let autoPhaseTimer = null;
+
+// Set mid-reveal by runAutoPhase() the instant the cell that actually wins
+// the game (reaches the bottom row) gets revealed — every reveal callback
+// still pending after that point (later cells in the same staggered group,
+// or the outer next() continuation) checks this and bails out instead of
+// revealing anything further, so the win screen cuts in right at that
+// moment instead of waiting for the rest of this turn's spread to finish
+// animating. Reset at the top of every runAutoPhase() call.
+let stopRevealAfterWin = false;
+
+// True if this cell is the one that actually satisfies the win condition
+// (reached the bottom row of an active tissue) — g.state is already
+// 'won' well before any of this turn's cells start revealing (see
+// _checkWin(), game.js, called synchronously at the end of
+// _runVirusGrowth()), so checking state alone can't tell WHICH cell was
+// the one responsible; this pins it down to stop the reveal at the right
+// moment rather than the first cell shown.
+function _isWinningCellReveal(g, tissue, cell) {
+  return g.state === 'won' && g.activeTissues.includes(tissue)
+    && g.boards[tissue] && cell.row === g.boards[tissue].rows - 1;
+}
 
 // Which not-yet-narrated immune_response cells should still display their
 // PRE-turn look instead of the live (already-resolved) model — keyed
@@ -1145,18 +1172,24 @@ function buildVirusGrowthSteps(g) {
   }
 
   const steps = [...intro];
+  // Latent cells wake BEFORE the rest of this turn's spread narrates —
+  // matches the actual order spreadVirus() (board.js) resolves them in: a
+  // dormant cell flips to infected and joins the SAME queue every other
+  // infected cell rolls from, so its own wake is chronologically the
+  // first thing that happens this phase, not an afterthought tacked onto
+  // the end of the normal spread line.
+  if (explodeOrgans.length) {
+    steps.push({
+      html: `Latent cell(s) became active in ${explodeOrgans.join(', ')}`,
+      cls: 'line-virus', groups: explodeGroups, flashClass: 'cell-explode-pop',
+    });
+  }
   // One line covering every organ that got new infected cells this turn
   // (direct growth and spillover alike), not a separate line per organ.
   if (organs.length) {
     steps.push({
       html: `Virus spread in ${organs.join(', ')}`,
       cls: 'line-virus', groups, flashClass: 'cell-infect-pop',
-    });
-  }
-  if (explodeOrgans.length) {
-    steps.push({
-      html: `Latent cell(s) became active in ${explodeOrgans.join(', ')}`,
-      cls: 'line-virus', groups: explodeGroups, flashClass: 'cell-explode-pop',
     });
   }
   return steps;
@@ -1365,9 +1398,18 @@ function showMutationToast(m) {
   } else {
     const generic = document.createElement('div');
     generic.className = 'mutation-toast-generic';
-    const arrowGlyph = m.direction === 'gain' ? '▲' : m.direction === 'loss' ? '▼' : '–';
-    generic.innerHTML = `<div class="mutation-toast-generic-icon">${MUTATION_CATEGORY_ICON[m.category] || '🧬'}</div>
-      <div class="mutation-toast-generic-arrow ${isNeutral ? 'neutral' : m.direction}">${arrowGlyph}</div>`;
+    // No-mutation ('none') is the only way this generic branch is ever
+    // neutral in practice — every real mutation event sets an explicit
+    // gain/loss direction (see game.js's mutation switch), and the "roll
+    // failed entirely" case never reaches here at all (lastMutation is
+    // null, so showMutationToast() bails before this runs). A dash/arrow
+    // glyph under the icon for "nothing happened" just read as visual
+    // noise (a stray "_"-like mark) — the icon alone, centred, says it.
+    const arrowHtml = isNeutral ? '' : (() => {
+      const arrowGlyph = m.direction === 'gain' ? '▲' : '▼';
+      return `<div class="mutation-toast-generic-arrow ${m.direction}">${arrowGlyph}</div>`;
+    })();
+    generic.innerHTML = `<div class="mutation-toast-generic-icon">${MUTATION_CATEGORY_ICON[m.category] || '🧬'}</div>${arrowHtml}`;
     cardSlot.appendChild(generic);
   }
 
@@ -1430,6 +1472,7 @@ document.addEventListener('click', (e) => {
 function runAutoPhase() {
   const g = activeGame;
   clearTimeout(autoPhaseTimer);
+  stopRevealAfterWin = false;
   const steps = g.phase === 'virus_growth' ? buildVirusGrowthSteps(g)
     : g.phase === 'immune_response' ? buildImmuneSteps(g)
     : buildMutationSteps(g);
@@ -1437,6 +1480,12 @@ function runAutoPhase() {
   let i = 0;
   let mutationPopupShown = false;
   function next() {
+    // The winning cell's own reveal (below) already cut straight to the
+    // end screen — every later step in this turn's queue (e.g. a "Latent
+    // cell(s) became active" step after the "Virus spread" one that
+    // actually won it) just bails out here instead of narrating anything
+    // more.
+    if (stopRevealAfterWin) return;
     if (i >= steps.length) {
       const advance = () => { activeGame.advance(); renderGame(); };
       if (mutationPopupShown) {
@@ -1488,6 +1537,11 @@ function runAutoPhase() {
       step.groups.forEach(gr => gr.cells.forEach(c => flatCells.push({ tissue: gr.tissue, ...c })));
       flatCells.forEach((c, idx) => {
         setTimeout(() => {
+          // A later cell's own timer can still fire after an earlier one
+          // in this same group already ended the game (see
+          // _isWinningCellReveal() below) — bail out rather than reveal
+          // anything past that point.
+          if (stopRevealAfterWin) return;
           // highlightCells() before revealBoardCells() (not the reverse) —
           // same order the immune-response path above uses, and for the
           // same reason: the flash class needs to land on the cell while
@@ -1496,6 +1550,16 @@ function runAutoPhase() {
           // class onto once it swaps the cell over to its live state.
           highlightCells(c.tissue, [c], step.flashClass);
           revealBoardCells([c]);
+          // Cut straight to the win screen the instant the cell that
+          // actually reached the bottom row is shown, instead of letting
+          // the rest of this turn's spread keep animating first — the
+          // player sees exactly the moment the mission was won, not a few
+          // more seconds of an already-decided outcome.
+          if (_isWinningCellReveal(activeGame, c.tissue, c)) {
+            stopRevealAfterWin = true;
+            clearTimeout(autoPhaseTimer);
+            renderGame();
+          }
         }, idx * VIRUS_SPREAD_CELL_STAGGER_MS);
       });
       // -1 cell's worth: the last cell's own stagger delay is when it
@@ -1951,7 +2015,6 @@ function renderTradeModal() {
     if (tradeGiveSelected.includes(i)) el.classList.add('selected');
     giveWrap.appendChild(el);
   });
-  document.getElementById('trade-give-count').textContent = `(${tradeGiveSelected.length}/3)`;
 
   const receiveWrap = document.getElementById('trade-receive-cards');
   receiveWrap.innerHTML = '';
@@ -1969,7 +2032,10 @@ function renderTradeModal() {
   // cards this virus's deck/hand/discard actually contain right now, see
   // getTradeableCardIds()), so a fixed grid left ragged/uneven rows
   // whenever the count wasn't a clean multiple of it.
-  receiveWrap.style.gridTemplateColumns = `repeat(${Math.max(1, Math.ceil(receiveIds.length / 2))}, 70px)`;
+  // 100px matches .trade-popup .trade-cards-grid .card-face's own width
+  // (index.html) — keep both in sync, or these columns stop lining up
+  // with the actual card size.
+  receiveWrap.style.gridTemplateColumns = `repeat(${Math.max(1, Math.ceil(receiveIds.length / 2))}, 100px)`;
 
   document.getElementById('trade-tab-give').classList.toggle('active', tradeActiveTab === 'give');
   document.getElementById('trade-tab-give').classList.toggle('complete', tradeGiveSelected.length === 3);
@@ -2025,6 +2091,7 @@ function renderHand() {
   const list = document.getElementById('hand-cards');
   list.innerHTML = '';
   selectedHandIndex = null;
+  _syncTissueTargetingClass();
 
   g.hand.forEach((card, i) => {
     const el = renderCardFace(card, interactive ? { onClick: () => selectHandCard(i) } : {});
@@ -2067,11 +2134,26 @@ function renderHand() {
   if (interactive && !g.hand.length) endStealthTurn();
 }
 
+// Toggles a class on the board wrap reflecting whether the currently
+// selected hand card targets a whole TISSUE rather than one cell
+// (Horizontal/Vertical Spread — see selectHandCard() below) — CSS uses
+// this to swap the usual per-cell hover pop for a whole-board highlight
+// instead, so hovering doesn't visually suggest the player can still aim
+// at one specific cell when they can't (balance pass: precise player-
+// chosen targeting was removed — see stealthDebugStats(), game.js).
+// Called from every path that changes selectedHandIndex (selecting,
+// deselecting, or playing a card), so it can't drift out of sync with
+// whichever card is actually selected right now.
+function _syncTissueTargetingClass() {
+  const card = selectedHandIndex !== null ? activeGame.hand[selectedHandIndex] : null;
+  document.getElementById('boards-wrap')?.classList.toggle('targeting-tissue', !!card && card.targetType === 'tissue');
+}
+
 function selectHandCard(i) {
   resetTurnReminder();
   document.querySelectorAll('#hand-cards .card-face').forEach(el => el.classList.remove('selected'));
   const card = activeGame.hand[i];
-  if (selectedHandIndex === i) { selectedHandIndex = null; return; }
+  if (selectedHandIndex === i) { selectedHandIndex = null; _syncTissueTargetingClass(); return; }
   selectedHandIndex = i;
   document.getElementById('hand-card-' + i).classList.add('selected');
 
@@ -2086,6 +2168,7 @@ function selectHandCard(i) {
   } else {
     document.getElementById('play-hint').textContent = 'Click a cell on the board to target it.';
   }
+  _syncTissueTargetingClass();
 }
 
 function onCellClick(tissue, col, row) {
@@ -2107,7 +2190,7 @@ function formatCardPlayText(card, target, result) {
   switch (card.id) {
     case 'infect-horizontal': return 'Played horizontal spread';
     case 'infect-vertical': return 'Played vertical spread';
-    case 'spread-speed-plus': return 'Played replication boost';
+    case 'spread-speed-plus': return `Played replication boost +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT} for 1 turn`;
     case 'latency': return 'Played latency - activates next turn';
     case 'antibody-escape-lung':
     case 'antibody-escape-liver':
@@ -2134,6 +2217,7 @@ function playSelectedCard(target) {
     lastPlayError = res.result.text;
   }
   selectedHandIndex = null;
+  _syncTissueTargetingClass();
   renderGame();
   // After renderGame() (not before) — the board's just been rebuilt, and
   // renderVirusInfoPanel() rebuilds the speed badge's innerHTML every

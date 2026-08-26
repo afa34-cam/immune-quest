@@ -270,12 +270,13 @@ const STEALTH_CONFIG = {
 
   // Replication Boost — TEMPORARY now, not a permanent stacking +1 (balance
   // pass: virus was winning far too consistently — see stealthDebugStats(),
-  // game.js). Mirrors Protein Vaccine's own temporary-turns pattern
-  // (VACCINE.PROTEIN_SPEED_PENALTY_*), just the virus's own side of it —
-  // see effectiveReplicationSpeed(), game.js.
+  // game.js). Unlike Protein Vaccine's own temporary-turns pattern
+  // (VACCINE.PROTEIN_SPEED_PENALTY_*), duration isn't a configurable turn
+  // count here — it's always active for exactly the next spread phase,
+  // then fully consumed (see replicationBoostAmount, game.js). AMOUNT does
+  // stack, though: playing it twice in the same turn adds AMOUNT twice.
   REPLICATION_BOOST: {
     AMOUNT: 1,
-    TURNS: 1,
   },
 
   // ── Cards / hand ─────────────────────────────────────────────────
