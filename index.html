@@ -59,6 +59,29 @@
       0%{transform:translateY(100vh);opacity:0} 10%{opacity:0.45} 90%{opacity:0.18} 100%{transform:translateY(-10vh);opacity:0}
     }
 
+    /* Landscape/minimum-size gate for the hub itself — same mechanism and
+       thresholds-in-spirit as Stealth Mission's own .orientation-lock
+       (games/stealth/index.html) and this page's own game-modal version
+       above: below a certain window size, or in portrait, this replaces
+       the header+main content with a "rotate / make your window bigger"
+       message instead of letting the layout squeeze into something
+       cramped. Skipped entirely while the game modal is open — that has
+       its own separate gate (.game-orientation-lock above) scoped to just
+       the game area, so the two never fight over the same screen. Driven
+       by checkHubViewportGate() (JS, below) rather than a pure
+       `@media(orientation:portrait)` query, for the same reason as both
+       the versions above: that only catches aspect ratio, not an
+       absolute-size problem like a small-but-landscape desktop window. */
+    .orientation-lock{
+      display:none; position:fixed; inset:0; z-index:6000;
+      flex-direction:column; align-items:center; justify-content:center; gap:16px;
+      background:var(--bg); text-align:center; padding:24px; box-sizing:border-box;
+    }
+    .orientation-lock-icon{ font-size:48px; color:var(--accent); }
+    .orientation-lock-text{ font-family:'Nunito',sans-serif; font-size:15px; color:var(--muted); max-width:320px; line-height:1.5; }
+    :root.hub-viewport-blocked .orientation-lock{ display:flex; }
+    :root.hub-viewport-blocked .header-outer, :root.hub-viewport-blocked .main, :root.hub-viewport-blocked footer{ display:none; }
+
     /* Header */
     .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(10px); }
     header {
@@ -486,6 +509,39 @@
     }
     .game-modal-frame-wrap iframe { width:100%; height:100%; border:none; display:block; flex:1; }
 
+    /* Landscape/minimum-size gate for the game modal — same reasoning as
+       Stealth Mission's own internal .orientation-lock (games/stealth/
+       index.html): below a certain window size (or in portrait) a game's
+       board/UI either gets scaled down past legibility or just doesn't fit,
+       so this shows a "rotate / make your window bigger" message instead
+       of letting that happen. Scoped to the MODAL only (games/games-frame-
+       wrap), not the landing page below — the landing page's own grid
+       already reflows down to phone-portrait width just fine (see the
+       @media rules above) and forcing landscape there would break normal
+       phone browsing for no reason; it's specifically the fixed-layout
+       GAME content that needs the floor. Driven by checkGameViewportGate()
+       below rather than a pure `@media(orientation:portrait)` query, for
+       the same reason Stealth's own version is JS-driven: that only catches
+       aspect ratio, not an absolute-size problem like a small-but-landscape
+       desktop window. The modal bar (Fullscreen/Exit) stays visible and
+       usable throughout, so a visitor whose device genuinely can't reach
+       the minimum size is never stuck unable to leave — only the game
+       frame itself is swapped out for the message. Games with their own
+       internal gate (Stealth) end up double-covered while embedded, which
+       is harmless; this exists mainly for every OTHER game that has no
+       such gate of its own. */
+    .game-orientation-lock{
+      display:none; position:absolute; inset:0; z-index:5;
+      flex-direction:column; align-items:center; justify-content:center; gap:16px;
+      background:var(--panel); text-align:center; padding:24px; box-sizing:border-box;
+    }
+    .game-orientation-lock-icon{ font-size:48px; color:var(--accent); }
+    .game-orientation-lock-text{
+      font-family:'Nunito',sans-serif; font-size:15px; color:var(--muted);
+      max-width:320px; line-height:1.5;
+    }
+    .game-modal-frame-wrap.viewport-blocked .game-orientation-lock{ display:flex; }
+
     /* Responsive */
     @media (max-width:860px) {
       header { padding:14px 20px; }
@@ -520,6 +576,11 @@
 
 <div class="icon-layer" id="icon-layer"></div>
 <div class="particles" id="particles"></div>
+
+<div class="orientation-lock">
+  <div class="orientation-lock-icon">↻</div>
+  <div class="orientation-lock-text" id="hub-orientation-lock-text">Rotate your device to landscape<br>to use Immune Quest.</div>
+</div>
 
 <div class="header-outer"></div>
 
@@ -759,6 +820,10 @@
     <div class="game-modal-frame-wrap" id="game-frame-wrap">
       <iframe id="game-iframe" frameborder="0" style="display:none;"
         src="" allowfullscreen allow="fullscreen"></iframe>
+      <div class="game-orientation-lock" id="game-orientation-lock">
+        <div class="game-orientation-lock-icon">↻</div>
+        <div class="game-orientation-lock-text" id="game-orientation-lock-text">Rotate your device to landscape<br>to play this game.</div>
+      </div>
     </div>
 
     <!-- Self-report panel: game stays visible behind it so the player can read their score -->
@@ -1317,7 +1382,85 @@ function launchGame(type) {
   // the button (hub bar for legacy games, in-game header for others),
   // not forced automatically on launch.
   document.getElementById('game-modal').style.display = 'flex';
+  checkGameViewportGate();
+  checkHubViewportGate(); // modal now open — releases the hub's own gate, see its own comment
 }
+
+// Minimum size the embedded game area needs to stay legible/usable — same
+// threshold Stealth Mission's own internal gate uses (games/stealth/
+// game-ui.js MIN_GAME_WIDTH/MIN_GAME_HEIGHT), kept in sync deliberately:
+// this exists to catch every OTHER embedded game that has no such gate of
+// its own (e.g. the Unity "virus" build), not to second-guess Stealth's.
+const MIN_GAME_MODAL_WIDTH = 820;
+const MIN_GAME_MODAL_HEIGHT = 480;
+
+// Drives .game-orientation-lock (see its own CSS comment, above) — checked
+// on load and on every resize/orientation change while the game modal is
+// open. A no-op whenever it's closed (checkHubViewportGate() below covers
+// the landing page instead). JS-driven rather than a pure
+// `@media(orientation:portrait)` query for the same reason Stealth's own
+// version is: that only catches aspect ratio, not an absolute-size problem
+// like a small-but-landscape desktop window.
+function checkGameViewportGate() {
+  const modal = document.getElementById('game-modal');
+  if (modal.style.display !== 'flex') return;
+
+  const w = window.innerWidth, h = window.innerHeight;
+  const portrait = h > w;
+  const tooSmall = w < MIN_GAME_MODAL_WIDTH || h < MIN_GAME_MODAL_HEIGHT;
+  const blocked = portrait || tooSmall;
+
+  document.getElementById('game-frame-wrap').classList.toggle('viewport-blocked', blocked);
+
+  // The iframe's own display is toggled via inline style elsewhere
+  // (launchGame() above), which beats any CSS class rule for the same
+  // property — so hiding it while blocked has to happen here in JS too,
+  // rather than in the .viewport-blocked CSS itself. Only touched once a
+  // game has actually been loaded (a src is set); otherwise this would
+  // fight with the 'display:none' launchGame() hasn't gotten to yet.
+  const iframeEl = document.getElementById('game-iframe');
+  if (iframeEl.src) iframeEl.style.display = blocked ? 'none' : 'block';
+
+  const textEl = document.getElementById('game-orientation-lock-text');
+  textEl.innerHTML = portrait
+    ? 'Rotate your device to landscape<br>to play this game.'
+    : 'Please make your browser window larger<br>to play this game.';
+}
+
+// Minimum size the hub's OWN landing page (header/games grid/patient
+// visual/chart) needs — a much lower bar than the game modal's, since this
+// content already reflows down to phone width via the @media rules above.
+// Kept mainly to catch a genuinely cramped desktop window; the orientation
+// check below is what does the real work of matching Stealth's own
+// "landscape only" rule for the hub itself.
+const MIN_HUB_WIDTH = 600;
+const MIN_HUB_HEIGHT = 380;
+
+// Drives .orientation-lock (see its own CSS comment, above) — checked on
+// load and on every resize/orientation change. Deliberately skipped while
+// the game modal is open: that has its own separate gate scoped to just
+// the game area (checkGameViewportGate() above), so the two never both try
+// to cover the same screen at once.
+function checkHubViewportGate() {
+  if (document.getElementById('game-modal').style.display === 'flex') {
+    document.documentElement.classList.remove('hub-viewport-blocked');
+    return;
+  }
+
+  const w = window.innerWidth, h = window.innerHeight;
+  const portrait = h > w;
+  const tooSmall = w < MIN_HUB_WIDTH || h < MIN_HUB_HEIGHT;
+  document.documentElement.classList.toggle('hub-viewport-blocked', portrait || tooSmall);
+
+  const textEl = document.getElementById('hub-orientation-lock-text');
+  textEl.innerHTML = portrait
+    ? 'Rotate your device to landscape<br>to use Immune Quest.'
+    : 'Please make your browser window larger<br>to use Immune Quest.';
+}
+window.addEventListener('resize', () => { checkGameViewportGate(); checkHubViewportGate(); });
+window.addEventListener('orientationchange', () => { checkGameViewportGate(); checkHubViewportGate(); });
+window.addEventListener('load', checkHubViewportGate);
+checkHubViewportGate();
 
 // ════════════════════════════════════════════════
 //  UNITY POSTMESSAGE INTEGRATION
@@ -1521,6 +1664,7 @@ function closeGame() {
     showUnlockToast();
     pendingUnlockToast = false;
   }
+  checkHubViewportGate(); // modal now closed — re-evaluate the landing page's own gate
 }
 
 // ════════════════════════════════════════════════

@@ -285,15 +285,15 @@ function setupSimpleMenu(config) {
   const landingLabel = (config.gameTitle || 'Game').split(' ')[0];
 
   modal.innerHTML = `
-    <div class="modal" style="max-width:520px;">
+    <div class="modal" style="max-width:640px;">
       <div class="modal-header">
         <div class="modal-title">Menu</div>
         <button class="modal-close" onclick="closeMenu()">✕</button>
       </div>
       <div class="modal-tabs">
         <div class="modal-tab active" onclick="switchGameTab('landing')">${landingLabel}</div>
-        <div class="modal-tab" onclick="switchGameTab('about')">About</div>
         <div class="modal-tab" onclick="switchGameTab('settings')">Settings</div>
+        <div class="modal-tab" onclick="switchGameTab('about')">About</div>
         <div class="modal-tab" onclick="switchGameTab('share')">Share</div>
         <div class="modal-tab" onclick="switchGameTab('feedback')">Feedback</div>
       </div>
@@ -327,7 +327,16 @@ function setupSimpleMenu(config) {
               </label>
             </div>
             <div style="font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px;">
-              We use <a href="https://www.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent3);">GoatCounter</a>, a privacy-first analytics tool, to count which games are opened and how often. It uses no cookies and never stores IP addresses or any other personal data — every visit is completely anonymous. These numbers help us show evidence of public engagement when reporting to the University and our funders, which helps keep Immune Quest free.
+              We use <a href="https://www.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent3);">GoatCounter</a>, a privacy-first analytics tool, to count which games are opened and how often. It uses no cookies and never stores IP addresses or any other personal data — every visit is completely anonymous. These numbers help us show evidence of public engagement when reporting to the University and funding bodies.
+            </div>
+          </div>
+          <div class="modal-section">
+            <div class="modal-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+              Sound effects
+              <label class="toggle-switch">
+                <input type="checkbox" id="game-toggle-sound" onchange="gameSetSound(this.checked)">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
           <div class="modal-section">
@@ -365,10 +374,13 @@ function setupSimpleMenu(config) {
 
   const toggleEl = document.getElementById('game-toggle-tracking');
   if (toggleEl) toggleEl.checked = localStorage.getItem('iq_no_track') !== '1';
+
+  const soundToggleEl = document.getElementById('game-toggle-sound');
+  if (soundToggleEl) soundToggleEl.checked = localStorage.getItem('iq_sound_muted') !== '1';
 }
 
 function switchGameTab(name) {
-  const names = ['landing', 'about', 'settings', 'share', 'feedback'];
+  const names = ['landing', 'settings', 'about', 'share', 'feedback'];
   document.querySelectorAll('#menu-modal .modal-tab').forEach((t, i) => {
     t.classList.toggle('active', names[i] === name);
   });
@@ -388,6 +400,14 @@ function gameSetTracking(on) {
   } else {
     localStorage.setItem('iq_no_track', on ? '0' : '1');
   }
+}
+
+// Purely a local playback preference (unlike tracking above) — localStorage
+// is already shared between the hub and a same-origin game iframe, so there
+// is no cross-page state to delegate to a parent for; every game just reads
+// this key directly before playing a sound.
+function gameSetSound(on) {
+  localStorage.setItem('iq_sound_muted', on ? '0' : '1');
 }
 
 function gameResetProgress() {

@@ -139,8 +139,7 @@ const STEALTH_CONFIG = {
     // immune_response phases before it expires unused — see mhcActive,
     // _runImmuneResponse() (game.js). Was indefinite (stayed primed
     // forever until it actually blocked a T-Cell), then 3 (balance pass —
-    // virus was winning far too consistently; see stealthDebugStats(),
-    // game.js).
+    // virus was winning far too consistently).
     MHC_EVASION_TURNS: 1,
     // Permanent, unlike Protein Vaccine's own temporary (if deeper — see
     // PROTEIN_SPEED_PENALTY_AMOUNT below) -2 — every successful Antiviral
@@ -269,8 +268,8 @@ const STEALTH_CONFIG = {
   HEPATITIS_HORIZONTAL_PENALTY: 1,
 
   // Replication Boost — TEMPORARY now, not a permanent stacking +1 (balance
-  // pass: virus was winning far too consistently — see stealthDebugStats(),
-  // game.js). Unlike Protein Vaccine's own temporary-turns pattern
+  // pass: virus was winning far too consistently). Unlike Protein
+  // Vaccine's own temporary-turns pattern
   // (VACCINE.PROTEIN_SPEED_PENALTY_*), duration isn't a configurable turn
   // count here — it's always active for exactly the next spread phase,
   // then fully consumed (see replicationBoostAmount, game.js). AMOUNT does
@@ -278,6 +277,15 @@ const STEALTH_CONFIG = {
   REPLICATION_BOOST: {
     AMOUNT: 1,
   },
+
+  // Ceiling on effectiveReplicationSpeed() (game.js) — same number the
+  // speed_gain mutation's own Math.min(10, ...) already respects, shared
+  // here so a Replication Boost played while already at max is genuinely
+  // inert (no visible change, same "no invisible debt" principle as
+  // Antiviral's own floor cap at the other end) instead of silently
+  // pushing the effective speed past what the rest of the game treats as
+  // the top of the scale.
+  MAX_REPLICATION_SPEED: 10,
 
   // ── Cards / hand ─────────────────────────────────────────────────
   CARDS: {

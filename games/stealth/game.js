@@ -75,9 +75,8 @@ class StealthGame {
     // Turn-state flags (mutable each turn via card effects)
     // Replication Boost (virus-favourable): a TEMPORARY effective-speed
     // bonus — was a permanent stacking bonus, changed in a balance pass
-    // (virus was winning far too consistently — see stealthDebugStats() at
-    // the bottom of this file) to a per-phase one instead. Unlike Protein
-    // Vaccine's own turns-remaining countdown, this isn't a duration at
+    // (virus was winning far too consistently) to a per-phase one instead.
+    // Unlike Protein Vaccine's own turns-remaining countdown, this isn't a duration at
     // all — it's cleared to 0 the moment the next virus_growth phase uses
     // it (see _runVirusGrowth()), always exactly one phase, never more.
     // Playing a second copy the SAME turn stacks the AMOUNT (each play adds
@@ -164,13 +163,19 @@ class StealthGame {
   // which is temporary) adjusted by Antiviral's permanent penalty,
   // Protein Vaccine's temporary one, and Replication Boost's own temporary
   // bonus, all applied together rather than one overriding another.
-  // Floored at 1 once, on the combined total, not on each modifier
-  // separately. Single source of truth for both the actual spread calc
+  // Clamped once, on the combined total, not on each modifier separately —
+  // floored at 1 (Antiviral's own cap on antiviralPenalty, above, already
+  // keeps that end from ever needing this in practice, but Protein
+  // Vaccine's temporary -2 still can) and ceilinged at
+  // MAX_REPLICATION_SPEED (config.js) — same top of the scale
+  // speed_gain mutations themselves respect, so a Replication Boost played
+  // while already at max is genuinely a no-op rather than silently pushing
+  // past it. Single source of truth for both the actual spread calc
   // (_runVirusGrowth()) and the UI's speed badge (renderVirusInfoPanel()).
   effectiveReplicationSpeed() {
     let speed = this.loadout.replication - this.antiviralPenalty + this.replicationBoostAmount;
     if (this.proteinVaccineTurns > 0) speed -= STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT;
-    return Math.max(1, speed);
+    return Math.max(1, Math.min(STEALTH_CONFIG.MAX_REPLICATION_SPEED, speed));
   }
 
   // ── Start game ────────────────────────────────────────────────
@@ -201,6 +206,9 @@ class StealthGame {
     // raises effectiveReplicationSpeed()'s attempt count, same as before.
     const penalized = this.antiviralPenalty > 0 || this.proteinVaccineTurns > 0;
     const effectiveSpeed = this.effectiveReplicationSpeed();
+    // Captured before the reset below, purely for display — see
+    // lastGrowth's own comment further down.
+    const replicationBoostUsed = this.replicationBoostAmount;
 
     const perTissue = {};
     let totalNew = 0;
@@ -222,7 +230,17 @@ class StealthGame {
     const spillovers = this._runSpillover();
     this.cellsInfectedTotal += totalNew + spillovers.length;
 
-    this.lastGrowth = { totalNew, perTissue, spillovers };
+    // effectiveSpeedUsed/replicationBoostUsed: this phase's own numbers,
+    // taken BEFORE the reset just above — this growth phase's actual
+    // spread already used the boosted speed (effectiveSpeed, computed at
+    // the top of this method), but replicationBoostAmount itself is
+    // already back to 0 by the time any of this even reaches the UI (this
+    // whole method runs synchronously, well before runAutoPhase() starts
+    // narrating it) — without its own snapshot here, the speed
+    // badge/Active Cards banner would show the boost as already gone
+    // during the exact phase it was actually used for. See
+    // renderVirusInfoPanel()/renderVirusTraits(), game-ui.js.
+    this.lastGrowth = { totalNew, perTissue, spillovers, effectiveSpeedUsed: effectiveSpeed, replicationBoostUsed };
     this._addLog(`Turn ${this.turn} — Virus growth: ${totalNew} new cell(s) infected.`);
     spillovers.forEach(s => this._addLog(`Spillover: infection spread from ${s.from} into ${s.to}.`));
 
@@ -316,6 +334,20 @@ class StealthGame {
   _runImmuneResponse() {
     this.phase = 'immune_response';
 
+    // Snapshot BEFORE the T-Cell auto-cancel check (further below, in the
+    // hand loop) and the end-of-method countdown both get a chance to zero
+    // it out — this whole method runs synchronously, well before
+    // runAutoPhase() ever narrates it (same reason lastGrowth/lastMutation
+    // snapshot things elsewhere, game.js/game-ui.js), so a T-Cell Evasion
+    // that blocks a T-Cell THIS phase (or simply expires unused) would
+    // otherwise already read as gone from live mhcActive by the time the
+    // Active Cards banner renders this exact phase instance — vanishing
+    // before the player ever sees the block it's credited with causing.
+    // See renderVirusTraits() (game-ui.js), which reads this snapshot
+    // instead of live g.mhcActive for as long as this phase instance is
+    // still on screen.
+    const mhcActiveBefore = { ...this.mhcActive };
+
     // mRNA Vaccine's boost is checked BEFORE ticking down, so a boost that
     // was activated last turn is still in effect this turn; a freshly-
     // played vaccine (below) only takes effect starting next turn. This
@@ -346,9 +378,8 @@ class StealthGame {
 
     // Activate Tregs (virus-favourable) — used to forfeit the immune
     // system's WHOLE turn (no draw, no plays, no trade); changed in a
-    // balance pass (virus was winning far too consistently — see
-    // stealthDebugStats() at the bottom of this file) to just cap how many
-    // cards get PLAYED this turn instead, so it's a slowdown rather than a
+    // balance pass (virus was winning far too consistently) to just cap
+    // how many cards get PLAYED this turn instead, so it's a slowdown rather than a
     // total no-op. Drawing/hand management below is untouched by it — the
     // immune system still keeps pace card-wise, it just can't act on all
     // of it yet. Countdown decremented here (read once, then consumed)
@@ -435,6 +466,42 @@ class StealthGame {
           return;
         }
 
+        // Turn 1 safety net — don't let NK Cell/T-Cell wipe out every cell
+        // the virus was just seeded with before the player has had a single
+        // real turn, an instant, anticlimactic loss via _checkLoss()'s "no
+        // infected cells remain anywhere" branch. Skipped (not discarded)
+        // exactly like the T-Cell Evasion auto-cancel above — it stays in
+        // hand for a later turn, once the infection has had a chance to
+        // actually establish itself. Only checked on turn 1; the identical
+        // wipeout on any later turn is a perfectly normal (if unlucky for
+        // the virus) outcome.
+        if (this.turn === 1 && (card.id === 'immune-nkcell' || card.id.startsWith('immune-tcell-'))) {
+          const totalInfected = Object.values(this.boards).reduce((s, b) => s + b.infectedCount(), 0);
+          let wouldClear = 0;
+          if (card.id === 'immune-nkcell') {
+            wouldClear = 1;
+          } else {
+            const board = this.boards[card.tissue];
+            const row = board._pickTCellRow();
+            if (row !== null) {
+              wouldClear = board._infectedCountInRow(row);
+              if (mrnaBoosted && row - 1 >= 0) wouldClear += board._infectedCountInRow(row - 1);
+            }
+          }
+          if (wouldClear >= totalInfected) {
+            stillHeld.push(card);
+            return;
+          }
+        }
+
+        // Captured before this card's own effect, so speedDelta below can
+        // report what the displayed speed number ACTUALLY did — not just
+        // what a card "should" be worth. Works generically for any
+        // speed-affecting card (Antiviral, Protein Vaccine) with no per-id
+        // special-casing needed here: whatever card.apply()/the antiviral
+        // block below actually changes, this just measures the real
+        // before/after difference.
+        const speedBefore = this.effectiveReplicationSpeed();
         const result = card.apply(this, ctx);
         let cells = [];
         if (result.cleared) { cells = result.cleared; totalCleared += result.cleared.length; }
@@ -449,10 +516,25 @@ class StealthGame {
         // play — a second Antiviral later in the game adds another -1 on
         // top rather than being wasted — unlike Protein Vaccine's own
         // temporary, non-stacking -2 (see vaccine-protein's apply(),
-        // cards.js).
+        // cards.js). Capped so it can't push the PERMANENT baseline
+        // (loadout.replication - antiviralPenalty) below effectiveReplication
+        // Speed()'s own floor of 1 — was uncapped, which let it build
+        // invisible "debt" past the floor (e.g. speed already at 1, three
+        // more Antiviral plays each show no visible change, silently
+        // pushing the raw value to -2) that a LATER Replication Boost had
+        // to pay off before ever visibly doing anything. Once the
+        // permanent baseline is already at the floor, further Antiviral
+        // plays are genuinely inert — no hidden effect banked for later.
         if (card.id === 'immune-antiviral') {
-          this.antiviralPenalty = (this.antiviralPenalty || 0) + STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT;
+          const maxPenalty = Math.max(0, this.loadout.replication - 1);
+          this.antiviralPenalty = Math.min(maxPenalty, (this.antiviralPenalty || 0) + STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT);
         }
+        // The REAL visible change this card's play caused — 0 (falsy,
+        // same as never having a delta at all) whenever the floor
+        // absorbed it, e.g. Protein Vaccine's -2 played while already at
+        // minimum speed. See buildImmuneSteps()/flashSpeedDelta(),
+        // game-ui.js, which only animates a floater when this is nonzero.
+        const speedDelta = this.effectiveReplicationSpeed() - speedBefore;
 
         const beforeStates = cells.map(c => {
           const snap = (preTurnBoardState[c.tissue] || [])[c.row] && preTurnBoardState[c.tissue][c.row][c.col];
@@ -477,7 +559,27 @@ class StealthGame {
           return cell ? { tissue: c.tissue, col: c.col, row: c.row, state: cell.state, cytokineColor: cell.cytokineColor, protectedTurns: cell.protectedTurns } : null;
         }).filter(Boolean);
 
-        played.push({ id: card.id, name: card.name, icon: card.icon, tissue: card.tissue, cells, beforeStates, afterStates });
+        // Baked into the play record itself, rather than left for the
+        // banner to work out later — a Cytokine/Vaccine's own countdown
+        // keeps ticking on turns after this one (tickTimers()/the
+        // proteinVaccineTurns decrement in _runVirusGrowth()), so any LIVE
+        // read of that same counter from the "just played" banner entry
+        // would already show a decremented number by the time the player
+        // even sees this play narrated on a later turn (same "resolves
+        // synchronously before it's ever narrated" problem lastGrowth
+        // snapshots elsewhere) — freezing the true just-played value here
+        // instead means the badge always starts at the real full duration,
+        // never a turn short. Cytokine's is read off afterStates (the
+        // shield's own freshly-set protectedTurns); Protein/mRNA Vaccine
+        // don't touch cells at all, so there's no afterStates to read it
+        // from — the config constant IS that value at the moment of play.
+        const turnsBadge = card.id.startsWith('immune-cytokine-') && afterStates[0]
+          ? afterStates[0].protectedTurns
+          : card.id === 'vaccine-protein' ? STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS
+          : card.id === 'vaccine-mrna' ? STEALTH_CONFIG.VACCINE.MRNA_BOOST_TURNS
+          : undefined;
+
+        played.push({ id: card.id, name: card.name, icon: card.icon, tissue: card.tissue, cells, beforeStates, afterStates, speedDelta, turnsBadge });
         this.immuneDeck.discardCard(card);
       });
       this.immuneHand = stillHeld;
@@ -501,7 +603,7 @@ class StealthGame {
     // (see cellsInfectedTotal's own comment, constructor).
     this.cellsInfectedTotal = Math.max(0, this.cellsInfectedTotal - totalCleared);
 
-    this.lastImmune = { totalCleared, played, handSize: this.immuneHand.length, mrnaBoosted, traded };
+    this.lastImmune = { totalCleared, played, handSize: this.immuneHand.length, mrnaBoosted, traded, mhcActiveBefore };
     this._addLog(`Turn ${this.turn} — Immune response: ${totalCleared} cell(s) cleared.`);
     played.forEach(p => this._addLog(`Immune: ${p.name} played.`));
     if (traded) this._addLog(`Immune system traded 3 cards for ${traded.received}.`);
@@ -556,29 +658,44 @@ class StealthGame {
 
     const event = this._weightedPick(this._effectiveMutationTable());
     let category = null, direction = null, text = '', tissue = null, color = null;
+    // Real before/after change, same principle as the immune side's own
+    // speedDelta (_runImmuneResponse(), above) — loadout.replication is
+    // capped at both ends (min 1, max 10), so a gain at 10 or a loss at 1
+    // is genuinely a no-op, not just a smaller version of the usual ±1.
+    // Left null for every other event (no floater at all, not just a zero
+    // one) — see buildMutationSteps(), game-ui.js.
+    let speedDelta = null;
 
     switch (event) {
       case 'none':
         text = 'The virus did not mutate';
         break;
 
-      case 'speed_gain':
+      case 'speed_gain': {
         category = 'Replication Speed'; direction = 'gain';
-        this.loadout = { ...this.loadout, replication: Math.min(10, this.loadout.replication + 1) };
+        const speedBefore = this.effectiveReplicationSpeed();
+        this.loadout = { ...this.loadout, replication: Math.min(STEALTH_CONFIG.MAX_REPLICATION_SPEED, this.loadout.replication + 1) };
         // effectiveReplicationSpeed(), not loadout.replication directly —
         // while an Antiviral/Protein Vaccine penalty is active the two
         // differ, and the badge (renderVirusInfoPanel(), game-ui.js) always
         // shows the effective one; logging the raw base here made the
         // mission log report a number that didn't match what the player
         // could actually see on screen.
-        text = `Mutation - replication speed increased to ${this.effectiveReplicationSpeed()}`;
+        const speedAfter = this.effectiveReplicationSpeed();
+        speedDelta = speedAfter - speedBefore;
+        text = speedDelta ? `Mutation - replication speed increased to ${speedAfter}` : 'Mutation - replication speed already at maximum, no effect';
         break;
+      }
 
-      case 'speed_loss':
+      case 'speed_loss': {
         category = 'Replication Speed'; direction = 'loss';
+        const speedBefore = this.effectiveReplicationSpeed();
         this.loadout = { ...this.loadout, replication: Math.max(1, this.loadout.replication - 1) };
-        text = `Mutation - replication speed decreased to ${this.effectiveReplicationSpeed()}`;
+        const speedAfter = this.effectiveReplicationSpeed();
+        speedDelta = speedAfter - speedBefore;
+        text = speedDelta ? `Mutation - replication speed decreased to ${speedAfter}` : 'Mutation - replication speed already at minimum, no effect';
         break;
+      }
 
       case 'escape_gain': {
         // Grants the card to hand for the player to play when they choose
@@ -727,7 +844,7 @@ class StealthGame {
       }
     }
 
-    this.lastMutation = { event, category, direction, text, tissue, color };
+    this.lastMutation = { event, category, direction, text, tissue, color, speedDelta };
     this._addLog(`Mutation: ${text}`);
 
     // tropism_loss can drop the virus's last active tissue (activeTissues
@@ -900,8 +1017,6 @@ class StealthGame {
       localStorage.setItem('iq_played', String(played + 1));
     } catch (e) { /* localStorage may not be available */ }
 
-    this._recordDebugOutcome();
-
     // Reports the final result to the hub for the win/loss analytics event
     // (see recordGameResult(), index.html). Placed here rather than in the
     // end-screen render path (game-ui.js) because _checkWin()/_checkLoss()
@@ -912,31 +1027,6 @@ class StealthGame {
     if (window.self !== window.top) {
       window.parent.postMessage({ type: 'iq_game_result', win: this.state === 'won', score: this.score }, '*');
     }
-  }
-
-  // ── Balance playtest log — see stealthDebugStats()/stealthDebugLog()/
-  // stealthDebugClear() at the bottom of this file. Local-only (never sent
-  // anywhere, unlike the GoatCounter analytics event above) — a running
-  // record of every mission's actual outcome on THIS device, specifically
-  // to compare real play against simulated-bot playtests when tuning
-  // virus-vs-immune balance: is the immune system's "boxed in" win as rare
-  // in practice as it looks, or was that a simulated-bot artifact?
-  _recordDebugOutcome() {
-    try {
-      const key = 'iq_stealth_debug_log';
-      const log = JSON.parse(localStorage.getItem(key) || '[]');
-      // Mirrors _checkLoss()'s own two branches exactly (see above) rather
-      // than parsing log text — 'cleared' = no infected cells anywhere,
-      // 'boxed-in' = the only other way _checkLoss() ever fires.
-      const reason = this.state === 'lost'
-        ? (Object.values(this.boards).every(b => b.hasNoInfection()) ? 'cleared' : 'boxed-in')
-        : null;
-      log.push({ ts: Date.now(), virus: this.loadout.id, outcome: this.state, reason, turn: this.turn, score: this.score });
-      // Capped so a long play history doesn't grow localStorage unbounded —
-      // most recent games matter most for spotting a CURRENT balance issue.
-      if (log.length > 500) log.splice(0, log.length - 500);
-      localStorage.setItem(key, JSON.stringify(log));
-    } catch (e) { /* localStorage may not be available */ }
   }
 
   // Computes the run's score, once, on a win only — never on a loss (see
@@ -1038,52 +1128,4 @@ class StealthGame {
     this.log.unshift(`T${this.turn}: ${msg}`);
     if (this.log.length > 30) this.log.pop();
   }
-}
-
-// ── Balance playtest log console helpers — see _recordDebugOutcome()
-// above for what gets written and why. Call from the browser console
-// while Stealth Mission is open (open DevTools on the game's own tab, or
-// reach into its iframe from the hub tab's console via
-// document.getElementById('game-iframe').contentWindow.stealthDebugStats()).
-function stealthDebugLog() {
-  try { return JSON.parse(localStorage.getItem('iq_stealth_debug_log') || '[]'); }
-  catch (e) { return []; }
-}
-
-function stealthDebugClear() {
-  localStorage.removeItem('iq_stealth_debug_log');
-  console.log('Stealth debug log cleared.');
-}
-
-// Prints one row per virus played so far: sample size, win/loss split, and
-// — the actual question this log exists to answer — what fraction of
-// immune wins came from clearing all infection (NK/T-cell) vs boxing the
-// virus in with no spread targets left, plus how many turns each typically
-// takes. Directly comparable to the simulated-bot numbers from the same
-// balance investigation, so real play can confirm or contradict them.
-function stealthDebugStats() {
-  const log = stealthDebugLog();
-  if (!log.length) { console.log('No games recorded yet — play a few missions, then call stealthDebugStats() again.'); return []; }
-  const byVirus = {};
-  log.forEach(e => { (byVirus[e.virus] = byVirus[e.virus] || []).push(e); });
-  const avgTurn = entries => entries.length ? (entries.reduce((s, e) => s + e.turn, 0) / entries.length).toFixed(1) : '—';
-  const pct = (part, whole) => whole ? Math.round(part / whole * 100) + '%' : '—';
-  const rows = Object.entries(byVirus).map(([virus, entries]) => {
-    const wins = entries.filter(e => e.outcome === 'won');
-    const losses = entries.filter(e => e.outcome === 'lost');
-    const cleared = losses.filter(e => e.reason === 'cleared');
-    const boxedIn = losses.filter(e => e.reason === 'boxed-in');
-    return {
-      virus, games: entries.length,
-      'virus win %': pct(wins.length, entries.length),
-      'immune win %': pct(losses.length, entries.length),
-      'via clear %': pct(cleared.length, entries.length),
-      'via boxed-in %': pct(boxedIn.length, entries.length),
-      'avg win turn': avgTurn(wins),
-      'avg clear turn': avgTurn(cleared),
-      'avg boxed-in turn': avgTurn(boxedIn),
-    };
-  });
-  console.table(rows);
-  return rows;
 }

@@ -122,8 +122,19 @@ footer a{
   color:var(--text);
 }
 
+/* display:inline-grid with a single (default) auto-sized column, rather
+   than flex-column, so every .menu-item below sizes to its own content
+   instead of stretching to the full modal width — but a grid column track
+   sizes itself to its WIDEST cell and then stretches every other cell in
+   that same column to match (grid's own default justify-items:stretch),
+   so the buttons still all end up equally wide (matching the longest
+   label, e.g. "Back to Patient") rather than each hugging its own
+   individually-shorter text. align-self:flex-start on the parent flex
+   layout (.modal-tab-content.active) keeps this content-sized block
+   left-aligned in the wider modal instead of also being force-stretched
+   to full width. */
 .menu-modal-body{
-  padding:12px; display:flex; flex-direction:column; gap:6px;
+  padding:12px; display:inline-grid; gap:6px; align-self:flex-start;
 }
 
 .menu-item{

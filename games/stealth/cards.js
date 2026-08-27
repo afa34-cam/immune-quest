@@ -37,8 +37,13 @@ function _cytokineNeutraliseDef(color) {
       if (!cell || cell.state !== 'immune' || cell.cytokineColor !== color) {
         return { text: `Target must be ${article} ${color} cytokine-shielded cell.`, count: 0, ok: false };
       }
-      const n = board.neutralizeCytokine(color, cell.cytokinePlacementId);
-      return { text: label, count: 0, ok: n > 0 };
+      const cells = board.neutralizeCytokine(color, cell.cytokinePlacementId);
+      // Read by playSelectedCard() (game-ui.js) to flash/play a poof on
+      // every cell this stripped protection from — missing here meant a
+      // Cytokine Neutralisation played with no board feedback at all
+      // beyond the log line, same class of bug infect-horizontal/vertical
+      // had (see those apply()s' own cells field, above).
+      return { text: label, count: 0, ok: cells.length > 0, cells };
     },
   };
 }
@@ -105,7 +110,7 @@ function _crossTissueInfectedNeighbor(boards, tissue, col, row) {
 // above) — collected as candidates rather than checked against one
 // player-picked cell, since Horizontal Spread no longer lets the player
 // choose the exact cell (see infect-horizontal below — balance pass, virus
-// was winning far too consistently; stealthDebugStats(), game.js).
+// was winning far too consistently).
 function _crossTissueSpreadCandidates(boards, tissue) {
   const board = boards[tissue];
   const candidates = [];
@@ -127,9 +132,9 @@ const STEALTH_CARD_DEFS = {
     tooltip: 'Infect a random healthy cell next to an already-infected cell in the same row.',
     // 'tissue' not 'cell' — the player picks WHICH tissue, not the exact
     // cell within it (balance pass: guaranteed player-chosen precision was
-    // too strong — see stealthDebugStats(), game.js). apply() below picks
-    // randomly among every valid candidate, same "no chosen cell" principle
-    // passive spread and Latency's own wake-up already follow.
+    // too strong). apply() below picks randomly among every valid
+    // candidate, same "no chosen cell" principle passive spread and
+    // Latency's own wake-up already follow.
     targetType: 'tissue',
     apply(boards, target, state) {
       const board = boards[target.tissue];
@@ -153,6 +158,10 @@ const STEALTH_CARD_DEFS = {
           ? `Horizontal Spread: infected [${pick.col + 1},${pick.row + 1}] in ${target.tissue}.`
           : `No valid horizontal spread target in that tissue.`,
         count: ok ? 1 : 0, ok,
+        // Read by playSelectedCard() (game-ui.js) to flash/play a sound on
+        // the newly-infected cell — missing here meant the card played
+        // silently with no board feedback at all beyond the log line.
+        cells: ok ? [{ col: pick.col, row: pick.row }] : [],
       };
     },
   },
@@ -173,6 +182,10 @@ const STEALTH_CARD_DEFS = {
           ? `Vertical Spread: infected [${pick.col + 1},${pick.row + 1}] in ${target.tissue}.`
           : `No valid vertical spread target in that tissue.`,
         count: ok ? 1 : 0, ok,
+        // Read by playSelectedCard() (game-ui.js) to flash/play a sound on
+        // the newly-infected cell — missing here meant the card played
+        // silently with no board feedback at all beyond the log line.
+        cells: ok ? [{ col: pick.col, row: pick.row }] : [],
       };
     },
   },
@@ -328,7 +341,12 @@ const CYTOKINE_RED_BOOST_SHAPE = [
 
 // T-Cell clears an ENTIRE row of infected cells outright (no chance
 // involved) — the row with the most infection, so it's always the most
-// impactful row available. mRNA Vaccine makes it clear an extra row.
+// impactful row available. mRNA Vaccine makes it sweep the ADJACENT row
+// too (one row shallower — toward row 0, where any remaining infection is
+// most likely to still be, since the picked row is already the deepest
+// infected one) rather than picking a second, independent "most infected"
+// row anywhere on the board — the boost widens one sweep into two
+// adjacent rows, it doesn't grant a second unrelated pick.
 // Fixed to its own tissue's board directly (closure over `tissue`), unlike
 // the old per-board version that relied on an outer loop to tell it which
 // board it was acting on.
@@ -342,9 +360,8 @@ function _tcellDef(tissue) {
       const cleared = [];
       const row = board._pickTCellRow();
       if (row !== null) cleared.push(...board.clearRow(row).map(cell => ({ ...cell, tissue })));
-      if (ctx.mrnaBoosted) {
-        const extraRow = board._pickTCellRow();
-        if (extraRow !== null) cleared.push(...board.clearRow(extraRow).map(cell => ({ ...cell, tissue })));
+      if (ctx.mrnaBoosted && row !== null && row - 1 >= 0) {
+        cleared.push(...board.clearRow(row - 1).map(cell => ({ ...cell, tissue })));
       }
       return { cleared };
     },
@@ -379,8 +396,17 @@ function _antibodyDef(tissue) {
 // per-board logic for free. This just decides WHICH tissue's board to ask:
 // active tissues under real threat first (there's an actual infection
 // front to defend), inactive ones only once no active tissue needs it.
+// Among active tissues, the most urgent one first — whichever has
+// progressed furthest toward the bottom row, not just whichever happens
+// to sit first in activeTissues (its own order is just "when this tissue
+// became active", unrelated to how close it now is to actually winning).
+// With multiple fronts open at once, a single Cytokine play should go
+// toward whichever one is genuinely closest to being lost, not an
+// arbitrary one that happens to still need something.
 function _cytokinePickTarget(game) {
-  for (const t of game.activeTissues) {
+  const byUrgency = [...game.activeTissues].sort((a, b) =>
+    game.boards[b]._deepestInfectedRow() - game.boards[a]._deepestInfectedRow());
+  for (const t of byUrgency) {
     const target = game.boards[t]._pickStrategicAntibodyTarget();
     if (target) return { tissue: t, ...target };
   }
@@ -388,6 +414,27 @@ function _cytokinePickTarget(game) {
   for (const t of inactive) {
     const target = game.boards[t]._pickStrategicAntibodyTarget();
     if (target) return { tissue: t, ...target };
+  }
+  return null;
+}
+
+// Which tissue's Antibody card Protein Vaccine grants — same "most urgent
+// active tissue first, inactive ones only as a fallback" priority as
+// _cytokinePickTarget() above, rather than a random tissue: the immune
+// system should spend its one bonus card where it actually helps (a tissue
+// with no valid antibody row left, e.g. every row already blocked or
+// virus-free with nothing to protect, gets skipped in favour of one that
+// still has something worth guarding), not risk handing itself a card
+// that turns out to be dead weight the moment it's granted.
+function _vaccineAntibodyPickTissue(game) {
+  const byUrgency = [...game.activeTissues].sort((a, b) =>
+    game.boards[b]._deepestInfectedRow() - game.boards[a]._deepestInfectedRow());
+  for (const t of byUrgency) {
+    if (game.boards[t]._pickAntibodyRow() !== null) return t;
+  }
+  const inactive = STEALTH_CONFIG.BOARD.TISSUES.filter(t => !game.activeTissues.includes(t));
+  for (const t of inactive) {
+    if (game.boards[t]._pickAntibodyRow() !== null) return t;
   }
   return null;
 }
@@ -504,7 +551,22 @@ const IMMUNE_CARD_DEFS = {
   'vaccine-mrna': {
     id: 'vaccine-mrna', name: 'mRNA Vaccine', icon: '💉',
     tooltip: 'Powerup that increases the power of cytokines and T cells (clears 2 rows instead of 1).',
-    isUseful(game) { return game.mrnaBoostTurns === 0; },
+    // Held rather than played the instant it's drawn — playing it on a turn
+    // with no T-Cell/Cytokine ALSO ready wastes part of its fixed duration
+    // on a turn with nothing to actually boost, shrinking how many of its
+    // remaining turns end up covering a real T-Cell/Cytokine play. Only
+    // counts as useful once a T-Cell or Cytokine already in hand could use
+    // the boost RIGHT NOW (checked via that card's own isUseful()) — NK
+    // Cell doesn't count, it isn't boosted by this (see tooltip). The
+    // priority ordering below (_immunePlayPriority — mRNA resolves first)
+    // then means that same T-Cell/Cytokine's own apply() this exact turn
+    // already sees the boost, for maximum effect AND longevity from the
+    // one play.
+    isUseful(game) {
+      if (game.mrnaBoostTurns > 0) return false;
+      return game.immuneHand.some(c =>
+        (c.id.startsWith('immune-tcell-') || c.id.startsWith('immune-cytokine-')) && c.isUseful(game));
+    },
     // Mutates ctx.mrnaBoosted directly (not just game.mrnaBoostTurns) so
     // that if the immune system draws mRNA Vaccine and a T-Cell/Cytokine
     // in the SAME turn, the priority ordering in game.js
@@ -519,7 +581,7 @@ const IMMUNE_CARD_DEFS = {
   },
   'vaccine-protein': {
     id: 'vaccine-protein', name: 'Protein-based Vaccine', icon: '🧪',
-    tooltip: 'Grants 1 random bonus antibody card and reduces the virus\'s replication speed by -2 for 3 turns.',
+    tooltip: 'Grants a bonus Antibody card for wherever it\'s needed most and reduces the virus\'s replication speed by -2 for 3 turns.',
     isUseful() { return true; }, // free value, no target required — always play it
     apply(game) {
       // Returned rather than pushed straight onto game.immuneHand here —
@@ -527,7 +589,7 @@ const IMMUNE_CARD_DEFS = {
       // _runImmuneResponse(), game.js) rebuilds the hand from a snapshot
       // taken before this turn's plays, so a direct push here would just
       // get discarded when that rebuilt hand replaces the live array.
-      const tissue = game.activeTissues[Math.floor(Math.random() * game.activeTissues.length)];
+      const tissue = _vaccineAntibodyPickTissue(game) || STEALTH_CONFIG.BOARD.TISSUES[0];
       const grantedCards = [{ ...IMMUNE_CARD_DEFS[`immune-antibody-${tissue}`] }];
       // Temporary — not a permanent loadout change, unlike Antiviral's own
       // (see immune-antiviral above) — tracked independently in its own
@@ -788,7 +850,4 @@ class StealthDeck {
   }
 
   discardCard(card) { this.discard.push(card); }
-
-  get drawCount()    { return this.draw.length; }
-  get discardCount() { return this.discard.length; }
 }

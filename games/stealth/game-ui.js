@@ -36,6 +36,70 @@ let selectedHandIndex = null;
 // itself is never spent on a failed attempt (see game.js playCard()).
 let lastPlayError = null;
 
+// ── Sound effects ────────────────────────────────────────────────────
+// All CC0, short one-shot cues (games/stealth/assets/sfx/) — see playSound()
+// below for the mute check (shared "Sound effects" Settings toggle, see
+// games/shared/ui.js gameSetSound()/iq_sound_muted).
+const SFX = {
+  'mutation-loss': 'assets/sfx/mutation-loss.wav', // a mutation event that WEAKENS the virus (escape/latency/speed/tropism loss)
+  'mutation-gain': 'assets/sfx/mutation-gain.wav', // a mutation event that STRENGTHENS the virus (escape/latency/speed/tropism gain)
+  'virus-spread':  'assets/sfx/virus-spread.wav',  // one new cell infected during virus growth
+  'poof':          'assets/sfx/poof.mp3',          // anything removed from the board — NK Cell/T-Cell clear, Antibody Escape, Cytokine Neutralisation
+  'cytokine-place':'assets/sfx/cytokine-place.wav',// a Cytokine shield placed on the board
+  'antibody-place':'assets/sfx/antibody-place.mp3',// an Antibody shield placed on the board
+  'click':         'assets/sfx/click.wav',         // generic button press
+  'powerup':       'assets/sfx/powerup.wav',       // replication speed increases
+  'powerdown':     'assets/sfx/powerdown.wav',     // replication speed decreases
+  'win':           'assets/sfx/win.wav',
+  'lose':          'assets/sfx/lose.wav',
+};
+// One shared <audio> element per id, cloned on each play — cloning (rather
+// than reusing/restarting the same element) lets the same sound overlap
+// itself when two triggers land close together (e.g. two spread cells
+// popping in on the same narration step) instead of the second play
+// cutting the first one off.
+const _sfxPool = {};
+function playSound(id) {
+  if (localStorage.getItem('iq_sound_muted') === '1') return;
+  const src = SFX[id];
+  if (!src) return;
+  const base = _sfxPool[id] || (_sfxPool[id] = new Audio(src));
+  const instance = base.cloneNode();
+  instance.volume = 0.5;
+  // Autoplay can be blocked until the player's first interaction with the
+  // page — harmless if it throws, just no sound for that one play.
+  instance.play().catch(() => {});
+}
+// Generic "button pressed" cue — delegated rather than added to every
+// individual handler, so a new button anywhere in the game gets the sound
+// for free. Walks up from the actual click target (rather than a single
+// closest() selector) so it catches every pattern this codebase actually
+// uses for a clickable element: an inline onclick="..." HTML attribute (the
+// vast majority of menu/dialog buttons, see index.html), or an onclick
+// property assigned in JS (virus-select cards — see createVirusCard()/
+// createCompactVirusCard(), index.html — plus scroll arrows, help-step
+// buttons etc.). Stops (no sound) the moment it reaches a .card-face
+// (hand/draft/trade cards, whose own onClick is wired as a JS property
+// too, see renderCardFace()) — those already get their own board-side cue
+// when the play actually resolves (see FLASH_SOUND), so a click sound on
+// the tap itself was a redundant, noisier double-up. Board cells are
+// similarly excluded — tapping a target cell is a targeting action, not a
+// button press.
+document.addEventListener('click', (e) => {
+  let el = e.target;
+  while (el instanceof Element) {
+    // .tissue-cell also gets an .onclick property while it's a valid
+    // target (see onCellClick() wiring below) — same reasoning as
+    // .card-face above, this stops the walk before that check ever runs.
+    if (el.classList.contains('card-face') || el.classList.contains('tissue-cell')) return;
+    if (el.onclick || el.hasAttribute('onclick')) {
+      playSound('click');
+      return;
+    }
+    el = el.parentElement;
+  }
+});
+
 // Fixed left-to-right board order, regardless of which tissues are active.
 const TISSUE_ORDER = ['liver', 'lung', 'intestine'];
 const STATE_LABEL  = { healthy: 'Healthy', infected: 'Infected', dormant: 'Dormant', immune: 'Antibody' };
@@ -653,12 +717,18 @@ function renderVirusTraits() {
 
   g.activeTissues.forEach(t => addCard(`${t}-tropism`, false));
   // No badge — the card face alone is the signal. Stays showing from the
-  // moment it's played through the NEXT virus_growth phase (whichever
-  // turn that lands on), then disappears the instant that phase clears
-  // replicationBoostAmount back to 0 (see game.js) — this condition
-  // already tracks that exactly, no separate "still within range" check
-  // needed.
-  if (g.replicationBoostAmount > 0) addCard('spread-speed-plus', true);
+  // moment it's played through the NEXT virus_growth phase, then
+  // disappears once that phase is done. replicationBoostAmount itself
+  // resets to 0 SYNCHRONOUSLY inside _runVirusGrowth() (game.js) — by the
+  // time this even renders during that phase's own narration, the live
+  // field already reads 0, which would hide the card during the exact
+  // phase it was used for. lastGrowth.replicationBoostUsed is that
+  // phase's own snapshot (taken before the reset), read for as long as
+  // we're still showing that growth phase.
+  const replicationBoostActive = g.phase === 'virus_growth' && g.lastGrowth
+    ? g.lastGrowth.replicationBoostUsed > 0
+    : g.replicationBoostAmount > 0;
+  if (replicationBoostActive) addCard('spread-speed-plus', true);
   // Activate Tregs' cap IS still a real turns-remaining count (balance
   // pass — see immuneCardCapTurns, game.js), unlike Replication Boost
   // above. Global (not per-tissue) — shown once, not inside the tissue
@@ -671,16 +741,37 @@ function renderVirusTraits() {
     // render rather than something worth a "turns left" number.
     const escaped = board.cells.some(row => row.some(c => c.escapeImmune > 0));
     if (escaped) addCard(`antibody-escape-${t}`, true);
-    if (board.hasDormant()) {
+    // wokeDuringThisGrowth: a dormant cell that wakes flips to 'infected'
+    // SYNCHRONOUSLY inside spreadVirus() (board.js), well before
+    // runAutoPhase() ever gets a chance to narrate that phase — so by the
+    // time this renders during the growth phase that actually woke it,
+    // board.hasDormant() already reads false, and the card would vanish
+    // from the banner before the player has even seen the "Latent cell(s)
+    // became active" narration for it. lastGrowth.perTissue[t].awoken is
+    // that phase's own snapshot (taken before anything moved on), same
+    // pattern as replicationBoostUsed above.
+    const wokeDuringThisGrowth = g.phase === 'virus_growth' && g.lastGrowth
+      && g.lastGrowth.perTissue[t] && (g.lastGrowth.perTissue[t].awoken || []).length > 0;
+    if (board.hasDormant() || wokeDuringThisGrowth) {
       // Soonest-to-wake cell, not the furthest — that's the one about to
-      // actually matter.
+      // actually matter. Infinity (no dormant cells left) when this is
+      // ONLY showing because of wokeDuringThisGrowth — badge just omits
+      // the number rather than showing a stale/meaningless countdown.
       const wakeTurns = board.cells.reduce((min, row) =>
         row.reduce((m, c) => (c.state === 'dormant' && c.dormantTurns > 0) ? Math.min(m, c.dormantTurns) : m, min), Infinity);
       addCard('latency', true, Number.isFinite(wakeTurns) ? wakeTurns : undefined);
     }
-    if (g.mhcActive && g.mhcActive[t]) {
-      const n = g.mhcActive[t];
-      addCard(`mhc1-downreg-${t}`, true, n);
+    // During the immune_response phase this priming might get consumed
+    // (or simply expire) in, live g.mhcActive already reads 0 by the time
+    // this renders — this whole phase resolves synchronously before
+    // runAutoPhase() narrates it, same as lastGrowth/wokeDuringThisGrowth
+    // above. lastImmune.mhcActiveBefore (game.js) is that phase's own
+    // "before" snapshot, so the card doesn't vanish from the banner before
+    // the player has even seen the T-Cell block it's credited with.
+    const mhcBeforeThisPhase = g.phase === 'immune_response' && g.lastImmune ? g.lastImmune.mhcActiveBefore : null;
+    const mhcTurns = (mhcBeforeThisPhase && mhcBeforeThisPhase[t]) || (g.mhcActive && g.mhcActive[t]);
+    if (mhcTurns) {
+      addCard(`mhc1-downreg-${t}`, true, mhcTurns);
     }
   });
   if (!cardsRow.children.length) cardsRow.innerHTML = '<span class="banner-empty">— none —</span>';
@@ -712,6 +803,16 @@ function renderVirusInfoPanel() {
   // temporary (see replicationBoostAmount, game.js) and gets its own
   // "currently boosted" colour below, same treatment as Antiviral/Protein
   // Vaccine's temporary penalty already gets.
+  //
+  // While a virus_growth phase is up, replicationBoostAmount has ALREADY
+  // been reset to 0 by the time this ever renders — _runVirusGrowth()
+  // (game.js) runs synchronously, well before runAutoPhase() gets a
+  // chance to narrate any of it. Read lastGrowth's own snapshot of what
+  // THIS phase actually used instead, or the badge would show the boost
+  // as already gone during the exact phase it was applied to.
+  const duringThisGrowth = g.phase === 'virus_growth' && g.lastGrowth;
+  const displaySpeed = duringThisGrowth ? g.lastGrowth.effectiveSpeedUsed : g.effectiveReplicationSpeed();
+  const boostActive = duringThisGrowth ? g.lastGrowth.replicationBoostUsed > 0 : g.replicationBoostAmount > 0;
   const speedEl = document.getElementById('virus-info-panel-speed');
   // Built once, then only the number itself is touched on later renders —
   // flashSpeedDelta() appends its floating +1/-1 stream as children of
@@ -725,9 +826,9 @@ function renderVirusInfoPanel() {
     speedEl.innerHTML = `<span class="virus-info-panel-label">Replication Speed</span> <span class="virus-info-panel-speed-value"><span class="speed-num"></span></span>`;
     valueEl = speedEl.querySelector('.virus-info-panel-speed-value');
   }
-  valueEl.querySelector('.speed-num').textContent = g.effectiveReplicationSpeed();
+  valueEl.querySelector('.speed-num').textContent = displaySpeed;
   valueEl.classList.toggle('speed-penalized', g.antiviralPenalty > 0 || g.proteinVaccineTurns > 0);
-  valueEl.classList.toggle('speed-boosted', g.replicationBoostAmount > 0);
+  valueEl.classList.toggle('speed-boosted', boostActive);
 }
 
 // A short staggered STREAM of floating "+1"/"-1" (was a single one-shot
@@ -751,6 +852,10 @@ const SPEED_STREAM_COUNT = Math.floor(SPEED_STREAM_SPAWN_WINDOW_MS / SPEED_STREA
 const SPEED_STREAM_DURATION_MS = 3000;
 
 function flashSpeedDelta(delta) {
+  // Only ever called with a truthy delta (see both call sites) — sign
+  // alone decides which cue plays, regardless of whether the change came
+  // from a card play or a mutation.
+  playSound(delta > 0 ? 'powerup' : 'powerdown');
   // Scoped to #virus-info-panel-speed specifically, not just the bare
   // class — the select screen's own virus preview (#virus-detail-traits)
   // reuses this exact same class for its own (hidden, once in-game) speed
@@ -1103,10 +1208,33 @@ function appendTurnMarker(turn) {
 // _immuneFlashClass() and playSelectedCard()'s own cell-antibody-escape-poof
 // call below.
 const ALL_CELL_FLASH_CLASSES = [
-  'cell-tcell-poof', 'cell-antibody-flash', 'cell-immune-flash', 'cell-antibody-escape-poof',
+  'cell-tcell-poof', 'cell-antibody-flash', 'cell-immune-flash', 'cell-antibody-escape-poof', 'cell-cytokine-flash',
+  'cell-cytokine-neutralise-poof-blue', 'cell-cytokine-neutralise-poof-orange', 'cell-cytokine-neutralise-poof-red',
 ];
 
+// Maps a cell flash to its sound cue, if it has one — 'cell-immune-flash'
+// (Sensing, the only card left on the generic default case) is deliberately
+// silent for now, no sound was made for that yet.
+// One play per highlightCells() CALL, not per cell in it — callers already
+// choose the right granularity themselves: virus spread calls this once
+// PER cell (see the staggered flatCells.forEach loop, runAutoPhase()),
+// while a poof-type play (T-Cell's whole row, Antibody Escape's block)
+// calls it once for every cell that play touched at once, since those
+// resolve together as one moment, not a sequence.
+const FLASH_SOUND = {
+  'cell-infect-pop': 'virus-spread',
+  'cell-explode-pop': 'virus-spread',
+  'cell-tcell-poof': 'poof',
+  'cell-antibody-escape-poof': 'poof',
+  'cell-cytokine-neutralise-poof-blue': 'poof',
+  'cell-cytokine-neutralise-poof-orange': 'poof',
+  'cell-cytokine-neutralise-poof-red': 'poof',
+  'cell-cytokine-flash': 'cytokine-place',
+  'cell-antibody-flash': 'antibody-place',
+};
+
 function highlightCells(tissue, cells, flashClass = 'cell-immune-flash') {
+  if (cells.length && FLASH_SOUND[flashClass]) playSound(FLASH_SOUND[flashClass]);
   cells.forEach(({ col, row }) => {
     const el = document.querySelector(`.tissue-cell[data-tissue="${tissue}"][data-col="${col}"][data-row="${row}"]`);
     if (!el) return;
@@ -1206,6 +1334,12 @@ function buildVirusGrowthSteps(g) {
 function _immuneFlashClass(cardId) {
   if (cardId.startsWith('immune-antibody')) return 'cell-antibody-flash';
   if (cardId.startsWith('immune-tcell') || cardId === 'immune-nkcell') return 'cell-tcell-poof';
+  // Own class (not the generic 'cell-immune-flash' below), purely so it can
+  // carry its own sound cue (see FLASH_SOUND) without Sensing — the OTHER
+  // card that falls through to the generic case — getting that same cue.
+  // Visually identical to 'cell-immune-flash' (see its shared animation,
+  // index.html); only the class NAME differs.
+  if (cardId.startsWith('immune-cytokine')) return 'cell-cytokine-flash';
   return 'cell-immune-flash';
 }
 
@@ -1233,21 +1367,26 @@ function buildImmuneSteps(g) {
     // its duration since it wears off; Antiviral doesn't (it's permanent —
     // see ANTIVIRAL_PENALTY_AMOUNT/PROTEIN_SPEED_PENALTY_AMOUNT, config.js
     // — but the tooltip already says so, no need to repeat it here too).
+    // p.speedDelta is the REAL before/after change this exact play caused
+    // (captured in _runImmuneResponse(), game.js) — not just "what this
+    // card is normally worth". Antiviral is capped so it can't build
+    // invisible debt past effectiveReplicationSpeed()'s floor any more,
+    // but Protein Vaccine's own -2 can still land with nothing left to
+    // give if speed's already at minimum — either way, the log says what
+    // actually happened instead of a fixed amount that may not have.
     const label = p.id === 'vaccine-protein'
-      ? `${name} — Replication Speed −${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT} for ${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS} turns`
+      ? (p.speedDelta ? `${name} — Replication Speed −${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT} for ${STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_TURNS} turns` : `${name} — already at minimum speed, no effect`)
       : p.id === 'immune-antiviral'
-      ? `${name} — Replication Speed −${STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT}`
+      ? (p.speedDelta ? `${name} — Replication Speed −${STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT}` : `${name} — already at minimum speed, no effect`)
       : name;
     const html = tissue ? `<span class="narration-tissue">${_cap(tissue)}</span> — ${label}` : label;
     steps.push({
       html, cls: 'line-immune', tissue, cells: p.cells, afterStates: p.afterStates, flashClass: _immuneFlashClass(p.id), inGroup: true, slow: true,
-      // Antiviral and Protein Vaccine both flash the effective-speed badge
-      // the same way Replication Boost's own +1 does, just by their own
-      // (different) magnitudes — see ANTIVIRAL_PENALTY_AMOUNT/
-      // PROTEIN_SPEED_PENALTY_AMOUNT, config.js.
-      speedDelta: p.id === 'immune-antiviral' ? -STEALTH_CONFIG.IMMUNE.ANTIVIRAL_PENALTY_AMOUNT
-                : p.id === 'vaccine-protein' ? -STEALTH_CONFIG.VACCINE.PROTEIN_SPEED_PENALTY_AMOUNT
-                : undefined,
+      // Falsy (0 or undefined) means no visible change — flashSpeedDelta()
+      // (runAutoPhase(), below) only animates when this is actually set,
+      // so a floor-absorbed play doesn't show a floating number that
+      // implies something happened when it didn't.
+      speedDelta: p.speedDelta || undefined,
       revealImmuneCard: true,
     });
   });
@@ -1283,21 +1422,23 @@ function buildMutationSteps(g) {
   // _runMutationPhase(), game.js) never populated g.lastMutation, so a
   // stand-in "no mutation" object is built here for showMutationToast()
   // to render the same way it renders the table's own 'none' outcome.
-  const m = g.lastMutation || { event: 'none', category: null, direction: null, text: 'The virus did not mutate', tissue: null, color: null };
+  const m = g.lastMutation || { event: 'none', category: null, direction: null, text: 'The virus did not mutate', tissue: null, color: null, speedDelta: null };
   // mutationData captures this specific mutation object (not just a flag),
   // so the line stays clickable to reopen the details on demand for as
   // long as it sits in the mission log — even after later turns overwrite
   // g.lastMutation with a different event.
-  // speedDelta triggers the same floating +1/-1 pulse (flashSpeedDelta(),
-  // see runAutoPhase()'s next()) that card-driven speed changes already
-  // get — without it, a mutation-driven speed_gain/speed_loss silently
-  // updates the badge's number with no visual cue at all, which read as
-  // "the mutation didn't actually do anything" even though it did.
-  const speedDelta = m.event === 'speed_gain' ? 1 : m.event === 'speed_loss' ? -1 : null;
+  // m.speedDelta is the REAL before/after change this mutation caused
+  // (captured in _runMutationPhase(), game.js) — triggers the same
+  // floating +1/-1 pulse (flashSpeedDelta(), see runAutoPhase()'s next())
+  // that card-driven speed changes get, but only when there actually was
+  // one: loadout.replication is capped at both ends (1..10), so a
+  // speed_gain rolled while already at 10 (or speed_loss at 1) is a
+  // genuine no-op — showing a floater for it would claim a change that
+  // didn't happen.
   return [{
     html: m.text, cls: 'line-mutation',
     mutationPopup: true, mutationData: m,
-    speedDelta,
+    speedDelta: m.speedDelta || undefined,
   }];
 }
 
@@ -1575,7 +1716,18 @@ function runAutoPhase() {
     // while the log/board effects were still trickling in one by one —
     // see immuneBannerRevealCount, renderImmuneBanner().
     if (step.revealImmuneCard) { immuneBannerRevealCount++; renderImmuneBanner(); }
-    if (step.mutationPopup) { showMutationToast(step.mutationData); mutationPopupShown = true; }
+    if (step.mutationPopup) {
+      showMutationToast(step.mutationData);
+      mutationPopupShown = true;
+      // Any mutation that WEAKENS/STRENGTHENS the virus (escape/latency/
+      // speed/tropism loss or gain) — a speed_loss/speed_gain mutation also
+      // fires flashSpeedDelta()'s own powerdown/powerup cue above; hearing
+      // both together is intentional, not a duplicate: one says "the virus
+      // lost/gained something", the other says specifically "replication
+      // speed dropped/rose".
+      if (step.mutationData && step.mutationData.direction === 'loss') playSound('mutation-loss');
+      if (step.mutationData && step.mutationData.direction === 'gain') playSound('mutation-gain');
+    }
     // Stays clickable for as long as the line sits in the mission log
     // (this turn's or any earlier turn's) so the player can bring the
     // toast back after dismissing or letting it auto-expire — bound to
@@ -1608,6 +1760,36 @@ function runAutoPhase() {
     autoPhaseTimer = setTimeout(next, delay);
   }
   next();
+}
+
+// A played Antibody/Cytokine card can be reversed later the SAME turn by
+// the virus's own counter-play (Antibody Escape / Cytokine Neutralisation,
+// both playable any time during play_cards) — but g.lastImmune.played (and
+// with it, the "just played" loop below) doesn't get replaced until the
+// NEXT immune_response phase runs, a full turn-plus later. Without this
+// check, an escaped/neutralised play kept showing in the banner as if
+// nothing had happened until g.lastImmune itself finally moved on — this
+// is what the "still active" entries further down already guard against
+// for cards no longer freshly played, just applied here too for a play
+// that's still "fresh" this same turn. Anything else (NK Cell, T-Cell,
+// vaccines, Antiviral, Sensing) has no live-reversal concept — those
+// always still count as shown.
+function _immunePlayStillReflected(g, p) {
+  if (p.id.startsWith('immune-antibody-')) {
+    return p.cells.some(c => {
+      const cell = g.boards[c.tissue]?.cells[c.row]?.[c.col];
+      return cell && cell.state === 'immune' && !cell.cytokineColor;
+    });
+  }
+  const cytokineMatch = p.id.match(/^immune-cytokine-(blue|orange|red)$/);
+  if (cytokineMatch) {
+    const color = cytokineMatch[1];
+    return p.cells.some(c => {
+      const cell = g.boards[c.tissue]?.cells[c.row]?.[c.col];
+      return cell && cell.state === 'immune' && cell.cytokineColor === color;
+    });
+  }
+  return true;
 }
 
 // ── Immune status banner (near the top) ────────────────────────────
@@ -1672,9 +1854,20 @@ function renderImmuneBanner() {
     // (e.g. 2x NK Cell) gets two separate faces.
     g.lastImmune.played.forEach((p, idx) => {
       if (g.phase === 'immune_response' && idx >= immuneBannerRevealCount) return;
+      // Skip a same-turn Antibody/Cytokine play the virus has already
+      // escaped/neutralised since — see _immunePlayStillReflected()'s own
+      // comment above. Only checked outside immune_response itself (that
+      // phase is this play's OWN reveal — nothing could have countered it
+      // yet at that point) so the reveal sequence never skips a step mid-
+      // narration.
+      if (g.phase !== 'immune_response' && !_immunePlayStillReflected(g, p)) return;
       const tissue = p.tissue || (p.cells[0] && p.cells[0].tissue);
       const active = g.phase === 'immune_response' && idx === immuneBannerRevealCount - 1;
-      addCard(p.id, tissue, p.name, false, undefined, active);
+      // turnsBadge (game.js) — a Cytokine/Vaccine's own frozen just-played
+      // duration, so its countdown badge shows the real full number
+      // immediately instead of only appearing later via the "still active"
+      // loop below (by which point it's already ticked down at least once).
+      addCard(p.id, tissue, p.name, false, p.turnsBadge, active);
     });
 
     // A fresh play of one of these ids is already shown by the loop above
@@ -1708,13 +1901,41 @@ function renderImmuneBanner() {
     // different countdowns live at once, and collapsing those into a
     // single "longest" badge would hide that the shorter one is about to
     // expire.
+    // Both loops below scan EVERY board (STEALTH_CONFIG.BOARD.TISSUES), not
+    // just g.activeTissues — Antibody and Cytokine can both be played on a
+    // currently-inactive tissue (pre-fortification ahead of a tropism_gain
+    // mutation, see _antibodyDef()/_cytokinePickTarget()'s inactive-tissue
+    // fallback, cards.js), and a tissue that later loses tropism keeps its
+    // cells frozen in place rather than clearing them (see _checkLoss(),
+    // game.js) — so a still-guarding shield can easily be sitting on a
+    // board no longer counted "active". Scanning only activeTissues left
+    // exactly that cell's card silently missing from the banner despite the
+    // bell/shield icon still showing right there on the board.
     ['blue', 'orange', 'red'].forEach(color => {
       const id = `immune-cytokine-${color}`;
-      if (playedThisTurn(id)) return;
+      // A fresh play of THIS colour this turn is already shown, badge-less,
+      // by the "just played" loop above — but that only accounts for the
+      // ONE placement just made. A completely separate, older placement of
+      // the SAME colour can still be counting down at a different number of
+      // turns (see the comment above), so skipping the whole colour here
+      // (rather than just the fresh play's own count) silently hid that
+      // older shield's card entirely whenever a new one of the same colour
+      // happened to be played the same turn. Excluding only the specific
+      // remaining-turn count(s) the fresh play's own cells currently hold
+      // still avoids a redundant duplicate of that ONE play while leaving
+      // any other distinct count free to get its own card below.
+      const freshPlay = g.lastImmune.played.find(p => p.id === id);
+      const freshTurns = new Set();
+      if (freshPlay) {
+        freshPlay.cells.forEach(c => {
+          const cell = g.boards[c.tissue]?.cells[c.row]?.[c.col];
+          if (cell && cell.protectedTurns > 0) freshTurns.add(cell.protectedTurns);
+        });
+      }
       const turnsSet = new Set();
-      g.activeTissues.forEach(t => {
+      STEALTH_CONFIG.BOARD.TISSUES.forEach(t => {
         g.boards[t].cells.forEach(row => row.forEach(c => {
-          if (c.cytokineColor === color && c.protectedTurns > 0) turnsSet.add(c.protectedTurns);
+          if (c.cytokineColor === color && c.protectedTurns > 0 && !freshTurns.has(c.protectedTurns)) turnsSet.add(c.protectedTurns);
         }));
       });
       [...turnsSet].sort((a, b) => b - a).forEach(turns => addCard(id, null, null, true, turns));
@@ -1727,7 +1948,7 @@ function renderImmuneBanner() {
     // was played on ends, despite the shield itself still visibly guarding
     // cells on the board. !c.cytokineColor excludes cells a Cytokine (not
     // plain Antibody) protected — those already get their own card above.
-    g.activeTissues.forEach(t => {
+    STEALTH_CONFIG.BOARD.TISSUES.forEach(t => {
       const id = `immune-antibody-${t}`;
       if (playedThisTurn(id)) return;
       const stillProtected = g.boards[t].cells.some(row => row.some(c => c.state === 'immune' && !c.cytokineColor));
@@ -2035,7 +2256,23 @@ function renderTradeModal() {
   // 100px matches .trade-popup .trade-cards-grid .card-face's own width
   // (index.html) — keep both in sync, or these columns stop lining up
   // with the actual card size.
-  receiveWrap.style.gridTemplateColumns = `repeat(${Math.max(1, Math.ceil(receiveIds.length / 2))}, 100px)`;
+  const receiveCols = Math.max(1, Math.ceil(receiveIds.length / 2));
+  const RECEIVE_CARD_WIDTH = 100;
+  const RECEIVE_CARD_GAP = 16; // matches #trade-receive-cards's own gap (index.html)
+  receiveWrap.style.gridTemplateColumns = `repeat(${receiveCols}, ${RECEIVE_CARD_WIDTH}px)`;
+
+  // Size the whole modal to hug the receive grid's widest row instead of a
+  // fixed guess — the tradeable pool varies per game (getTradeableCardIds()),
+  // so a fixed max-width either wasted space or, once a virus had enough
+  // tradeable card types to need more columns, forced awkward wrapping.
+  // FIXED_CHROME is every bit of padding/border between the grid's content
+  // and the modal's outer edge that stays constant regardless of column
+  // count: #trade-receive-cards's own 8px×2 padding + .draft-popup's own
+  // 18px×2 padding + 1px×2 border (index.html).
+  const FIXED_CHROME = 54;
+  const gridContentWidth = receiveCols * RECEIVE_CARD_WIDTH + (receiveCols - 1) * RECEIVE_CARD_GAP;
+  const tradePopupEl = document.querySelector('.trade-popup');
+  if (tradePopupEl) tradePopupEl.style.width = `${gridContentWidth + FIXED_CHROME}px`;
 
   document.getElementById('trade-tab-give').classList.toggle('active', tradeActiveTab === 'give');
   document.getElementById('trade-tab-give').classList.toggle('complete', tradeGiveSelected.length === 3);
@@ -2049,6 +2286,12 @@ function renderTradeModal() {
 }
 
 function toggleTradeGive(i) {
+  // Explicit here (not the delegated listener) — these are .card-face
+  // elements, which that listener deliberately skips on the assumption a
+  // card's own play will supply its own board-side sound; a trade
+  // selection never plays a card or touches the board at all, so without
+  // this it would be completely silent.
+  playSound('click');
   const idx = tradeGiveSelected.indexOf(i);
   if (idx !== -1) tradeGiveSelected.splice(idx, 1);
   else if (tradeGiveSelected.length < 3) tradeGiveSelected.push(i);
@@ -2059,6 +2302,7 @@ function toggleTradeGive(i) {
 }
 
 function toggleTradeReceive(id) {
+  playSound('click'); // see toggleTradeGive()'s own comment above
   tradeReceiveSelected = tradeReceiveSelected === id ? null : id;
   renderTradeModal();
 }
@@ -2140,7 +2384,7 @@ function renderHand() {
 // this to swap the usual per-cell hover pop for a whole-board highlight
 // instead, so hovering doesn't visually suggest the player can still aim
 // at one specific cell when they can't (balance pass: precise player-
-// chosen targeting was removed — see stealthDebugStats(), game.js).
+// chosen targeting was removed).
 // Called from every path that changes selectedHandIndex (selecting,
 // deselecting, or playing a card), so it can't drift out of sync with
 // whichever card is actually selected right now.
@@ -2162,8 +2406,8 @@ function selectHandCard(i) {
   } else if (card.targetType === 'tissue') {
     // Horizontal/Vertical Spread — the player picks WHICH tissue, not the
     // exact cell (balance pass: guaranteed player-chosen precision was too
-    // strong — see stealthDebugStats(), game.js) — any cell click within
-    // that tissue's board works, onCellClick() below only reads the tissue.
+    // strong) — any cell click within that tissue's board works,
+    // onCellClick() below only reads the tissue.
     document.getElementById('play-hint').textContent = 'Click anywhere in the tissue you want to target.';
   } else {
     document.getElementById('play-hint').textContent = 'Click a cell on the board to target it.';
@@ -2185,12 +2429,17 @@ function onCellClick(tissue, col, row) {
 // Short player-facing narration per card, independent of the more
 // detailed (coordinate-level) text used internally for activeGame.log.
 // Undefined cardIds (e.g. Antigenic Drift, not covered by a short form
-// yet) just fall back to that detailed text.
-function formatCardPlayText(card, target, result) {
+// yet) just fall back to that detailed text. speedDelta is the REAL
+// before/after change Replication Boost's play caused (0 if the speed
+// cap/floor absorbed it) — see playSelectedCard() below.
+function formatCardPlayText(card, target, result, speedDelta) {
   switch (card.id) {
     case 'infect-horizontal': return 'Played horizontal spread';
     case 'infect-vertical': return 'Played vertical spread';
-    case 'spread-speed-plus': return `Played replication boost +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT} for 1 turn`;
+    case 'spread-speed-plus':
+      return speedDelta
+        ? `Played replication boost +${STEALTH_CONFIG.REPLICATION_BOOST.AMOUNT} for 1 turn`
+        : `Played replication boost — already at maximum speed, no effect`;
     case 'latency': return 'Played latency - activates next turn';
     case 'antibody-escape-lung':
     case 'antibody-escape-liver':
@@ -2206,9 +2455,16 @@ function formatCardPlayText(card, target, result) {
 function playSelectedCard(target) {
   if (selectedHandIndex === null) return;
   const card = activeGame.hand[selectedHandIndex];
+  // Captured before the play — Replication Boost has a real ceiling now
+  // (MAX_REPLICATION_SPEED, config.js) as well as the floor other cards
+  // already respect, so computing the REAL before/after change here
+  // (instead of assuming +1) is what makes both ends correct automatically
+  // — same principle as the immune side's own speedDelta (game.js).
+  const speedBeforePlay = activeGame.effectiveReplicationSpeed();
   const res = activeGame.playCard(selectedHandIndex, target);
+  const speedDelta = card.id === 'spread-speed-plus' ? activeGame.effectiveReplicationSpeed() - speedBeforePlay : undefined;
   if (res.ok) {
-    appendNarrationLine(formatCardPlayText(card, target, res.result), 'line-player', { insertAfterHeader: true });
+    appendNarrationLine(formatCardPlayText(card, target, res.result, speedDelta), 'line-player', { insertAfterHeader: true });
     lastPlayError = null;
   } else {
     // Invalid target — the card stays in hand (see playCard()), just tell
@@ -2222,10 +2478,35 @@ function playSelectedCard(target) {
   // After renderGame() (not before) — the board's just been rebuilt, and
   // renderVirusInfoPanel() rebuilds the speed badge's innerHTML every
   // render, which would wipe out the flash if it were appended first.
-  if (res.ok && res.result.cells && res.result.cells.length) {
-    highlightCells(card.requiresTissue || target.tissue, res.result.cells, 'cell-antibody-escape-poof');
+  const touchedCells = res.ok && res.result.cells && res.result.cells.length;
+  if (touchedCells) {
+    // Horizontal/Vertical Spread INFECT new cells (same mechanism as
+    // ordinary growth-phase spread, see buildVirusGrowthSteps() above) —
+    // the poof flashes below are for something being REMOVED from the
+    // board instead, which is backwards for a card that's adding infection
+    // to it. Cytokine Neutralisation gets its OWN poof (the same coloured
+    // bell mask a live shield shows, see cell-cytokine-neutralise-poof-*'s
+    // own CSS comment) — it has nothing to do with antibodies, reusing
+    // that class just because both happen to be a "removal" was showing
+    // the wrong icon AND the wrong colour.
+    const cytokineColorMatch = card.id.match(/^cytokine-neutralise-(blue|orange|red)$/);
+    const flashClass = (card.id === 'infect-horizontal' || card.id === 'infect-vertical')
+      ? 'cell-infect-pop'
+      : cytokineColorMatch
+      ? `cell-cytokine-neutralise-poof-${cytokineColorMatch[1]}`
+      : 'cell-antibody-escape-poof';
+    highlightCells(card.requiresTissue || target.tissue, res.result.cells, flashClass);
   }
-  if (res.ok && card.id === 'spread-speed-plus') flashSpeedDelta(1);
+  const gotSpeedCue = res.ok && card.id === 'spread-speed-plus' && speedDelta;
+  if (gotSpeedCue) flashSpeedDelta(speedDelta);
+  // Fallback for a successful play that triggers neither of the above (T-
+  // Cell Evasion, Activate Tregs, or Antibody Escape landing on a tissue
+  // with no antibodies actually present to break through) — the tap itself
+  // is deliberately silent (see the delegated click listener's .card-face
+  // exclusion, above) on the assumption the play's own board effect will
+  // supply a sound, so a card that has none of its own would otherwise
+  // play with literally no audio feedback at all.
+  if (res.ok && !touchedCells && !gotSpeedCue) playSound('click');
 }
 
 // How long a just-played card's own board animation needs before the
@@ -2264,7 +2545,12 @@ function endStealthTurn() {
 // ── End screen ─────────────────────────────────────────────────────
 function renderEndScreen() {
   const el = document.getElementById('end-screen');
+  // renderEndScreen() can re-run several times for the same finished game
+  // (other UI updates while the win/lose screen stays up) — only the FIRST
+  // call, the actual game-end transition, should play the win/lose cue.
+  const alreadyShown = el.classList.contains('visible');
   el.classList.add('visible');
+  if (!alreadyShown) playSound(activeGame.state === 'won' ? 'win' : 'lose');
   // Hides every banner around the board (see .game-over, index.html) so
   // the final board is the whole story — cleared the moment a new game
   // starts (renderGame()'s normal-state branch). immune-banner/hand-panel

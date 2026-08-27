@@ -6,7 +6,7 @@
 <title>Stealth Mission — Immune Quest</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/ui.css?cachebust=177">
+<link rel="stylesheet" href="../shared/ui.css?cachebust=205">
 <style>
   /* Dark navy + toxic-green "pathogen" theme */
   :root{
@@ -215,7 +215,6 @@
   .form-group{ display:flex; flex-direction:column; gap:6px; }
   .form-label{ font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px; color:var(--text); text-transform:uppercase; }
   .builder-hint{ font-size:11px; color:var(--muted); margin-top:6px; margin-bottom: 12px;}
-  .builder-hint-warn{ font-size:10px; color:var(--accent2); margin-top:6px; margin-bottom:6px; }
 
   .builder-card-row{ display:flex; flex-wrap:wrap; gap:12px; }
   .builder-modal .card-face{ width:90px; }
@@ -363,7 +362,6 @@
      shared .help-title class, so the icon-less tutorial title is
      unaffected. */
   #virus-info-title{ color:var(--virus-color, var(--stealth)); display:flex; align-items:center; gap:8px; }
-  .help-step-num{ font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--stealth); text-transform:uppercase; margin-bottom:8px; }
   .help-step-title{ font-family:'Orbitron',monospace; font-size:14px; color:var(--text); margin-bottom:10px; letter-spacing:1px; }
   .help-step-desc{ font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:16px; }
   .help-footer{
@@ -815,11 +813,6 @@
     width:76px;
   }
 
-  /* Real organ art standing in for tissue emoji — inline icon, badge-corner
-     icon (on tissue boards) covered separately by .tissue-board-organ. */
-  .icon-organ{ height:1.1em; width:auto; vertical-align:-2px; object-fit:contain; }
-  .icon-organ-badge{ height:12px; vertical-align:-2px; }
-
   /* ═══════════════════════════════════════════════════════════════
      CARD ART — small in-play card faces + the (i) info button that
      opens the large-art modal. Cards ship as transparent PNGs (title
@@ -1106,8 +1099,8 @@
   }
   .tissue-cell:hover{ transform:scale(1.15); z-index:1; }
   /* Horizontal/Vertical Spread target a whole TISSUE now, not a chosen
-     cell (balance pass: guaranteed player-chosen precision was too strong
-     — see stealthDebugStats(), game.js) — while one of those is selected
+     cell (balance pass: guaranteed player-chosen precision was too strong)
+     — while one of those is selected
      (#boards-wrap gets .targeting-tissue, see _syncTissueTargetingClass(),
      game-ui.js), an individual cell popping up on hover would still read
      as "I'm choosing this exact cell", so that's suppressed here in
@@ -1258,6 +1251,29 @@
     color:var(--antibody-color, var(--tissue-color, var(--accent))); pointer-events:none;
     animation:cell-antibody-escape-poof .9s ease-out forwards;
   }
+  /* Cytokine Neutralisation — same drift-up-and-fade as Antibody Escape's
+     poof above (shares its keyframes), but the exact SVG bell mask a live
+     cytokine-shielded cell shows (.cytokine-blue/orange/red::after above),
+     not an emoji — an emoji bell always renders in its own fixed (yellow)
+     colour regardless of which cytokine it just replaced, and reads as a
+     different shape entirely from the one that was actually just sitting
+     there. One class per colour (rather than a shared class + CSS custom
+     property) since by the time this class is applied the cell is already
+     plain 'healthy' — its own .cytokine-* class is long gone — so
+     playSelectedCard() (game-ui.js) picks which of these three to add
+     based on which colour of Cytokine Neutralisation was actually played. */
+  .tissue-cell[class*="cell-cytokine-neutralise-poof-"]::after{
+    content:''; position:absolute; inset:0; margin:auto; width:60cqw; height:55cqw; pointer-events:none;
+    -webkit-mask-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='6' r='4'/><path d='M50 10C38 10 30 20 30 35L30 55L20 70L80 70L70 55L70 35C70 20 62 10 50 10Z'/><rect x='15' y='70' width='70' height='8' rx='4'/><circle cx='50' cy='88' r='7'/></svg>");
+    mask-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='6' r='4'/><path d='M50 10C38 10 30 20 30 35L30 55L20 70L80 70L70 55L70 35C70 20 62 10 50 10Z'/><rect x='15' y='70' width='70' height='8' rx='4'/><circle cx='50' cy='88' r='7'/></svg>");
+    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+    -webkit-mask-position:center; mask-position:center;
+    -webkit-mask-size:100% 100%; mask-size:100% 100%;
+    animation:cell-antibody-escape-poof .9s ease-out forwards;
+  }
+  .tissue-cell.cell-cytokine-neutralise-poof-blue::after{   background-color:#3aa0ff; }
+  .tissue-cell.cell-cytokine-neutralise-poof-orange::after{ background-color:#ff9d3f; }
+  .tissue-cell.cell-cytokine-neutralise-poof-red::after{    background-color:#ff4d4d; }
   /* Every tissue renders its REAL cell data now, active or not (see
      renderBoards(), game-ui.js) — so a plain healthy cell in an inactive
      board still needs to read as muted/"not in play", but WITHOUT hiding
@@ -1267,6 +1283,17 @@
     background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.3); box-shadow:none; cursor:default;
   }
   .tissue-board.inactive .tissue-cell:hover{ transform:none; }
+  /* A tissue that lost tropism keeps its infected cells frozen in place
+     rather than clearing them (see _checkLoss(), game.js) — muted here so
+     they read as "no longer actively spreading" at a glance, but kept
+     distinct from a dormant/latent cell's own look (purple tint, .35
+     opacity icon, above): different opacity (.55) and still the normal
+     green tint rather than dormant's purple, so "frozen infection" and
+     "lying-low latency" never look like the same state on the board. */
+  .tissue-board.inactive .tissue-cell.state-infected{
+    background:rgba(57,255,20,.06); box-shadow:none;
+  }
+  .tissue-board.inactive .tissue-cell.state-infected::before{ opacity:.55; }
 
   /* Virus spread — a newly infected cell "grows" into existence, synced to
      its narration line appearing in the mission log. */
@@ -1296,6 +1323,14 @@
     100%{ transform:scale(1); outline-color:transparent; }
   }
   .tissue-cell.cell-immune-flash{
+    outline:3px solid var(--accent); outline-offset:1px;
+    animation:cell-immune-flash 1s ease-out;
+  }
+  /* Cytokine placement — same look as the generic immune flash above, just
+     its own class name so it can carry its own sound cue (see
+     FLASH_SOUND/_immuneFlashClass(), game-ui.js) without Sensing, the other
+     card that falls through to the generic case, getting that cue too. */
+  .tissue-cell.cell-cytokine-flash{
     outline:3px solid var(--accent); outline-offset:1px;
     animation:cell-immune-flash 1s ease-out;
   }
@@ -1375,7 +1410,7 @@
      two TABS (give up / receive) rather than two stacked rows — "receive"
      in particular can offer a long list of card types, too many to fit
      one row at any size. */
-  .trade-popup{ max-width:760px; }
+  .trade-popup{ max-width:95vw; } /* actual width is set inline by renderTradeModal() to hug the receive grid; this is just a viewport safety cap */
   /* Underline tabs, matching the virus builder's own .builder-tabs/.tab-btn
      look (same font treatment, bottom-border indicator, no filled pill)
      rather than a distinct style of its own. */
@@ -2037,14 +2072,14 @@ const STEALTH_GAME_CONFIG = {
 };
 </script>
 
-<script src="../shared/ui.js?cachebust=177"></script>
+<script src="../shared/ui.js?cachebust=205"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=177"></script>
-<script src="board.js?cachebust=177"></script>
-<script src="cards.js?cachebust=177"></script>
-<script src="game.js?cachebust=177"></script>
-<script src="game-ui.js?cachebust=177"></script>
+<script src="config.js?cachebust=205"></script>
+<script src="board.js?cachebust=205"></script>
+<script src="cards.js?cachebust=205"></script>
+<script src="game.js?cachebust=205"></script>
+<script src="game-ui.js?cachebust=205"></script>
 
 <script>
 // Initialize shared UI with game config

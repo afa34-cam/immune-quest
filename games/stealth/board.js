@@ -167,8 +167,8 @@ class StealthBoard {
 
     // Wake any dormant cells whose timer has elapsed BEFORE building this
     // phase's spread queue below — a balance-pass change (guaranteed
-    // auto-infect was too strong; see stealthDebugStats(), game.js) means
-    // a woken cell no longer force-infects a neighbour on waking. Instead
+    // auto-infect was too strong) means a woken cell no longer
+    // force-infects a neighbour on waking. Instead
     // it just becomes a normal infected cell going into the SAME queue as
     // every pre-existing one, with its own attemptsPerSource rolls through
     // the ordinary _rollSpreadTargets() chance below — same pattern, same
@@ -293,6 +293,15 @@ class StealthBoard {
       if (this.cells[r].some(c => c.state === 'infected' && c.escapeImmune <= 0)) return r;
     }
     return null;
+  }
+
+  // How many cells a T-Cell clear of this row would actually remove —
+  // mirrors clearRow()'s own eligibility check exactly, but as a read-only
+  // peek (no mutation) so _runImmuneResponse() (game.js) can tell in
+  // advance whether playing T-Cell would wipe out the game's last
+  // remaining infection, without having to apply-then-undo the card.
+  _infectedCountInRow(row) {
+    return this.cells[row].filter(c => c.state === 'infected' && c.escapeImmune <= 0).length;
   }
 
   // NK Cells' own target on this board — the single infected cell that's
@@ -421,7 +430,7 @@ class StealthBoard {
   // a separate play untouched, and leaving Antibody's separate permanent
   // protection (cytokineColor stays null) untouched too.
   neutralizeCytokine(color, placementId) {
-    let count = 0;
+    const cleared = [];
     for (let r = 0; r < this.rows; r++) {
       for (let c = 0; c < this.cols; c++) {
         const cell = this.cells[r][c];
@@ -430,11 +439,11 @@ class StealthBoard {
           cell.protectedTurns = 0;
           cell.cytokineColor = null;
           cell.cytokinePlacementId = null;
-          count++;
+          cleared.push({ col: c, row: r });
         }
       }
     }
-    return count;
+    return cleared;
   }
 
   hasDormant() {
@@ -444,23 +453,33 @@ class StealthBoard {
     return false;
   }
 
-  // Priority 1: a healthy cell directly BELOW an infected cell — blocks
-  //             the specific move that would advance toward the win
-  //             condition (the bottom row). Scanned from the BOTTOM row
-  //             up, so the deepest (most advanced, most urgent) infected
-  //             row's own candidates are used first — the previous
-  //             version collected "below" candidates from every infected
-  //             cell on the board and picked among them uniformly at
-  //             random, which could just as easily block a cell in the
-  //             middle of the board while the virus's actual front, one
-  //             row from winning, sat completely unguarded.
-  // Priority 2: a healthy cell beside (same row as) an infected cell —
-  //             same bottom-up preference.
-  // Priority 3: no infection anywhere on this board yet — guard the entry
-  //             point (row 0, centre) pre-emptively, matching where
-  //             seedInfection()/spillover would land.
+  // Row by row, bottom (deepest, most urgent) up to top — at EACH row,
+  // vertical is still checked before horizontal (blocking the actual move
+  // toward the win condition beats blocking a sideways one), but both are
+  // tried for THIS row before moving up to a shallower one:
+  //   Priority 1: a healthy cell directly BELOW an infected cell in this
+  //               row — blocks the specific move that would advance
+  //               toward the win condition (the bottom row).
+  //   Priority 2: no opening below at this row (already blocked — e.g. an
+  //               Antibody row already sitting right under it — or off
+  //               the bottom edge) — a healthy cell BESIDE an infected
+  //               cell in this SAME row instead, sealing its flanks
+  //               rather than leaving them open while this method moves
+  //               on to guard a shallower, less-urgent row's own vertical
+  //               path first. Was two entirely separate passes (every
+  //               row's vertical option, THEN every row's horizontal
+  //               option) — that let a wide-open flank on the deepest row
+  //               sit unguarded for turns while a vertical opening on
+  //               some row far from winning got defended first, just
+  //               because vertical options anywhere outranked horizontal
+  //               options everywhere.
+  //   Priority 3: no infection anywhere on this board yet — guard the
+  //               entry point (row 0, centre) pre-emptively, matching
+  //               where seedInfection()/spillover would land.
   _pickStrategicAntibodyTarget() {
     for (let r = this.rows - 1; r >= 0; r--) {
+      if (!this.cells[r].some(c => c.state === 'infected')) continue;
+
       const below = [];
       for (let c = 0; c < this.cols; c++) {
         if (this.cells[r][c].state !== 'infected') continue;
@@ -468,8 +487,7 @@ class StealthBoard {
         if (downCell && downCell.state === 'healthy') below.push({ col: c, row: r + 1 });
       }
       if (below.length) return below[Math.floor(Math.random() * below.length)];
-    }
-    for (let r = this.rows - 1; r >= 0; r--) {
+
       const beside = [];
       for (let c = 0; c < this.cols; c++) {
         if (this.cells[r][c].state !== 'infected') continue;
@@ -524,8 +542,8 @@ class StealthBoard {
   // already-infected cell in the same row (sideways only). Returns
   // candidates rather than infecting one directly — the player no longer
   // picks the exact cell (balance pass: guaranteed precision was too
-  // strong — see stealthDebugStats(), game.js), the card's own apply()
-  // (cards.js) picks randomly among these instead.
+  // strong), the card's own apply() (cards.js) picks randomly among these
+  // instead.
   horizontalSpreadCandidates() {
     const candidates = [];
     for (let r = 0; r < this.rows; r++) {
