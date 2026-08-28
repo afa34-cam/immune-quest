@@ -368,6 +368,25 @@ function _tcellDef(tissue) {
   };
 }
 
+// How deep an ADJACENT tissue's own infection has reached — the row a
+// spillover (_runSpillover(), game.js) would actually land on in `tissue`,
+// since spillover always lands at the SAME row number the source tissue's
+// own edge column has reached. Used to pre-fortify a tissue the virus
+// hasn't touched yet at a row that's an actual, current threat, rather
+// than an arbitrary guess (row 0, or a fixed distance from the bottom) —
+// see _pickAntibodyRow()/_pickStrategicAntibodyTarget()'s own comments,
+// board.js. -1 if neither neighbour has any infection to threaten with.
+// Only DIRECT neighbours count (liver-lung-intestine — liver and
+// intestine aren't adjacent to each other), same restriction spillover
+// itself has.
+function _adjacentThreatRow(boards, tissue) {
+  const order = STEALTH_CONFIG.BOARD.ADJACENCY_ORDER;
+  const i = order.indexOf(tissue);
+  if (i === -1) return -1;
+  return [order[i - 1], order[i + 1]].filter(Boolean)
+    .reduce((max, n) => Math.max(max, boards[n] ? boards[n]._deepestInfectedRow() : -1), -1);
+}
+
 // Antibody protects an ENTIRE row permanently — but only a row that has no
 // virus present at all. That's just as true of a tissue the virus hasn't
 // even reached yet (every row is virus-free by definition) as it is of an
@@ -379,10 +398,10 @@ function _antibodyDef(tissue) {
   return {
     id: `immune-antibody-${tissue}`, name: `Antibody: ${_capitalize(tissue)}`, icon: '🛡️', tissue,
     tooltip: `Protects an entire row of cells in ${_capitalize(tissue)} from infection.`,
-    isUseful(game) { return game.boards[tissue]._pickAntibodyRow() !== null; },
+    isUseful(game) { return game.boards[tissue]._pickAntibodyRow(_adjacentThreatRow(game.boards, tissue)) !== null; },
     apply(game) {
       const board = game.boards[tissue];
-      const row = board._pickAntibodyRow();
+      const row = board._pickAntibodyRow(_adjacentThreatRow(game.boards, tissue));
       if (row === null) return { placed: false, protectedCells: [] };
       const protectedCells = board.protectRow(row, 0).map(cell => ({ ...cell, tissue })); // 0 turns = permanent
       return { placed: protectedCells.length > 0, protectedCells };
@@ -412,7 +431,7 @@ function _cytokinePickTarget(game) {
   }
   const inactive = STEALTH_CONFIG.BOARD.TISSUES.filter(t => !game.activeTissues.includes(t));
   for (const t of inactive) {
-    const target = game.boards[t]._pickStrategicAntibodyTarget();
+    const target = game.boards[t]._pickStrategicAntibodyTarget(_adjacentThreatRow(game.boards, t));
     if (target) return { tissue: t, ...target };
   }
   return null;

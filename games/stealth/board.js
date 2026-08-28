@@ -346,9 +346,20 @@ class StealthBoard {
   // Antibody protects a whole row PERMANENTLY, but only a row with no
   // virus anywhere in it. Prefers the row immediately ahead of the
   // infection front (deepest infected row + 1) so it's actually in the
-  // virus's path; falls back to the closest virus-free row to the front,
-  // or row 0 (the entry point) if nothing's infected yet.
-  _pickAntibodyRow() {
+  // virus's path; falls back to the closest virus-free row to the front.
+  //
+  // adjacentThreatRow (caller-supplied — see _adjacentThreatRow(), cards.js)
+  // is how deep an ADJACENT active tissue has already reached, used only
+  // when THIS tissue has no infection of its own (deepest === -1). Guarding
+  // row 0 (the entry point) there only blocks growth that starts right at
+  // the top, but this tissue can also be reached via SPILLOVER from that
+  // adjacent tissue (_runSpillover(), game.js), which lands in THIS
+  // tissue's edge column at the SAME row number the source tissue's own
+  // infection has reached — not row 0. Targeting that exact row directly
+  // denies the spillover cell itself, rather than only reacting after the
+  // fact. Falls back to row 0 when there's no adjacent threat to react to
+  // either (a genuinely untouched, unthreatened tissue).
+  _pickAntibodyRow(adjacentThreatRow = -1) {
     const isVirusFree = r => this.cells[r].every(c => c.state !== 'infected' && c.state !== 'dormant');
     const hasProtectableCell = r => this.cells[r].some(c => c.state === 'healthy');
     const candidates = [];
@@ -358,11 +369,11 @@ class StealthBoard {
     if (candidates.length === 0) return null;
 
     const deepest = this._deepestInfectedRow();
-    if (deepest === -1) return candidates.includes(0) ? 0 : Math.min(...candidates);
-
-    const preferred = deepest + 1;
+    const preferred = deepest === -1
+      ? (adjacentThreatRow >= 0 ? adjacentThreatRow : 0)
+      : deepest + 1;
     if (candidates.includes(preferred)) return preferred;
-    return candidates.reduce((best, r) => Math.abs(r - deepest) < Math.abs(best - deepest) ? r : best);
+    return candidates.reduce((best, r) => Math.abs(r - preferred) < Math.abs(best - preferred) ? r : best);
   }
 
   protectRow(row, turns) {
@@ -473,10 +484,27 @@ class StealthBoard {
   //               some row far from winning got defended first, just
   //               because vertical options anywhere outranked horizontal
   //               options everywhere.
-  //   Priority 3: no infection anywhere on this board yet — guard the
-  //               entry point (row 0, centre) pre-emptively, matching
-  //               where seedInfection()/spillover would land.
-  _pickStrategicAntibodyTarget() {
+  //   Priority 3: no infection anywhere on this board yet — guard whatever
+  //               row an ADJACENT active tissue's own infection has
+  //               already reached (adjacentThreatRow, caller-supplied —
+  //               see _adjacentThreatRow(), cards.js), matching the exact
+  //               row a spillover would actually land on, rather than
+  //               row 0 (only relevant to a mutation-seeded start, a much
+  //               rarer path in for a tissue nothing has reached yet).
+  //               Falls back to row 0 when there's no adjacent threat to
+  //               react to either.
+  //
+  // Among tied candidates at whichever priority wins, _pickSpreadOutCandidate()
+  // below breaks the tie toward whichever one is farthest from EXISTING
+  // protection instead of picking uniformly at random — a Cytokine's own
+  // shape (protectShape(), cards.js) already clusters several cells around
+  // wherever it lands, so with no bias away from existing coverage,
+  // repeated plays landing near each other by pure chance wastes overlap
+  // (protecting the same handful of cells twice) while a whole flank sits
+  // completely open. The virus only loses once it has nowhere left to
+  // spread at all, so maximising the WIDTH of blocked area matters more
+  // than reinforcing a spot that's already covered.
+  _pickStrategicAntibodyTarget(adjacentThreatRow = -1) {
     for (let r = this.rows - 1; r >= 0; r--) {
       if (!this.cells[r].some(c => c.state === 'infected')) continue;
 
@@ -486,7 +514,7 @@ class StealthBoard {
         const downCell = this.getCell(c, r + 1);
         if (downCell && downCell.state === 'healthy') below.push({ col: c, row: r + 1 });
       }
-      if (below.length) return below[Math.floor(Math.random() * below.length)];
+      if (below.length) return this._pickSpreadOutCandidate(below);
 
       const beside = [];
       for (let c = 0; c < this.cols; c++) {
@@ -496,15 +524,43 @@ class StealthBoard {
           if (cell && cell.state === 'healthy') beside.push({ col: cc, row: rr });
         });
       }
-      if (beside.length) return beside[Math.floor(Math.random() * beside.length)];
+      if (beside.length) return this._pickSpreadOutCandidate(beside);
     }
 
     if (this._deepestInfectedRow() === -1) {
       const entryCol = Math.floor(this.cols / 2);
-      const entry = this.getCell(entryCol, 0);
-      if (entry && entry.state === 'healthy') return { col: entryCol, row: 0 };
+      const targetRow = adjacentThreatRow >= 0 ? adjacentThreatRow : 0;
+      const target = this.getCell(entryCol, targetRow);
+      if (target && target.state === 'healthy') return { col: entryCol, row: targetRow };
     }
     return null;
+  }
+
+  // Scores each candidate by its (Manhattan) distance to the NEAREST cell
+  // already in state 'immune' anywhere on this board, and picks whichever
+  // is FARTHEST from existing protection (ties broken randomly) — see
+  // _pickStrategicAntibodyTarget()'s own comment above for why. A board
+  // with no protection anywhere yet has nothing to spread away from, so
+  // every candidate ties and this is equivalent to the old uniform-random
+  // pick in that case.
+  _pickSpreadOutCandidate(candidates) {
+    if (candidates.length === 1) return candidates[0];
+    let bestDist = -1;
+    let best = [];
+    candidates.forEach(cand => {
+      let minDist = Infinity;
+      for (let r = 0; r < this.rows; r++) {
+        for (let c = 0; c < this.cols; c++) {
+          if (this.cells[r][c].state !== 'immune') continue;
+          const dist = Math.abs(c - cand.col) + Math.abs(r - cand.row);
+          if (dist < minDist) minDist = dist;
+        }
+      }
+      if (minDist === Infinity) minDist = 0; // no existing protection anywhere — every candidate ties
+      if (minDist > bestDist) { bestDist = minDist; best = [cand]; }
+      else if (minDist === bestDist) best.push(cand);
+    });
+    return best[Math.floor(Math.random() * best.length)];
   }
 
   // Deepest (highest row index) cell currently infected or dormant, or
