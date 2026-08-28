@@ -362,7 +362,17 @@ function setupSimpleMenu(config) {
         <div class="modal-tab-content" id="gtab-feedback">
           <div class="modal-section">
             <div class="modal-section-title">Send feedback</div>
-            <textarea class="feedback-area" id="game-feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..."></textarea>
+            <div class="feedback-rating-row" style="margin-top:6px;">
+              <span class="feedback-rating-label">Rate Immune Quest (optional)</span>
+              <div class="star-rating" id="game-feedback-rating" data-value="0">
+                <span class="star" data-value="1">★</span>
+                <span class="star" data-value="2">★</span>
+                <span class="star" data-value="3">★</span>
+                <span class="star" data-value="4">★</span>
+                <span class="star" data-value="5">★</span>
+              </div>
+            </div>
+            <textarea class="feedback-area" id="game-feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..." style="margin-top:10px;"></textarea>
             <button class="feedback-submit" onclick="gameSubmitFeedback()">Send →</button>
             <div id="game-feedback-confirm" style="font-size:10px;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
           </div>
@@ -377,6 +387,27 @@ function setupSimpleMenu(config) {
 
   const soundToggleEl = document.getElementById('game-toggle-sound');
   if (soundToggleEl) soundToggleEl.checked = localStorage.getItem('iq_sound_muted') !== '1';
+
+  setupStarRating('game-feedback-rating');
+}
+
+// Star rating — plain click/hover-painted spans, own copy of the same pair
+// of functions index.html defines for its own feedback tab (small enough,
+// and different enough in ID, that sharing one implementation across the
+// two separate menu systems wasn't worth the indirection).
+function paintStarRating(containerId, value) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.star').forEach(s => s.classList.toggle('filled', +s.dataset.value <= value));
+}
+function setupStarRating(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.star').forEach(s => {
+    s.onclick = () => { container.dataset.value = s.dataset.value; paintStarRating(containerId, +s.dataset.value); };
+    s.onmouseenter = () => paintStarRating(containerId, +s.dataset.value);
+  });
+  container.onmouseleave = () => paintStarRating(containerId, +container.dataset.value);
 }
 
 function switchGameTab(name) {
@@ -443,16 +474,32 @@ function gameShareDone(kind) {
   }
 }
 
+// Same anonymous Cloudflare Worker + Google Sheet index.html's own
+// submitFeedback() posts to — see feedback-worker/README.md at the repo
+// root for setup. Only reachable from here when the game is opened
+// standalone (window.self === window.top); embedded (the normal case,
+// launched from the hub) relays through the hub's OWN submitFeedback()
+// instead, via postMessage below, so every game funnels through that one
+// Worker call rather than each needing its own copy of the endpoint URL.
+const GAME_FEEDBACK_ENDPOINT = 'https://immune-quest-feedback.YOUR-SUBDOMAIN.workers.dev';
+
 function gameSubmitFeedback() {
   const textEl = document.getElementById('game-feedback-text');
   const text = textEl?.value.trim();
-  if (!text) return;
+  const ratingEl = document.getElementById('game-feedback-rating');
+  const rating = parseInt(ratingEl?.dataset.value || '0', 10);
+  if (!text && !rating) return;
   if (window.self !== window.top) {
-    window.parent.postMessage({ type: 'iq_submit_feedback', text }, '*');
+    window.parent.postMessage({ type: 'iq_submit_feedback', text, rating }, '*');
   } else {
-    location.href = 'mailto:feedback@immunequest.org?subject=Feedback&body=' + encodeURIComponent(text);
+    fetch(GAME_FEEDBACK_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rating, text }),
+    }).catch(() => {});
   }
   textEl.value = '';
+  if (ratingEl) { ratingEl.dataset.value = '0'; paintStarRating('game-feedback-rating', 0); }
   const confirmEl = document.getElementById('game-feedback-confirm');
   if (confirmEl) confirmEl.style.display = 'block';
 }

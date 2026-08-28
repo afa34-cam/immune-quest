@@ -232,6 +232,13 @@ footer a{
   font-size:12px; resize:vertical; min-height:80px; outline:none;
 }
 .feedback-area:focus{ border-color:var(--accent); }
+/* Star rating — see index.html's own copy of this same set of rules for
+   why (shared markup pattern, not a shared component). */
+.feedback-rating-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.star-rating{ display:flex; gap:4px; font-size:22px; line-height:1; cursor:pointer; }
+.star-rating .star{ color:rgba(255,255,255,.15); transition:color .15s; }
+.star-rating .star.filled{ color:#ffb400; }
+.feedback-rating-label{ font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-family:'Orbitron',monospace; }
 .feedback-submit{
   padding:9px 18px; background:rgba(0,229,255,.1); border:1px solid var(--accent);
   border-radius:8px; color:var(--accent); font-family:'Orbitron',monospace;

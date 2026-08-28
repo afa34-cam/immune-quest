@@ -1,0 +1,9 @@
+name = "immune-quest-feedback"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Secrets — set these with `wrangler secret put <NAME>`, never commit them:
+#   GOOGLE_CLIENT_EMAIL — the service account's "client_email" field
+#   GOOGLE_PRIVATE_KEY  — the service account's "private_key" field (full PEM, BEGIN/END lines included)
+#   SHEET_ID            — the target Google Sheet's ID (the long string in its URL between /d/ and /edit)
+#   ALLOWED_ORIGIN      — (optional) restrict CORS to your site's origin, e.g. https://afa34-cam.github.io — omit to allow any origin

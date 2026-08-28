@@ -331,9 +331,15 @@
 
     .modal-section { display:flex; flex-direction:column; gap:8px; }
     .modal-section-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+    /* Divider BETWEEN sections (e.g. Settings tab's Privacy/Sound/Progress),
+       not inside one — was previously a border-bottom on .toggle-row itself
+       (below), which put the line mid-Privacy-section (between the toggle
+       and its own explanatory GoatCounter text) instead of actually
+       separating sections, since that text sits after the toggle-row as a
+       sibling within the SAME section, not after it. */
+    .modal-section + .modal-section { border-top:1px solid var(--border); padding-top:12px; }
 
-    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--border); }
-    .toggle-row:last-child { border-bottom:none; }
+    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; }
     .toggle-label { font-size:12px; color:var(--text); }
     .toggle-sub   { font-size:10px; color:var(--muted); margin-top:2px; }
     .toggle-switch {
@@ -392,6 +398,16 @@
       font-size:12px; resize:vertical; min-height:80px; outline:none;
     }
     .feedback-area:focus { border-color:var(--accent); }
+    /* Star rating — optional, sits above the free-text box, label and
+       stars sharing one row. Plain click/hover-painted spans rather than
+       radio inputs, since there's no need for keyboard-form-submit
+       semantics here (submitFeedback() reads the chosen value straight off
+       the container's data-value). */
+    .feedback-rating-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .star-rating { display:flex; gap:4px; font-size:22px; line-height:1; cursor:pointer; }
+    .star-rating .star { color:rgba(255,255,255,0.15); transition:color .15s; }
+    .star-rating .star.filled { color:#ffb400; }
+    .feedback-rating-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-family:'Orbitron',monospace; }
     .onboarding-next-btn {
       padding:8px 16px; background:rgba(57,255,20,0.08); border:1px solid var(--accent3);
       border-radius:8px; color:var(--accent3); font-family:'Orbitron',monospace;
@@ -896,6 +912,15 @@
           </div>
         </div>
         <div class="modal-section">
+          <div class="modal-section-title" style="display:flex; justify-content:space-between; align-items:center;">
+            Sound effects
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-sound" onchange="setSound(this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="modal-section">
           <div class="modal-section-title">Progress (this device)</div>
           <div class="modal-btn" style="cursor:pointer; align-self:flex-start;" onclick="resetProgress()">
             <span class="modal-btn-icon">↺</span> Reset all progress
@@ -928,7 +953,17 @@
       <div class="modal-tab-content" id="tab-feedback">
         <div class="modal-section">
           <div class="modal-section-title">Send feedback</div>
-          <textarea class="feedback-area" id="feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..."></textarea>
+          <div class="feedback-rating-row" style="margin-top:6px;">
+            <span class="feedback-rating-label">Rate Immune Quest (optional)</span>
+            <div class="star-rating" id="feedback-rating" data-value="0">
+              <span class="star" data-value="1">★</span>
+              <span class="star" data-value="2">★</span>
+              <span class="star" data-value="3">★</span>
+              <span class="star" data-value="4">★</span>
+              <span class="star" data-value="5">★</span>
+            </div>
+          </div>
+          <textarea class="feedback-area" id="feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..." style="margin-top:10px;"></textarea>
           <button class="feedback-submit" onclick="submitFeedback()">Send →</button>
           <div id="feedback-confirm" style="font-size:10px;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
         </div>
@@ -1554,6 +1589,8 @@ window.addEventListener('message', (e) => {
   if (data.type === 'iq_submit_feedback') {
     const el = document.getElementById('feedback-text');
     if (el) el.value = data.text || '';
+    const ratingEl = document.getElementById('feedback-rating');
+    if (ratingEl) ratingEl.dataset.value = String(data.rating || 0);
     submitFeedback();
     return;
   }
@@ -1968,6 +2005,14 @@ function setTracking(on) {
   localStorage.setItem('iq_no_track', on ? '0' : '1');
 }
 
+// Same 'iq_sound_muted' key/semantics Stealth Mission's own Settings
+// toggle uses (games/shared/ui.js gameSetSound()) — localStorage is shared
+// across the hub and its same-origin game iframes, so muting here takes
+// effect the moment a game reads it, no cross-window messaging needed.
+function setSound(on) {
+  localStorage.setItem('iq_sound_muted', on ? '0' : '1');
+}
+
 function resetProgress() {
   Object.keys(localStorage).filter(k => k.startsWith('iq_')).forEach(k => localStorage.removeItem(k));
   sessionStorage.removeItem('iq_relapse');
@@ -1990,13 +2035,50 @@ function copyLink() {
     setTimeout(() => document.getElementById('copy-label').textContent = 'Copy link', 2000);
   });
 }
+// Feedback is sent anonymously — no email, no account, no identifying data
+// of any kind — to a small Cloudflare Worker (see feedback-worker/ at the
+// repo root) that appends {timestamp, rating, text} as one row in a
+// private Google Sheet. FEEDBACK_ENDPOINT must point at your own deployed
+// Worker's URL — see feedback-worker/README.md for one-time setup.
+const FEEDBACK_ENDPOINT = 'https://immune-quest-feedback.YOUR-SUBDOMAIN.workers.dev';
+
+// Plain click/hover-painted spans (not radio inputs) — submitFeedback()
+// below just reads the chosen value straight off the container's own
+// data-value, no form-submit semantics needed. Shared by both the hub's
+// own feedback tab (id passed in below) and each game's in-menu one (see
+// games/shared/ui.js's own copy of this same pair of functions).
+function paintStarRating(containerId, value) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.star').forEach(s => s.classList.toggle('filled', +s.dataset.value <= value));
+}
+function setupStarRating(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('.star').forEach(s => {
+    s.onclick = () => { container.dataset.value = s.dataset.value; paintStarRating(containerId, +s.dataset.value); };
+    s.onmouseenter = () => paintStarRating(containerId, +s.dataset.value);
+  });
+  container.onmouseleave = () => paintStarRating(containerId, +container.dataset.value);
+}
+setupStarRating('feedback-rating');
+
 function submitFeedback() {
   const text = document.getElementById('feedback-text').value.trim();
-  if (!text) return;
-  // In production: send to your backend endpoint or email service
-  // For now: open a mailto as fallback
-  location.href = 'mailto:feedback@immunequest.org?subject=Feedback&body='+encodeURIComponent(text);
+  const ratingEl = document.getElementById('feedback-rating');
+  const rating = parseInt(ratingEl.dataset.value || '0', 10);
+  if (!text && !rating) return; // nothing to send — at least one of the two is required
+  // Fire-and-forget — this is low-stakes anonymous feedback, not worth
+  // blocking the confirmation (or the player's next click) on network
+  // latency or a Worker that briefly hiccups.
+  fetch(FEEDBACK_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rating, text }),
+  }).catch(() => {});
   document.getElementById('feedback-text').value = '';
+  ratingEl.dataset.value = '0';
+  paintStarRating('feedback-rating', 0);
   document.getElementById('feedback-confirm').style.display = 'block';
 }
 
@@ -2004,6 +2086,12 @@ function submitFeedback() {
 (function() {
   const noTrack = localStorage.getItem('iq_no_track') === '1';
   document.getElementById('toggle-tracking').checked = !noTrack;
+})();
+
+// Init sound toggle from stored preference — same default-on/'1'-means-
+// muted convention as the tracking toggle above.
+(function() {
+  document.getElementById('toggle-sound').checked = localStorage.getItem('iq_sound_muted') !== '1';
 })();
 
 // ════════════════════════════════════════════════
