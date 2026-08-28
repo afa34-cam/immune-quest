@@ -474,14 +474,14 @@ function gameShareDone(kind) {
   }
 }
 
-// Same anonymous Cloudflare Worker + Google Sheet index.html's own
-// submitFeedback() posts to — see feedback-worker/README.md at the repo
-// root for setup. Only reachable from here when the game is opened
+// Same anonymous Google Apps Script Web App + Sheet index.html's own
+// submitFeedback() posts to — see feedback-apps-script/README.md at the
+// repo root for setup. Only reachable from here when the game is opened
 // standalone (window.self === window.top); embedded (the normal case,
 // launched from the hub) relays through the hub's OWN submitFeedback()
 // instead, via postMessage below, so every game funnels through that one
-// Worker call rather than each needing its own copy of the endpoint URL.
-const GAME_FEEDBACK_ENDPOINT = 'https://immune-quest-feedback.YOUR-SUBDOMAIN.workers.dev';
+// call rather than each needing its own copy of the endpoint URL.
+const GAME_FEEDBACK_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwBJVOQ3tAi_5TDrMexUD_KIYuj2MDPN5jLyXPlwukk_SEzGnINQVTPCX-a8geL6Cr9/exec';
 
 function gameSubmitFeedback() {
   const textEl = document.getElementById('game-feedback-text');
@@ -492,9 +492,12 @@ function gameSubmitFeedback() {
   if (window.self !== window.top) {
     window.parent.postMessage({ type: 'iq_submit_feedback', text, rating }, '*');
   } else {
+    // mode:'no-cors', no explicit Content-Type — see submitFeedback()'s
+    // own comment (index.html) for why: keeps this a CORS "simple
+    // request" so Apps Script never needs to handle a preflight.
     fetch(GAME_FEEDBACK_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      mode: 'no-cors',
       body: JSON.stringify({ rating, text }),
     }).catch(() => {});
   }

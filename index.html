@@ -2036,11 +2036,12 @@ function copyLink() {
   });
 }
 // Feedback is sent anonymously — no email, no account, no identifying data
-// of any kind — to a small Cloudflare Worker (see feedback-worker/ at the
-// repo root) that appends {timestamp, rating, text} as one row in a
-// private Google Sheet. FEEDBACK_ENDPOINT must point at your own deployed
-// Worker's URL — see feedback-worker/README.md for one-time setup.
-const FEEDBACK_ENDPOINT = 'https://immune-quest-feedback.YOUR-SUBDOMAIN.workers.dev';
+// of any kind — to a Google Apps Script Web App (see feedback-apps-script/
+// at the repo root) bound to a private Google Sheet, which appends
+// {timestamp, rating, text} as one row. FEEDBACK_ENDPOINT must point at
+// your own deployed Web App's URL — see feedback-apps-script/README.md
+// for one-time setup.
+const FEEDBACK_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwBJVOQ3tAi_5TDrMexUD_KIYuj2MDPN5jLyXPlwukk_SEzGnINQVTPCX-a8geL6Cr9/exec';
 
 // Plain click/hover-painted spans (not radio inputs) — submitFeedback()
 // below just reads the chosen value straight off the container's own
@@ -2070,10 +2071,15 @@ function submitFeedback() {
   if (!text && !rating) return; // nothing to send — at least one of the two is required
   // Fire-and-forget — this is low-stakes anonymous feedback, not worth
   // blocking the confirmation (or the player's next click) on network
-  // latency or a Worker that briefly hiccups.
+  // latency or a hiccup on Google's end. mode:'no-cors' (and no explicit
+  // Content-Type — a plain string body defaults to text/plain, one of the
+  // CORS-safelisted types) keeps this a "simple request": Apps Script Web
+  // Apps don't handle a JSON-triggered CORS preflight cleanly, so this
+  // sidesteps needing one at all. The response is opaque either way,
+  // which is fine — nothing here reads it.
   fetch(FEEDBACK_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    mode: 'no-cors',
     body: JSON.stringify({ rating, text }),
   }).catch(() => {});
   document.getElementById('feedback-text').value = '';
