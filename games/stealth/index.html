@@ -6,7 +6,7 @@
 <title>Stealth Mission — Immune Quest</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/ui.css?cachebust=214">
+<link rel="stylesheet" href="../shared/ui.css?cachebust=219">
 <style>
   /* Dark navy + toxic-green "pathogen" theme */
   :root{
@@ -2072,14 +2072,14 @@ const STEALTH_GAME_CONFIG = {
 };
 </script>
 
-<script src="../shared/ui.js?cachebust=214"></script>
+<script src="../shared/ui.js?cachebust=219"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=214"></script>
-<script src="board.js?cachebust=214"></script>
-<script src="cards.js?cachebust=214"></script>
-<script src="game.js?cachebust=214"></script>
-<script src="game-ui.js?cachebust=214"></script>
+<script src="config.js?cachebust=219"></script>
+<script src="board.js?cachebust=219"></script>
+<script src="cards.js?cachebust=219"></script>
+<script src="game.js?cachebust=219"></script>
+<script src="game-ui.js?cachebust=219"></script>
 
 <script>
 // Initialize shared UI with game config
@@ -2134,7 +2134,7 @@ const PRESETS = [
     color:'#00e5ff',
     info:'A highly contagious virus that infects the gut and causes vomiting and diarrhoea.',
     infoLong:'Norovirus is one of the most contagious viruses known, as little as 18 virus particles can cause an infection! Norovirus can be spread by accidentally swallowing tiny particles of faeces (poop 💩) or vomit 🤮 from an infected person. This can happen through contaminated food, water or surfaces.\n\nSymptoms (vomiting, diarrhoea, stomach cramps) usually appear within 12–48 hours and most people will make a full recovery in 2 to 3 days without needing medicine. Norovirus can be spread for 2 weeks or more after you feel better! There is currently no vaccine available. To stop norovirus spreading, you should wash your hands thoroughly after using the toilet, after contact with a sick individual, and before preparing and eating food.',
-    tissue:['intestine-tropism'], replication: 8, mutation:'low', abilities:['mhc1-downreg']
+    tissue:['intestine-tropism'], replication: 8, mutation:'low', abilities:['activate-tregs']
   },
   {
     id:'hepatitis', icon:'🟡', iconImg:'assets/build-virus/hepatitis_virus.svg', name:'Hepatitis virus', tagline:'The Silent Intruder',
@@ -2208,9 +2208,10 @@ function generateDeck(tissue, replication, mutation, abilities){
   deck.push('antibody-escape-lung', 'antibody-escape-liver', 'antibody-escape-intestine');
   deck.push('cytokine-neutralise-blue', 'cytokine-neutralise-orange', 'cytokine-neutralise-red');
   // Activate Tregs and T-Cell Evasion are opt-in abilities (see
-  // ABILITY_IDS) — Influenza/Norovirus/Hepatitis bake T-Cell Evasion into
-  // their own `abilities` array (see PRESETS below) so it stays available
-  // there; Activate Tregs is custom-virus-only, not on any preset.
+  // ABILITY_IDS) — Influenza/Hepatitis bake T-Cell Evasion, and Norovirus
+  // bakes Activate Tregs, into their own `abilities` array (see PRESETS
+  // below) so each stays available there even though both are otherwise
+  // custom-virus-only picks.
   // 'mhc1-downreg' is a single builder-facing marker standing in for all
   // 3 tissue variants — expand it here rather than pushing the marker id
   // itself, which isn't a real card.
@@ -2268,9 +2269,9 @@ function selectEmoji(emoji, e){
 const TROPISM_IDS = ['lung-tropism', 'liver-tropism', 'intestine-tropism'];
 // Cytokine Neutralisation is standard kit for every virus (see
 // generateDeck()) — not opt-in. Activate Tregs and T-Cell Evasion ARE
-// opt-in here, but only for custom-built viruses; Influenza/Norovirus/
-// Hepatitis get T-Cell Evasion (not Activate Tregs) baked into their own
-// `abilities` array directly on the PRESETS entry instead of through this
+// opt-in here for custom-built viruses; Influenza/Hepatitis instead get
+// T-Cell Evasion, and Norovirus gets Activate Tregs, baked directly into
+// their own `abilities` array on the PRESETS entry instead of through this
 // picker. Antigenic Drift is a passive trait, not a real playable card —
 // it's pushed into the deck id list below purely so it shows up in deck
 // previews (STEALTH_CARD_DEFS has no entry for it, so _buildFromLoadout,

@@ -344,36 +344,51 @@ class StealthBoard {
   }
 
   // Antibody protects a whole row PERMANENTLY, but only a row with no
-  // virus anywhere in it. Prefers the row immediately ahead of the
-  // infection front (deepest infected row + 1) so it's actually in the
-  // virus's path; falls back to the closest virus-free row to the front.
+  // virus anywhere in it. Only ever targets ONE specific, meaningful row —
+  // never falls back to some other distant virus-free row just to spend
+  // the card — so once that meaningful row is already covered, this
+  // returns null and the immune system holds the card in hand instead
+  // (see isUseful(), cards.js's _antibodyDef()). That reserve matters
+  // because Antibody Escape (a virus card) strips ALL antibodies from a
+  // whole tissue at once — an Antibody sitting in hand can be replayed
+  // there the very next turn, rather than the immune system having to
+  // wait on a fresh draw.
   //
-  // adjacentThreatRow (caller-supplied — see _adjacentThreatRow(), cards.js)
-  // is how deep an ADJACENT active tissue has already reached, used only
-  // when THIS tissue has no infection of its own (deepest === -1). Guarding
-  // row 0 (the entry point) there only blocks growth that starts right at
-  // the top, but this tissue can also be reached via SPILLOVER from that
-  // adjacent tissue (_runSpillover(), game.js), which lands in THIS
-  // tissue's edge column at the SAME row number the source tissue's own
-  // infection has reached — not row 0. Targeting that exact row directly
-  // denies the spillover cell itself, rather than only reacting after the
-  // fact. Falls back to row 0 when there's no adjacent threat to react to
-  // either (a genuinely untouched, unthreatened tissue).
+  // Inactive tissue (deepest === -1): row 0 first — basic pre-fortification
+  // at the entry point, since that's the far more common way this tissue
+  // gets infected (a tropism_gain mutation seeding row 0 directly). Only
+  // once row 0 is already covered does a SECOND Antibody in this same
+  // still-inactive tissue go toward adjacentThreatRow (caller-supplied —
+  // see _adjacentThreatRow(), cards.js): how deep an ADJACENT active
+  // tissue has already reached, and so the exact row a SPILLOVER
+  // (_runSpillover(), game.js) would actually land on in this tissue's
+  // edge column — preloaded protection in case the virus later gains
+  // tropism here too. Neither row is a distance-based guess; both are the
+  // two actual ways this tissue could end up seeded.
+  //
+  // Active tissue (deepest >= 0): the row directly ahead of the infection
+  // front (deepest + 1) is the primary target — the only row that actually
+  // blocks the virus's next forward step. Once THAT'S covered, a further
+  // Antibody in this same active tissue only goes toward adjacentThreatRow
+  // if it's a genuine, still-open spillover risk from an adjacent tissue —
+  // an extra row worth placing precisely because it guards a real second
+  // opening (the spillover entry point), not because there's nothing
+  // better to do with the card.
   _pickAntibodyRow(adjacentThreatRow = -1) {
-    const isVirusFree = r => this.cells[r].every(c => c.state !== 'infected' && c.state !== 'dormant');
-    const hasProtectableCell = r => this.cells[r].some(c => c.state === 'healthy');
-    const candidates = [];
-    for (let r = 0; r < this.rows; r++) {
-      if (isVirusFree(r) && hasProtectableCell(r)) candidates.push(r);
-    }
-    if (candidates.length === 0) return null;
+    const isCandidate = r => r >= 0 && r < this.rows
+      && this.cells[r].every(c => c.state !== 'infected' && c.state !== 'dormant')
+      && this.cells[r].some(c => c.state === 'healthy');
 
     const deepest = this._deepestInfectedRow();
-    const preferred = deepest === -1
-      ? (adjacentThreatRow >= 0 ? adjacentThreatRow : 0)
-      : deepest + 1;
-    if (candidates.includes(preferred)) return preferred;
-    return candidates.reduce((best, r) => Math.abs(r - preferred) < Math.abs(best - preferred) ? r : best);
+    if (deepest === -1) {
+      if (isCandidate(0)) return 0;
+      if (adjacentThreatRow >= 0 && isCandidate(adjacentThreatRow)) return adjacentThreatRow;
+      return null;
+    }
+    const preferred = deepest + 1;
+    if (isCandidate(preferred)) return preferred;
+    if (adjacentThreatRow >= 0 && isCandidate(adjacentThreatRow)) return adjacentThreatRow;
+    return null;
   }
 
   protectRow(row, turns) {
@@ -403,21 +418,57 @@ class StealthBoard {
   // 5-wide board) — the immune system should get its full blocked
   // frontage out of every Cytokine play, not lose cells off the edge just
   // because the strategic target (_pickStrategicAntibodyTarget()) happened
-  // to land near one. Every shape here includes [0, 0] (the target cell
-  // itself), and the nudge never moves further than the shape's own
-  // bounding box requires, so the target stays covered either way — this
-  // only recovers cells that would otherwise be wasted, never sacrifices
-  // the actual entry point being guarded.
+  // to land near one.
+  //
+  // Beyond just fitting on-board, the anchor is also chosen to maximise
+  // how many currently-healthy cells the shape actually lands on: a fixed
+  // anchor can waste shape cells on ground that doesn't need protecting
+  // (already infected/dormant, or already shielded), when shifting WHICH
+  // shape cell sits on the original target still blocks the exact opening
+  // this play was meant to guard while covering more real healthy cells
+  // elsewhere in the shape. Every candidate anchor below is required to
+  // keep the ORIGINAL (centerCol, centerRow) covered by some cell of the
+  // shape — this never trades away the actual blocking purpose of the
+  // play just to grab free cells that don't matter for blocking anything.
   protectShape(centerCol, centerRow, offsets, turns, color = null) {
     const dxs = offsets.map(([dx]) => dx);
     const dys = offsets.map(([, dy]) => dy);
     const minDx = Math.min(...dxs), maxDx = Math.max(...dxs);
     const minDy = Math.min(...dys), maxDy = Math.max(...dys);
-    let col = centerCol, row = centerRow;
-    if (col + minDx < 0) col = -minDx;
-    if (col + maxDx > this.cols - 1) col = this.cols - 1 - maxDx;
-    if (row + minDy < 0) row = -minDy;
-    if (row + maxDy > this.rows - 1) row = this.rows - 1 - maxDy;
+    const clampToBoard = (c, r) => {
+      let col = c, row = r;
+      if (col + minDx < 0) col = -minDx;
+      if (col + maxDx > this.cols - 1) col = this.cols - 1 - maxDx;
+      if (row + minDy < 0) row = -minDy;
+      if (row + maxDy > this.rows - 1) row = this.rows - 1 - maxDy;
+      return [col, row];
+    };
+
+    let bestAnchor = null, bestScore = -1;
+    const seen = new Set();
+    offsets.forEach(([dx, dy]) => {
+      const [c, r] = clampToBoard(centerCol - dx, centerRow - dy);
+      const key = `${c},${r}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const stillCovers = offsets.some(([odx, ody]) => c + odx === centerCol && r + ody === centerRow);
+      if (!stillCovers) return;
+      const score = offsets.reduce((n, [odx, ody]) => {
+        const cell = this.getCell(c + odx, r + ody);
+        return n + (cell && cell.state === 'healthy' ? 1 : 0);
+      }, 0);
+      if (score > bestScore) { bestScore = score; bestAnchor = [c, r]; }
+    });
+    // If NO candidate can shift the shape without losing the original
+    // target cell (only possible right at a board edge/corner, when the
+    // shape has no offset diagonal enough to reach back to it — e.g. the
+    // cross shape has no [-1,-1] arm), anchor directly on the target
+    // itself rather than clamping away from it: any arm that falls
+    // off-board there is simply skipped below, same as one landing on a
+    // non-healthy cell already is, but the one cell that actually matters
+    // (the opening this play exists to block) is never sacrificed just to
+    // keep the WHOLE shape technically on-board.
+    const [col, row] = bestAnchor || [centerCol, centerRow];
 
     const protectedCells = [];
     const placementId = color ? _nextCytokinePlacementId++ : null;
@@ -486,13 +537,17 @@ class StealthBoard {
   //               options everywhere.
   //   Priority 3: no infection anywhere on this board yet — guard whatever
   //               row an ADJACENT active tissue's own infection has
-  //               already reached (adjacentThreatRow, caller-supplied —
-  //               see _adjacentThreatRow(), cards.js), matching the exact
-  //               row a spillover would actually land on, rather than
-  //               row 0 (only relevant to a mutation-seeded start, a much
-  //               rarer path in for a tissue nothing has reached yet).
-  //               Falls back to row 0 when there's no adjacent threat to
-  //               react to either.
+  //               already reached, in the exact EDGE COLUMN that faces
+  //               that neighbour (adjacentThreatRow/adjacentThreatCol,
+  //               caller-supplied — see _adjacentThreatCell(), cards.js),
+  //               matching precisely where a spillover would actually land
+  //               (_spilloverCandidates(), game.js, pairs the same two
+  //               facing edge columns) rather than this board's middle
+  //               column, which only matters for the OTHER, rarer seed
+  //               path (a mutation-seeded start, via seedInfection()'s own
+  //               default middle column). Falls back to row 0 / the middle
+  //               column when there's no adjacent threat to react to
+  //               either.
   //
   // Among tied candidates at whichever priority wins, _pickSpreadOutCandidate()
   // below breaks the tie toward whichever one is farthest from EXISTING
@@ -504,7 +559,7 @@ class StealthBoard {
   // completely open. The virus only loses once it has nowhere left to
   // spread at all, so maximising the WIDTH of blocked area matters more
   // than reinforcing a spot that's already covered.
-  _pickStrategicAntibodyTarget(adjacentThreatRow = -1) {
+  _pickStrategicAntibodyTarget(adjacentThreatRow = -1, adjacentThreatCol = null) {
     for (let r = this.rows - 1; r >= 0; r--) {
       if (!this.cells[r].some(c => c.state === 'infected')) continue;
 
@@ -528,8 +583,9 @@ class StealthBoard {
     }
 
     if (this._deepestInfectedRow() === -1) {
-      const entryCol = Math.floor(this.cols / 2);
       const targetRow = adjacentThreatRow >= 0 ? adjacentThreatRow : 0;
+      const entryCol = adjacentThreatRow >= 0 && adjacentThreatCol !== null
+        ? adjacentThreatCol : Math.floor(this.cols / 2);
       const target = this.getCell(entryCol, targetRow);
       if (target && target.state === 'healthy') return { col: entryCol, row: targetRow };
     }

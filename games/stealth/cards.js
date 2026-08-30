@@ -354,7 +354,14 @@ function _tcellDef(tissue) {
   return {
     id: `immune-tcell-${tissue}`, name: `T-Cell: ${_capitalize(tissue)}`, icon: '🔬', tissue,
     tooltip: `Clears an entire row of infected cells in ${_capitalize(tissue)}.`,
-    isUseful(game) { return game.boards[tissue]._pickTCellRow() !== null; },
+    // hasSpreadTarget() guards against a boxed-in tissue specifically: with
+    // no spread target left anywhere on this board, every infected cell is
+    // already a dead end, and "boxed in" (_checkLoss(), game.js) is itself
+    // a win condition — clearing a row there back to healthy would only
+    // ever hand a still-boxed-in NEIGHBOUR cell a fresh opening, undoing
+    // that progress and dragging the game out for no benefit (there's
+    // nothing left to lose by leaving those cells infected).
+    isUseful(game) { return game.boards[tissue].hasSpreadTarget() && game.boards[tissue]._pickTCellRow() !== null; },
     apply(game, ctx) {
       const board = game.boards[tissue];
       const cleared = [];
@@ -385,6 +392,30 @@ function _adjacentThreatRow(boards, tissue) {
   if (i === -1) return -1;
   return [order[i - 1], order[i + 1]].filter(Boolean)
     .reduce((max, n) => Math.max(max, boards[n] ? boards[n]._deepestInfectedRow() : -1), -1);
+}
+
+// Like _adjacentThreatRow() above, but also reports the exact edge column
+// of `tissue` that faces whichever neighbour produced the deepest row —
+// Cytokine's pre-fortification placement (_cytokinePickTarget() below)
+// needs the real landing COLUMN too, not just the row, since its shield
+// only covers a small local patch rather than a whole row the way
+// Antibody's permanent protection does (protectRow() spans every column,
+// so Antibody never needed this). Mirrors _spilloverCandidates()'s own
+// column pairing (game.js) exactly: whichever side of `tissue` physically
+// touches the threatening neighbour, based on ADJACENCY_ORDER position.
+// null if neither neighbour has any infection to threaten with.
+function _adjacentThreatCell(boards, tissue) {
+  const order = STEALTH_CONFIG.BOARD.ADJACENCY_ORDER;
+  const i = order.indexOf(tissue);
+  if (i === -1) return null;
+  let best = null;
+  [order[i - 1], order[i + 1]].filter(Boolean).forEach(n => {
+    const row = boards[n] ? boards[n]._deepestInfectedRow() : -1;
+    if (row < 0 || (best && row <= best.row)) return;
+    const col = order.indexOf(tissue) < order.indexOf(n) ? boards[tissue].cols - 1 : 0;
+    best = { row, col };
+  });
+  return best;
 }
 
 // Antibody protects an ENTIRE row permanently — but only a row that has no
@@ -431,7 +462,8 @@ function _cytokinePickTarget(game) {
   }
   const inactive = STEALTH_CONFIG.BOARD.TISSUES.filter(t => !game.activeTissues.includes(t));
   for (const t of inactive) {
-    const target = game.boards[t]._pickStrategicAntibodyTarget(_adjacentThreatRow(game.boards, t));
+    const threat = _adjacentThreatCell(game.boards, t);
+    const target = game.boards[t]._pickStrategicAntibodyTarget(threat ? threat.row : -1, threat ? threat.col : null);
     if (target) return { tissue: t, ...target };
   }
   return null;
@@ -489,10 +521,20 @@ function _cytokineDef(color, baseTier) {
 // and (unlike T-Cell) never scales up with mRNA Vaccine's boost. Targets
 // whichever active tissue's infection has advanced furthest (closest to
 // the win condition), tie-broken randomly.
+//
+// Skips any tissue that's already boxed in (hasSpreadTarget() false, same
+// check T-Cell's own isUseful() uses above) — with no spread target left
+// there, every infected cell is a dead end already, so clearing one only
+// ever risks handing a still-infected neighbour a fresh opening rather
+// than making any real progress. If EVERY active tissue is boxed in, there
+// is nowhere left worth spending an NK Cell on at all — returns null and
+// the card stays in hand.
 function _nkPickTarget(game) {
   let best = null;
   game.activeTissues.forEach(t => {
-    const cell = game.boards[t]._pickDeepestInfectedCell();
+    const board = game.boards[t];
+    if (!board.hasSpreadTarget()) return;
+    const cell = board._pickDeepestInfectedCell();
     if (cell && (!best || cell.row > best.row)) best = { tissue: t, ...cell };
   });
   return best;

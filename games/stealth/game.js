@@ -19,11 +19,19 @@
 // played this same turn; NK Cell/T-Cell go before Cytokine/Antibody so a
 // row they just cleared is already virus-free by the time the protector
 // cards pick where to shield, letting the block land the same turn instead
-// of reacting a turn late. Cards not covered by an explicit tier keep the
-// old (arbitrary hand-order) behaviour, sorted last.
+// of reacting a turn late. NK Cell specifically goes before T-Cell (not
+// just tied with it): the infection front is usually just a thin leading
+// edge (one freshly-spread cell), with the row behind it already denser —
+// so NK Cell sniping that single front cell first, THEN T-Cell re-picking
+// its target (_pickTCellRow(), board.js — always recomputed fresh, not
+// cached), naturally shifts T-Cell's whole-row sweep one row further back
+// to the denser row instead of both cards converging on the same thin
+// front row. Cards not covered by an explicit tier keep the old (arbitrary
+// hand-order) behaviour, sorted last.
 function _immunePlayPriority(id) {
   if (id === 'vaccine-mrna') return 0;
-  if (id === 'immune-nkcell' || id.startsWith('immune-tcell-')) return 1;
+  if (id === 'immune-nkcell') return 1;
+  if (id.startsWith('immune-tcell-')) return 1.5;
   if (id.startsWith('immune-antibody-') || id.startsWith('immune-cytokine-')) return 2;
   return 3;
 }
