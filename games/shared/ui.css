@@ -1,7 +1,13 @@
 /* ════════════════════════════════════════════════════════════════
-   SHARED UI STYLES — Header, Footer, Menu
-   Used across all game pages
+   SHARED UI STYLES — root scale, header, footer, menus & modals
+   Used by the platform page and every game (pages can override after it).
    ════════════════════════════════════════════════════════════════ */
+
+/* Fluid scale for every page: sizes are in rem, so this one root
+   font-size scales the whole UI with whichever of the window's width or
+   height is tighter — 14px floor for short laptop windows, 24px cap on big
+   monitors (embedded games measure their own iframe, not the window). */
+html{ font-size:clamp(14px, min(1.45vw, 2.25vh), 24px); }
 
 :root{
   --bg:#070c18; --panel:#0d1525; --border:#24406a;
@@ -14,39 +20,39 @@
    ────────────────────────────────────────────────────────────── */
 .header-outer{
   position:relative; z-index:10; border-bottom:1px solid var(--border);
-  background:rgba(7,12,24,0.88); backdrop-filter:blur(10px);
+  background:rgba(7,12,24,0.88); backdrop-filter:blur(0.625rem);
 }
 
 header{
   display:flex; align-items:center; justify-content:space-between;
-  padding:16px 20px; max-width:1400px; margin:0 auto; position:relative; width:100%;
+  padding:1rem 1.25rem; max-width:87.5rem; margin:0 auto; position:relative; width:100%;
   font-family:'Orbitron',monospace;
 }
 
 .logo-wrap{
-  display:flex; align-items:center; gap:12px;
+  display:flex; align-items:center; gap:0.75rem;
 }
 
 .back-link{
-  font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+  font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px;
   color:var(--muted); text-decoration:none; transition:color .2s;
 }
 
 .back-link:hover{ color:var(--accent); }
 
 .logo{
-  font-family:'Orbitron',monospace; font-size:19px; font-weight:900;
-  letter-spacing:2px; text-shadow:0 0 16px rgba(0,229,255,.4);
+  font-family:'Orbitron',monospace; font-size:1.1875rem; font-weight:900;
+  letter-spacing:2px; text-shadow:0 0 1rem rgba(0,229,255,.4);
 }
 
 .header-right{
-  display:flex; gap:10px; align-items:center;
+  display:flex; gap:0.625rem; align-items:center;
 }
 
 .help-btn{
-  background:none; border:1px solid var(--border); border-radius:8px;
-  color:var(--muted); cursor:pointer; padding:7px 12px;
-  font-family:'Orbitron',monospace; font-size:12px; letter-spacing:1px;
+  background:none; border:1px solid var(--border); border-radius:0.5rem;
+  color:var(--muted); cursor:pointer; padding:0.4375rem 0.75rem;
+  font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1px;
   transition:border-color .2s, color .2s;
 }
 
@@ -55,11 +61,11 @@ header{
 }
 
 .menu-btn{
-  background:none; border:1px solid var(--border); border-radius:8px;
-  color:var(--muted); cursor:pointer; padding:7px 12px;
-  font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+  background:none; border:1px solid var(--border); border-radius:0.5rem;
+  color:var(--muted); cursor:pointer; padding:0.4375rem 0.75rem;
+  font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px;
   transition:border-color .2s, color .2s;
-  display:flex; align-items:center; gap:6px;
+  display:flex; align-items:center; gap:0.375rem;
 }
 
 .menu-btn:hover{
@@ -70,8 +76,8 @@ header{
    FOOTER
    ────────────────────────────────────────────────────────────── */
 footer{
-  position:relative; z-index:1; text-align:center; padding:14px;
-  font-size:11px; color:var(--muted); border-top:1px solid var(--border);
+  position:relative; z-index:1; text-align:center; padding:0.875rem;
+  font-size:0.8125rem; color:var(--muted); border-top:1px solid var(--border);
   letter-spacing:1px; margin-top:auto;
 }
 
@@ -84,7 +90,7 @@ footer a{
    ────────────────────────────────────────────────────────────── */
 .modal-overlay{
   display:none; position:fixed; inset:0;
-  background:rgba(7,12,24,0.92); z-index:2000; backdrop-filter:blur(6px);
+  background:rgba(7,12,24,0.92); z-index:2000; backdrop-filter:blur(0.375rem);
   align-items:center; justify-content:center;
 }
 
@@ -98,63 +104,41 @@ footer a{
 #menu-modal{ z-index:2500; }
 
 .menu-modal{
-  background:var(--panel); border:1px solid var(--border); border-radius:16px;
-  width:100%; max-width:300px; margin:20px;
-  box-shadow:0 0 40px rgba(57,255,20,.12);
-}
-
-.menu-modal-header{
-  background:rgba(57,255,20,.08); border-bottom:1px solid var(--border);
-  padding:14px 18px; display:flex; justify-content:space-between; align-items:center;
-}
-
-.menu-modal-title{
-  font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px;
-  color:var(--stealth);
+  background:var(--panel); border:1px solid var(--border); border-radius:1rem;
+  width:100%; max-width:18.75rem; margin:1.25rem;
+  box-shadow:0 0 2.5rem rgba(57,255,20,.12);
 }
 
 .modal-close{
-  background:none; border:none; color:var(--muted); font-size:18px;
-  cursor:pointer; padding:0 4px;
+  background:none; border:none; color:var(--muted); font-size:1.125rem;
+  cursor:pointer; padding:0 0.25rem;
 }
 
 .modal-close:hover{
   color:var(--text);
 }
 
-/* display:inline-grid with a single (default) auto-sized column, rather
-   than flex-column, so every .menu-item below sizes to its own content
-   instead of stretching to the full modal width — but a grid column track
-   sizes itself to its WIDEST cell and then stretches every other cell in
-   that same column to match (grid's own default justify-items:stretch),
-   so the buttons still all end up equally wide (matching the longest
-   label, e.g. "Back to Patient") rather than each hugging its own
-   individually-shorter text. align-self:flex-start on the parent flex
-   layout (.modal-tab-content.active) keeps this content-sized block
-   left-aligned in the wider modal instead of also being force-stretched
-   to full width. */
+/* Game menu's first tab: an inline grid, so all buttons are as wide as
+   the longest label (not the full modal width), kept left-aligned. */
 .menu-modal-body{
-  padding:12px; display:inline-grid; gap:6px; align-self:flex-start;
+  padding:0.75rem; display:inline-grid; gap:0.375rem; align-self:flex-start;
 }
 
 .menu-item{
-  padding:10px 12px; border-radius:8px; background:none;
+  padding:0.625rem 0.75rem; border-radius:0.5rem; background:none;
   border:1px solid var(--border); color:var(--text); cursor:pointer;
-  font-size:11px; font-family:'Orbitron',monospace; letter-spacing:1px;
+  font-size:0.8125rem; font-family:'Orbitron',monospace; letter-spacing:1px;
   transition:border-color .2s, background .2s; text-decoration:none;
-  display:flex; align-items:center; gap:10px; text-align:left;
+  display:flex; align-items:center; gap:0.625rem; text-align:left;
 }
 
 .menu-item:hover{
   border-color:var(--accent); background:rgba(0,229,255,.06);
 }
 
-/* Own font-size, independent of the label's — lets the icon read bigger
-   without also blowing up the (Orbitron, already-wide-tracking) label
-   text next to it. Matches width/centering with .modal-btn-icon below so
-   every icon in this menu (landing tab here, Settings/Share tabs there)
-   lines up the same regardless of which tab it's in. */
-.menu-item-icon{ font-size:20px; width:20px; text-align:center; flex-shrink:0; }
+/* Menu icons sized apart from their labels, same width as
+   .modal-btn-icon so icons line up across tabs. */
+.menu-item-icon{ font-size:1.25rem; width:1.25rem; text-align:center; flex-shrink:0; }
 
 /* ──────────────────────────────────────────────────────────────
    TABBED MENU (game pages) — mirrors the main hub's own menu modal
@@ -163,86 +147,80 @@ footer a{
    ────────────────────────────────────────────────────────────── */
 .modal{
   background:var(--panel); border:1px solid var(--border);
-  border-radius:16px; width:100%; margin:20px; overflow:hidden;
-  box-shadow:0 0 40px rgba(0,229,255,.12);
+  border-radius:1rem; width:100%; margin:1.25rem; overflow:hidden;
+  box-shadow:0 0 2.5rem rgba(0,229,255,.12);
 }
 .modal-header{
   background:rgba(0,180,255,.06); border-bottom:1px solid var(--border);
-  padding:14px 18px; display:flex; justify-content:space-between; align-items:center;
+  padding:0.875rem 1.125rem; display:flex; justify-content:space-between; align-items:center;
 }
-.modal-title{ font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--accent); }
-.modal-body{ padding:18px; display:flex; flex-direction:column; gap:16px; }
+.modal-title{ font-family:'Orbitron',monospace; font-size:0.8125rem; letter-spacing:2px; color:var(--accent); }
+.modal-body{ padding:1.125rem; display:flex; flex-direction:column; gap:1rem; }
 
 .modal-tabs{ display:flex; border-bottom:1px solid var(--border); }
 .modal-tab{
-  flex:1; padding:10px; text-align:center; cursor:pointer;
-  font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px;
+  flex:1; padding:0.625rem; text-align:center; cursor:pointer;
+  font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:1px;
   color:var(--muted); border-bottom:2px solid transparent;
   transition:color .2s, border-color .2s;
 }
 .modal-tab.active{ color:var(--accent); border-bottom-color:var(--accent); }
 .modal-tab-content{ display:none; }
-.modal-tab-content.active{ display:flex; flex-direction:column; gap:12px; }
+.modal-tab-content.active{ display:flex; flex-direction:column; gap:0.75rem; }
 
-.modal-section{ display:flex; flex-direction:column; gap:8px; }
-.modal-section-title{ font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
-/* Divider BETWEEN sections (e.g. Settings tab's Privacy/Progress), not
-   inside one — was previously a border-bottom on .toggle-row itself
-   (below), which put the line mid-Privacy-section (between the toggle and
-   its own explanatory text) instead of actually separating the two
-   sections, since that text sits after the toggle-row as a sibling within
-   the SAME section, not after it. */
-.modal-section + .modal-section{ border-top:1px solid var(--border); padding-top:12px; }
+.modal-section{ display:flex; flex-direction:column; gap:0.5rem; }
+.modal-section-title{ font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+/* Divider between sections of a menu tab. */
+.modal-section + .modal-section{ border-top:1px solid var(--border); padding-top:0.75rem; }
 
-.toggle-row{ display:flex; justify-content:space-between; align-items:center; padding:8px 0; }
-.toggle-label{ font-size:12px; color:var(--text); }
-.toggle-sub{ font-size:10px; color:var(--muted); margin-top:2px; }
-.toggle-switch{ position:relative; width:40px; height:22px; flex-shrink:0; }
+.toggle-row{ display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; }
+.toggle-label{ font-size:0.75rem; color:var(--text); }
+.toggle-sub{ font-size:0.75rem; color:var(--muted); margin-top:2px; }
+.toggle-switch{ position:relative; width:2.5rem; height:1.375rem; flex-shrink:0; }
 .toggle-switch input{ opacity:0; width:0; height:0; }
 .toggle-slider{
   position:absolute; inset:0; background:var(--border);
-  border-radius:11px; cursor:pointer; transition:background .2s;
+  border-radius:0.6875rem; cursor:pointer; transition:background .2s;
 }
 .toggle-slider::before{
-  content:''; position:absolute; width:16px; height:16px; left:3px; top:3px;
+  content:''; position:absolute; width:1rem; height:1rem; left:0.1875rem; top:0.1875rem;
   background:#fff; border-radius:50%; transition:transform .2s;
 }
 .toggle-switch input:checked + .toggle-slider{ background:var(--accent); }
-.toggle-switch input:checked + .toggle-slider::before{ transform:translateX(18px); }
+.toggle-switch input:checked + .toggle-slider::before{ transform:translateX(1.125rem); }
 
 .modal-btn{
-  display:flex; align-items:center; gap:10px;
-  padding:10px 14px; border-radius:8px;
+  display:flex; align-items:center; gap:0.625rem;
+  padding:0.625rem 0.875rem; border-radius:0.5rem;
   background:rgba(255,255,255,.04); border:1px solid var(--border);
-  color:var(--text); cursor:pointer; font-size:12px;
+  color:var(--text); cursor:pointer; font-size:0.75rem;
   transition:border-color .2s, background .2s;
   text-decoration:none; font-family:'Nunito',sans-serif;
 }
 .modal-btn:hover{ border-color:var(--accent); background:rgba(0,229,255,.06); }
-.modal-btn-icon{ font-size:20px; width:20px; text-align:center; }
+.modal-btn-icon{ font-size:1.25rem; width:1.25rem; text-align:center; }
 
-.share-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.share-grid{ display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
 
-.about-text{ font-size:11px; color:var(--muted); line-height:1.7; }
+.about-text{ font-size:0.8125rem; color:var(--muted); line-height:1.7; }
 .about-text a{ color:var(--accent); text-decoration:none; }
 
 .feedback-area{
   width:100%; background:rgba(255,255,255,.03); border:1px solid var(--border);
-  border-radius:8px; padding:10px; color:var(--text); font-family:'Nunito',sans-serif;
-  font-size:12px; resize:vertical; min-height:80px; outline:none;
+  border-radius:0.5rem; padding:0.625rem; color:var(--text); font-family:'Nunito',sans-serif;
+  font-size:0.75rem; resize:vertical; min-height:5rem; outline:none;
 }
 .feedback-area:focus{ border-color:var(--accent); }
-/* Star rating — see index.html's own copy of this same set of rules for
-   why (shared markup pattern, not a shared component). */
-.feedback-rating-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.star-rating{ display:flex; gap:4px; font-size:22px; line-height:1; cursor:pointer; }
+/* Star rating (same markup as the platform page's feedback tab). */
+.feedback-rating-row{ display:flex; align-items:center; justify-content:space-between; gap:0.75rem; }
+.star-rating{ display:flex; gap:0.25rem; font-size:1.375rem; line-height:1; cursor:pointer; }
 .star-rating .star{ color:rgba(255,255,255,.15); transition:color .15s; }
 .star-rating .star.filled{ color:#ffb400; }
-.feedback-rating-label{ font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-family:'Orbitron',monospace; }
+.feedback-rating-label{ font-size:0.75rem; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-family:'Orbitron',monospace; }
 .feedback-submit{
-  padding:9px 18px; background:rgba(0,229,255,.1); border:1px solid var(--accent);
-  border-radius:8px; color:var(--accent); font-family:'Orbitron',monospace;
-  font-size:9px; letter-spacing:2px; cursor:pointer; align-self:flex-end;
+  padding:0.5625rem 1.125rem; background:rgba(0,229,255,.1); border:1px solid var(--accent);
+  border-radius:0.5rem; color:var(--accent); font-family:'Orbitron',monospace;
+  font-size:0.6875rem; letter-spacing:2px; cursor:pointer; align-self:flex-end;
   transition:background .2s;
 }
 .feedback-submit:hover{ background:rgba(0,229,255,.2); }
@@ -251,7 +229,7 @@ footer a{
    RESPONSIVE
    ────────────────────────────────────────────────────────────── */
 @media (max-width:600px){
-  header{ padding:14px 16px; }
-  .logo{ font-size:16px; }
-  .menu-btn{ font-size:8px; padding:6px 10px; }
+  header{ padding:0.875rem 1rem; }
+  .logo{ font-size:1rem; }
+  .menu-btn{ font-size:0.625rem; padding:0.375rem 0.625rem; }
 }

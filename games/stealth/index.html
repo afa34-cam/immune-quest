@@ -4,11 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stealth Mission — Immune Quest</title>
+<link rel="icon" type="image/jpeg" href="../../assets/icons/app-icon.jpg">
+<link rel="apple-touch-icon" href="../../assets/icons/app-icon.jpg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/ui.css?cachebust=219">
+<link rel="stylesheet" href="../shared/ui.css?cachebust=221">
 <style>
-  /* Dark navy + toxic-green "pathogen" theme */
+  /* ═══════════════════════════════════════════════════════════════
+     STEALTH MISSION — page styles
+     Contents: theme & header · select screen · detail panel · builder
+     modal · buttons · help overlay · responsive / orientation lock ·
+     game screen (layout, phase panel, virus panel, mission log, banners,
+     cards, board, cell states & animations, hand, hint banner, draft &
+     trade pop-ups, mutation toast, card info modal, end screen)
+     All sizes are rem, scaled by the root font-size in shared/ui.css.
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* Theme: dark navy + toxic green */
   :root{
     --bg:#0b0616; --panel:#0d1525; --border:#24406a;
     --accent:#00e5ff; --accent2:#e0227a; --stealth:#39ff14;
@@ -17,19 +29,11 @@
     --card-bg:#131c33; --card-border:#2f4270;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
-  /* Thinner header than shared/ui.css's own default (16px 20px / 7px 12px
-     button padding) — scoped to this page only, not the shared file
-     itself, since ui.css is shared across every game and other games'
-     headers weren't asked for. Stealth Mission's board is the tightest on
-     vertical space of the games (see fitGameStage(), game-ui.js, which
-     scales the whole board+banners+log stage to fit under whatever's left
-     below the header), so every pixel reclaimed here directly grows the
-     board. Later in the cascade than ui.css's own header rule (this
-     <style> block loads after that stylesheet link, and wins ties by
-     source order at equal specificity), so no !important needed. */
-  .header-outer header{ padding:8px 20px; }
-  .header-outer .help-btn, .header-outer .menu-btn{ padding:5px 12px; }
-  .header-outer .logo{ font-size:16px; }
+  /* Slimmer header than the shared default (this page only) — the game
+     board is short on height, so every pixel here grows the board. */
+  .header-outer header{ padding:0.5rem 1.25rem; }
+  .header-outer .help-btn, .header-outer .menu-btn{ padding:0.3125rem 0.75rem; }
+  .header-outer .logo{ font-size:1rem; }
   body{
     background:var(--bg); color:var(--text); font-family:'Nunito',sans-serif;
     min-height:100vh; overflow-x:hidden; display:flex; flex-direction:column;
@@ -41,95 +45,78 @@
       radial-gradient(circle at 80% 70%, rgba(57,255,20,0.05), transparent 45%),
       linear-gradient(rgba(57,255,20,0.035) 1px, transparent 1px),
       linear-gradient(90deg, rgba(57,255,20,0.035) 1px, transparent 1px);
-    background-size:auto, auto, 44px 44px, 44px 44px;
+    background-size:auto, auto, 2.75rem 2.75rem, 2.75rem 2.75rem;
     pointer-events:none; z-index:0;
   }
 
-  .wrap{ position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:10px 20px 0; flex:1; width:100%; }
-  /* In-game, drop the select-screen's reading-width cap so the board
-     assembly can scale up to use a large desktop viewport, not just sit
-     capped at 1100px with wasted space either side. */
+  .wrap{ position:relative; z-index:1; max-width:68.75rem; margin:0 auto; padding:0.625rem 1.25rem 0; flex:1; width:100%; }
+  /* In game, no width cap — the board can use the whole screen. */
   body.in-game .wrap{ max-width:none; }
 
-  /* Header icon glyphs (back arrow, MENU/FULLSCREEN) bumped up on their
-     own, independent of the label text beside them — games/shared/ui.js
-     wraps each in <span class="hdr-icon">, this page is the only one that
-     actually sizes that span up, so other games' headers are unaffected.
-     The ? help button is bumped to the same size directly (it has no
-     separate label to protect from growing — the whole button is the
-     icon), so all three header buttons read as visually equal weight. */
-  .hdr-icon{ font-size:15px; }
-  .help-btn{ font-size:15px; }
-  /* Visual order menu → help → fullscreen, independent of the DOM order
-     .header-right is built in (games/shared/ui.js) — scoped here via flex
-     `order` instead of changing that shared build order, which other
-     games also rely on. */
-  #menu-trigger{ order:1; }
-  #help-trigger{ order:2; }
-  #fullscreen-trigger{ order:3; }
+  /* Header icons slightly larger on this page (.hdr-icon wraps the icon
+     part of each header button — see games/shared/ui.js). */
+  .hdr-icon{ font-size:0.9375rem; }
+  .help-btn{ font-size:0.9375rem; }
 
   /* ═══════════════════════════════════════════════════════════════
      SELECT SCREEN — intro copy + virus grid
      ═══════════════════════════════════════════════════════════════ */
-  .intro{ text-align:center; margin-bottom:30px; }
-  .eyebrow{ font-family:'Orbitron',monospace; font-size:9px; letter-spacing:4px; color:var(--muted); text-transform:uppercase; }
-  h1{ font-family:'Orbitron',monospace; font-size:28px; letter-spacing:1px; margin:8px 0 10px; color:var(--text); }
-  .sub{ color:var(--muted); font-size:13px; max-width:560px; margin:0 auto; line-height:1.6; }
+  .intro{ text-align:center; margin-bottom:1.875rem; }
+  .eyebrow{ font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:0.25rem; color:var(--muted); text-transform:uppercase; }
+  h1{ font-family:'Orbitron',monospace; font-size:1.75rem; letter-spacing:1px; margin:0.5rem 0 0.625rem; color:var(--text); }
+  .sub{ color:var(--muted); font-size:0.8125rem; max-width:35rem; margin:0 auto; line-height:1.6; }
 
-  .virus-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,340px)); justify-content:center; gap:16px; margin-bottom:20px; }
+  .virus-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(16.25rem,21.25rem)); justify-content:center; gap:1rem; margin-bottom:1.25rem; }
 
   .vcard{
-    border:1px solid var(--border); border-radius:12px; background:var(--panel);
-    padding:20px; cursor:pointer; transition:transform .15s,border-color .2s,box-shadow .2s; position:relative;
+    border:1px solid var(--border); border-radius:0.75rem; background:var(--panel);
+    padding:1.25rem; cursor:pointer; transition:transform .15s,border-color .2s,box-shadow .2s; position:relative;
   }
-  /* Each virus has its own accent (--virus-color, set inline per card),
-     matching the platform's own cyan/pink/green, so selection reads
-     consistently across the app. */
-  .vcard:hover{ transform:translateY(-3px); border-color:var(--virus-color, var(--stealth)); box-shadow:0 6px 20px rgba(57,255,20,.12); }
+  /* --virus-color is each virus's own accent, set inline per card. */
+  .vcard:hover{ transform:translateY(-0.1875rem); border-color:var(--virus-color, var(--stealth)); box-shadow:0 0.375rem 1.25rem rgba(57,255,20,.12); }
   .vcard.selected{
     border-color:var(--virus-color, var(--stealth));
-    box-shadow:0 0 0 1px var(--virus-color, var(--stealth)), 0 6px 20px rgba(57,255,20,.18);
+    box-shadow:0 0 0 1px var(--virus-color, var(--stealth)), 0 0.375rem 1.25rem rgba(57,255,20,.18);
   }
-  .vcard-head{ display:flex; align-items:center; gap:14px; }
-  .vcard-icon{ font-size:60px; }
-  .vcard-icon-img{ width:96px; height:96px; object-fit:contain; }
-  .vcard-name{ font-family:'Orbitron',monospace; font-size:15px; letter-spacing:1px; color:var(--virus-color, var(--stealth)); }
-  .vcard-sub{ font-size:12px; color:var(--muted); margin:10px 0; min-height:36px; line-height:1.5; }
+  .vcard-head{ display:flex; align-items:center; gap:0.875rem; }
+  .vcard-icon{ font-size:3.75rem; }
+  .vcard-icon-img{ width:6rem; height:6rem; object-fit:contain; }
+  .vcard-name{ font-family:'Orbitron',monospace; font-size:0.9375rem; letter-spacing:1px; color:var(--virus-color, var(--stealth)); }
+  .vcard-sub{ font-size:0.75rem; color:var(--muted); margin:0.625rem 0; min-height:2.25rem; line-height:1.5; }
   .vcard-info-btn{
-    background:none; border:1px solid var(--border); border-radius:6px;
-    color:var(--virus-color, var(--stealth)); cursor:pointer; padding:7px 13px;
-    font-family:'Orbitron',monospace; font-size:12px; font-weight:700; letter-spacing:.5px;
+    background:none; border:1px solid var(--border); border-radius:0.375rem;
+    color:var(--virus-color, var(--stealth)); cursor:pointer; padding:0.4375rem 0.8125rem;
+    font-family:'Orbitron',monospace; font-size:0.75rem; font-weight:700; letter-spacing:.5px;
     transition:border-color .2s, background .2s;
   }
   .vcard-info-btn:hover{
     border-color:var(--virus-color, var(--stealth));
     background:color-mix(in srgb, var(--virus-color, var(--stealth)) 8%, transparent);
   }
-  .vcard-info-icon{ display:inline-flex; align-items:center; font-size:24px; }
-  .vcard-info-icon img{ width:44px; height:44px; object-fit:contain; vertical-align:middle; }
-  #virus-info-body p{ margin-bottom:12px; line-height:1.7; }
+  .vcard-info-icon{ display:inline-flex; align-items:center; font-size:1.5rem; }
+  .vcard-info-icon img{ width:2.75rem; height:2.75rem; object-fit:contain; vertical-align:middle; }
+  #virus-info-body p{ margin-bottom:0.75rem; line-height:1.7; }
   #virus-info-body p:last-child{ margin-bottom:0; }
 
-  /* Custom-built viruses row — small button-style tiles (name + delete
-     only, no info/learn-more), since there's little to show per card. */
-  .custom-virus-row{ display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; margin-bottom:20px; }
+  /* Custom viruses: small tiles (name + delete only). */
+  .custom-virus-row{ display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:0.75rem; margin-bottom:1.25rem; }
   .vcard-compact{
-    display:inline-flex; align-items:center; gap:10px;
-    border:1px solid var(--border); border-radius:10px; background:var(--panel);
-    padding:11px 14px 11px 18px; cursor:pointer;
-    font-family:'Orbitron',monospace; font-size:13px; letter-spacing:.5px;
+    display:inline-flex; align-items:center; gap:0.625rem;
+    border:1px solid var(--border); border-radius:0.625rem; background:var(--panel);
+    padding:0.6875rem 0.875rem 0.6875rem 1.125rem; cursor:pointer;
+    font-family:'Orbitron',monospace; font-size:0.8125rem; letter-spacing:.5px;
     color:var(--virus-color, var(--stealth));
     transition:border-color .2s, box-shadow .2s;
   }
-  .vcard-compact:hover{ border-color:var(--virus-color, var(--stealth)); box-shadow:0 0 10px rgba(57,255,20,.15); }
+  .vcard-compact:hover{ border-color:var(--virus-color, var(--stealth)); box-shadow:0 0 0.625rem rgba(57,255,20,.15); }
   .vcard-compact.selected{
     border-color:var(--virus-color, var(--stealth));
-    box-shadow:0 0 0 1px var(--virus-color, var(--stealth)), 0 0 10px rgba(57,255,20,.18);
+    box-shadow:0 0 0 1px var(--virus-color, var(--stealth)), 0 0 0.625rem rgba(57,255,20,.18);
   }
-  .vcard-compact-icon{ font-size:18px; }
+  .vcard-compact-icon{ font-size:1.125rem; }
   .vcard-compact-delete{
     background:none; border:none; color:var(--accent2); cursor:pointer;
-    font-size:15px; line-height:1; padding:2px; opacity:.6; transition:opacity .2s;
+    font-size:0.9375rem; line-height:1; padding:2px; opacity:.6; transition:opacity .2s;
   }
   .vcard-compact-delete:hover{ opacity:1; }
   .vcard-compact.new-virus-compact{ border-style:dashed; }
@@ -140,144 +127,129 @@
      DETAIL PANEL — deck preview for the currently selected virus
      ═══════════════════════════════════════════════════════════════ */
   .detail{
-    display:none; max-width:640px; margin:22px auto 0; border:1px solid var(--virus-color, var(--stealth)); border-radius:12px;
+    display:none; max-width:40rem; margin:1.375rem auto 0; border:1px solid var(--virus-color, var(--stealth)); border-radius:0.75rem;
     background:color-mix(in srgb, var(--virus-color, var(--stealth)) 4%, transparent);
-    box-shadow:0 0 24px color-mix(in srgb, var(--virus-color, var(--stealth)) 16%, transparent);
-    padding:14px 16px;
+    box-shadow:0 0 1.5rem color-mix(in srgb, var(--virus-color, var(--stealth)) 16%, transparent);
+    padding:0.875rem 1rem;
   }
   .detail.visible{ display:block; }
-  .detail-top{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
-  /* Neutral now, not the bright virus color — the panel's own border/glow
-     is enough of a "this one's selected" signal on its own; piling the
-     same bright color onto the title, traits and button too read as too
-     much, so only the deploy button keeps it. */
-  .detail-title{ font-family:'Orbitron',monospace; font-size:12px; letter-spacing:1px; color:var(--text); }
+  .detail-top{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.625rem; }
+  /* Only the deploy button uses the virus colour; the panel's border
+     already marks the selection. */
+  .detail-title{ font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1px; color:var(--text); }
   .deploy-btn{
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
-    padding:9px 18px; border-radius:8px; border:1px solid var(--virus-color, var(--stealth));
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:2px;
+    padding:0.5625rem 1.125rem; border-radius:0.5rem; border:1px solid var(--virus-color, var(--stealth));
     background:color-mix(in srgb, var(--virus-color, var(--stealth)) 10%, transparent);
     color:var(--virus-color, var(--stealth)); cursor:pointer; transition:background .2s;
   }
   .deploy-btn:hover{ background:color-mix(in srgb, var(--virus-color, var(--stealth)) 22%, transparent); }
-  /* Replication speed / mutation rate — reuses the exact same
-     .virus-info-panel-mutation/-speed markup and classes as the in-game
-     panel (see selectVirus() below and game-ui.js renderVirusInfoPanel),
-     so what the player sees here previewing a virus is styled identically
-     to what they'll see once deployed. */
-  .detail-body{ display:flex; gap:18px; align-items:flex-start; margin-top:12px; }
-  /* Same space-between row alignment as .virus-info-panel-stats
-     (game-ui.js) — see its own comment — so label/value line up here
-     exactly as they will once deployed. A fixed width (not just
-     min-width) is what actually gives space-between room to distribute —
-     190px comfortably fits "Replication Speed" + its badge on one row. */
+  /* Speed / mutation rows reuse the in-game virus panel's classes, so
+     the preview looks the same as in game. */
+  .detail-body{ display:flex; gap:1.125rem; align-items:flex-start; margin-top:0.75rem; }
+  /* Fixed width so label and badge spread to both ends (fits
+     "Replication Speed" + its badge). */
   .detail-traits{
-    display:flex; flex-direction:column; gap:6px; flex-shrink:0; width:190px;
+    display:flex; flex-direction:column; gap:0.375rem; flex-shrink:0; width:11.875rem;
   }
-  .detail-cards{ display:flex; flex-wrap:wrap; gap:16px; flex:1; }
-  .card-face.card-face-preview{ width:80px; }
+  .detail-cards{ display:flex; flex-wrap:wrap; gap:1rem; flex:1; }
+  .card-face.card-face-preview{ width:5rem; }
 
   /* ═══════════════════════════════════════════════════════════════
      BUILDER MODAL — 5-tab custom virus designer
      ═══════════════════════════════════════════════════════════════ */
   .builder-modal{
-    /* Orange accent for the whole builder — distinct from the game's own
-       green/cyan, matching "Design New" and the custom-virus tiles it
-       leads to. */
+    /* Orange accent throughout the builder (matches "Design New"). */
     --builder-accent:#ff9d3f;
-    background:var(--panel); border:1px solid var(--border); border-radius:16px;
-    width:100%; max-width:620px; margin:20px; max-height:90vh; overflow:auto;
-    box-shadow:0 0 40px rgba(255,157,63,.15);
+    background:var(--panel); border:1px solid var(--border); border-radius:1rem;
+    width:100%; max-width:38.75rem; margin:1.25rem; max-height:90vh; overflow:auto;
+    box-shadow:0 0 2.5rem rgba(255,157,63,.15);
   }
   .builder-modal .modal-header{
     background:rgba(255,157,63,.1); border-bottom:1px solid var(--border);
-    padding:16px 20px; display:flex; justify-content:space-between; align-items:center;
+    padding:1rem 1.25rem; display:flex; justify-content:space-between; align-items:center;
     position:sticky; top:0; z-index:1;
   }
-  .builder-modal .modal-title{ font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--builder-accent); }
-  .modal-body{ padding:20px; }
+  .builder-modal .modal-title{ font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px; color:var(--builder-accent); }
+  .modal-body{ padding:1.25rem; }
 
-  .builder-tabs{ display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid var(--border); padding-bottom:12px; overflow-x:auto; }
+  .builder-tabs{ display:flex; gap:0.5rem; margin-bottom:1.25rem; border-bottom:1px solid var(--border); padding-bottom:0.75rem; overflow-x:auto; }
   .tab-btn{
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px;
-    padding:8px 12px; border:none; background:none; color:var(--muted); cursor:pointer;
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:1px;
+    padding:0.5rem 0.75rem; border:none; background:none; color:var(--muted); cursor:pointer;
     border-bottom:2px solid transparent; transition:all .2s; white-space:nowrap;
   }
   .tab-btn.active{ color:var(--builder-accent); border-bottom-color:var(--builder-accent); }
   .tab-btn:hover:not(.active){ color:var(--text); }
 
-  /* Sized to the tallest tab (Identity, ~204px) so the modal stays one
-     fixed size as the player switches tabs, instead of resizing per tab. */
-  .builder-tab-panels{ min-height:210px; }
+  /* Fixed height (tallest tab) so the modal doesn't resize between tabs. */
+  .builder-tab-panels{ min-height:13.125rem; }
   .tab-content{ display:none; }
   .tab-content.active{ display:block; }
-  .tab-content > * + *{ margin-top:16px; }
+  .tab-content > * + *{ margin-top:1rem; }
 
-  .form-group{ display:flex; flex-direction:column; gap:6px; }
-  .form-label{ font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px; color:var(--text); text-transform:uppercase; }
-  .builder-hint{ font-size:11px; color:var(--muted); margin-top:6px; margin-bottom: 12px;}
+  .form-group{ display:flex; flex-direction:column; gap:0.375rem; }
+  .form-label{ font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:2px; color:var(--text); text-transform:uppercase; }
+  .builder-hint{ font-size:0.6875rem; color:var(--muted); margin-top:0.375rem; margin-bottom: 0.75rem;}
 
-  .builder-card-row{ display:flex; flex-wrap:wrap; gap:12px; }
-  .builder-modal .card-face{ width:90px; }
+  .builder-card-row{ display:flex; flex-wrap:wrap; gap:0.75rem; }
+  .builder-modal .card-face{ width:5.625rem; }
   .builder-modal .card-face:hover .card-face-art{ border-color:var(--builder-accent); }
   .builder-modal .card-face.selected .card-face-art{
-    border-color:var(--builder-accent); box-shadow:0 0 10px rgba(255,157,63,.4);
+    border-color:var(--builder-accent); box-shadow:0 0 0.625rem rgba(255,157,63,.4);
   }
 
-  .slider-row{ display:flex; align-items:center; gap:12px; margin-top:16px; }
-  .slider-value{ font-family:'Share Tech Mono',monospace; font-size:12px; min-width:50px; text-align:right; color:var(--builder-accent); }
+  .slider-row{ display:flex; align-items:center; gap:0.75rem; margin-top:1rem; }
+  .slider-value{ font-family:'Share Tech Mono',monospace; font-size:0.75rem; min-width:3.125rem; text-align:right; color:var(--builder-accent); }
 
-  /* Custom range-slider styling (replication speed + mutation rate) —
-     dark track matching the rest of the UI, glowing orange thumb instead
-     of the browser's default control. Shorter and thicker than a plain
-     full-width slider so it reads more like a deliberate control. */
+  /* Range sliders: dark track, glowing orange thumb. */
   .slider-row input[type="range"]{
-    flex:0 1 260px; -webkit-appearance:none; appearance:none;
-    height:12px; background:transparent; cursor:pointer; outline:none;
+    flex:0 1 16.25rem; -webkit-appearance:none; appearance:none;
+    height:0.75rem; background:transparent; cursor:pointer; outline:none;
   }
   .slider-row input[type="range"]::-webkit-slider-runnable-track{
-    height:12px; border-radius:6px; background:var(--panel); border:1px solid var(--border);
+    height:0.75rem; border-radius:0.375rem; background:var(--panel); border:1px solid var(--border);
   }
   .slider-row input[type="range"]::-moz-range-track{
-    height:12px; border-radius:6px; background:var(--panel); border:1px solid var(--border);
+    height:0.75rem; border-radius:0.375rem; background:var(--panel); border:1px solid var(--border);
   }
   .slider-row input[type="range"]::-webkit-slider-thumb{
-    -webkit-appearance:none; appearance:none; margin-top:-6px;
-    width:24px; height:24px; border-radius:50%;
+    -webkit-appearance:none; appearance:none; margin-top:-0.375rem;
+    width:1.5rem; height:1.5rem; border-radius:50%;
     background:var(--builder-accent); border:2px solid var(--bg);
-    box-shadow:0 0 8px rgba(255,157,63,.7); cursor:pointer;
+    box-shadow:0 0 0.5rem rgba(255,157,63,.7); cursor:pointer;
   }
   .slider-row input[type="range"]::-moz-range-thumb{
-    width:24px; height:24px; border-radius:50%; border:2px solid var(--bg);
-    background:var(--builder-accent); box-shadow:0 0 8px rgba(255,157,63,.7); cursor:pointer;
+    width:1.5rem; height:1.5rem; border-radius:50%; border:2px solid var(--bg);
+    background:var(--builder-accent); box-shadow:0 0 0.5rem rgba(255,157,63,.7); cursor:pointer;
   }
-  .slider-row input[type="range"]:focus::-webkit-slider-thumb{ box-shadow:0 0 12px rgba(255,157,63,.9); }
-  .slider-row input[type="range"]:focus::-moz-range-thumb{ box-shadow:0 0 12px rgba(255,157,63,.9); }
+  .slider-row input[type="range"]:focus::-webkit-slider-thumb{ box-shadow:0 0 0.75rem rgba(255,157,63,.9); }
+  .slider-row input[type="range"]:focus::-moz-range-thumb{ box-shadow:0 0 0.75rem rgba(255,157,63,.9); }
 
   .text-input{
-    border:1px solid var(--border); border-radius:8px; padding:10px 12px;
-    background:var(--panel); color:var(--text); font-family:'Nunito',sans-serif; font-size:12px;
+    border:1px solid var(--border); border-radius:0.5rem; padding:0.625rem 0.75rem;
+    background:var(--panel); color:var(--text); font-family:'Nunito',sans-serif; font-size:0.75rem;
   }
   .text-input:focus{ outline:none; border-color:var(--builder-accent); }
 
-  .emoji-selector{ display:grid; grid-template-columns:repeat(6,1fr); gap:8px; }
+  .emoji-selector{ display:grid; grid-template-columns:repeat(6,1fr); gap:0.5rem; }
   .emoji-btn{
-    border:1px solid var(--border); border-radius:8px; padding:12px; background:var(--panel);
-    font-size:20px; cursor:pointer; transition:all .2s;
+    border:1px solid var(--border); border-radius:0.5rem; padding:0.75rem; background:var(--panel);
+    font-size:1.25rem; cursor:pointer; transition:all .2s;
   }
   .emoji-btn:hover{ border-color:var(--builder-accent); }
-  .emoji-btn.selected{ border-color:var(--builder-accent); box-shadow:0 0 12px rgba(255,157,63,.2); }
+  .emoji-btn.selected{ border-color:var(--builder-accent); box-shadow:0 0 0.75rem rgba(255,157,63,.2); }
 
   .modal-footer{
-    padding:14px 20px; display:flex; gap:8px; justify-content:flex-end;
+    padding:0.875rem 1.25rem; display:flex; gap:0.5rem; justify-content:flex-end;
     border-top:1px solid var(--border);
     position:sticky; bottom:0; background:var(--panel); z-index:1;
-    /* Stays the same height even when the Identity tab's Save & Play
-       button is hidden (no name entered yet) — see .builder-tab-panels. */
-    min-height:64px; box-sizing:border-box;
+    /* Same height even when Save & Play is hidden. */
+    min-height:4rem; box-sizing:border-box;
   }
   .btn{
-    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px;
-    padding:10px 18px; border-radius:8px; border:1px solid var(--border);
+    font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:1px;
+    padding:0.625rem 1.125rem; border-radius:0.5rem; border:1px solid var(--border);
     background:var(--panel); color:var(--text); cursor:pointer; transition:all .2s;
   }
   .btn:hover{ border-color:var(--stealth); color:var(--stealth); }
@@ -288,15 +260,11 @@
   .btn-primary:disabled{
     opacity:.4; cursor:not-allowed; background:rgba(57,255,20,.1);
   }
-  /* Distinct from End Turn's green (a different KIND of action, and not
-     the one that ends your turn) — cyan, matching the immune banner's own
-     accent, since this is about reshaping your hand, not playing it. */
+  /* Trade button is cyan — a different kind of action from End Turn. */
   .btn-trade{ border-color:var(--accent); color:var(--accent); background:rgba(0,229,255,.08); }
   .btn-trade:hover:not(:disabled){ background:rgba(0,229,255,.18); }
   .btn-trade:disabled{ opacity:.4; cursor:not-allowed; }
-  /* Builder's own footer buttons (Next / Save & Play) get the orange
-     accent instead of the game's green — scoped so End Turn/Select
-     in-game keep their green. */
+  /* Builder buttons use the builder's orange. */
   .builder-modal .btn:hover{ border-color:var(--builder-accent); color:var(--builder-accent); }
   .builder-modal .btn-primary{
     border-color:var(--builder-accent); background:rgba(255,157,63,.1); color:var(--builder-accent);
@@ -309,70 +277,57 @@
   .builder-modal .btn:disabled:hover{ border-color:var(--border); color:var(--text); }
 
   .back-btn{
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted);
-    border:1px solid var(--border); border-radius:8px; padding:9px 16px; cursor:pointer;
-    display:inline-flex; align-items:center; gap:8px;
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:2px; color:var(--muted);
+    border:1px solid var(--border); border-radius:0.5rem; padding:0.5625rem 1rem; cursor:pointer;
+    display:inline-flex; align-items:center; gap:0.5rem;
     transition:border-color .2s,color .2s;
   }
   .back-btn:hover{ border-color:var(--accent); color:var(--accent); }
-  .back-btn-icon{ font-size:17px; line-height:1; }
+  .back-btn-icon{ font-size:1.0625rem; line-height:1; }
 
   /* ═══════════════════════════════════════════════════════════════
      HELP OVERLAY — first-visit tutorial, reopenable from the menu
      ═══════════════════════════════════════════════════════════════ */
   .help-overlay{
     display:none; position:fixed; inset:0; background:rgba(7,12,24,0.94); z-index:3000;
-    align-items:center; justify-content:center; backdrop-filter:blur(8px);
+    align-items:center; justify-content:center; backdrop-filter:blur(0.5rem);
   }
   .help-overlay.open{ display:flex; }
   .help-panel{
-    background:var(--panel); border:1px solid var(--stealth); border-radius:16px;
-    width:100%; max-width:500px; margin:20px;
-    box-shadow:0 0 50px rgba(57,255,20,.18);
+    background:var(--panel); border:1px solid var(--stealth); border-radius:1rem;
+    width:100%; max-width:31.25rem; margin:1.25rem;
+    box-shadow:0 0 3.125rem rgba(57,255,20,.18);
   }
   .help-header{
     background:linear-gradient(135deg, rgba(57,255,20,.12), rgba(0,229,255,.05));
-    border-bottom:1px solid var(--stealth); padding:18px 20px;
+    border-bottom:1px solid var(--stealth); padding:1.125rem 1.25rem;
     display:flex; justify-content:space-between; align-items:center;
   }
-  .help-title{ font-family:'Orbitron',monospace; font-size:13px; letter-spacing:2px; color:var(--stealth); }
-  .help-close{ background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; }
+  .help-title{ font-family:'Orbitron',monospace; font-size:0.8125rem; letter-spacing:2px; color:var(--stealth); }
+  .help-close{ background:none; border:none; color:var(--muted); font-size:1.125rem; cursor:pointer; }
   .help-close:hover{ color:var(--text); }
-  /* min-height, not a fixed height — sized to comfortably fit the longest
-     step's description (renderHelpStep(), below — HELP_STEPS' text length
-     varies a fair bit step to step) so the panel doesn't visibly grow/
-     shrink as the player clicks through, without clipping a shorter step
-     that just leaves some blank space below it instead. */
-  .help-body{ padding:24px; min-height:210px; }
-  /* Virus "Learn more" reuses .help-overlay/.help-panel (the tutorial's
-     own look) but scoped by #virus-info-overlay so these two rules don't
-     bleed into the actual tutorial modal, which keeps its plain green.
-     Outline toned down to the same muted grey/blue as the card info
-     modal (was the same bright green as the tutorial) so the popup's own
-     border stops competing with what's inside it; the title instead
-     picks up that virus's own highlight colour (--virus-color, set in
-     openVirusInfo()) so it still reads as "this virus's" popup. */
+  /* Min-height fits the longest tutorial step, so the panel doesn't
+     resize between steps. */
+  .help-body{ padding:1.5rem; min-height:13.125rem; }
+  /* Virus "Learn more" reuses the tutorial panel's look, with a muted
+     border and the title in the virus's own colour. */
   #virus-info-overlay .help-panel{
-    border-color:var(--muted); box-shadow:0 0 30px rgba(124,156,196,.12);
+    border-color:var(--muted); box-shadow:0 0 1.875rem rgba(124,156,196,.12);
   }
   #virus-info-overlay .help-header{ border-bottom-color:var(--muted); }
-  /* Flex + align-items so the virus name sits vertically centred against
-     the (now bigger) icon instead of default inline/baseline alignment,
-     which reads low against a tall icon. Scoped to this id, not the
-     shared .help-title class, so the icon-less tutorial title is
-     unaffected. */
-  #virus-info-title{ color:var(--virus-color, var(--stealth)); display:flex; align-items:center; gap:8px; }
-  .help-step-title{ font-family:'Orbitron',monospace; font-size:14px; color:var(--text); margin-bottom:10px; letter-spacing:1px; }
-  .help-step-desc{ font-size:12px; color:var(--muted); line-height:1.7; margin-bottom:16px; }
+  /* Title centred against the virus icon. */
+  #virus-info-title{ color:var(--virus-color, var(--stealth)); display:flex; align-items:center; gap:0.5rem; }
+  .help-step-title{ font-family:'Orbitron',monospace; font-size:0.875rem; color:var(--text); margin-bottom:0.625rem; letter-spacing:1px; }
+  .help-step-desc{ font-size:0.75rem; color:var(--muted); line-height:1.7; margin-bottom:1rem; }
   .help-footer{
-    padding:16px 20px; border-top:1px solid var(--border);
-    display:flex; gap:10px; justify-content:space-between;
+    padding:1rem 1.25rem; border-top:1px solid var(--border);
+    display:flex; gap:0.625rem; justify-content:space-between;
   }
-  .help-progress{ font-size:10px; color:var(--muted); letter-spacing:1px; }
-  .help-nav{ display:flex; gap:8px; }
+  .help-progress{ font-size:0.625rem; color:var(--muted); letter-spacing:1px; }
+  .help-nav{ display:flex; gap:0.5rem; }
   .help-nav button{
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px;
-    padding:8px 14px; border:1px solid var(--border); border-radius:6px;
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:1px;
+    padding:0.5rem 0.875rem; border:1px solid var(--border); border-radius:0.375rem;
     background:var(--panel); color:var(--text); cursor:pointer;
     transition:border-color .2s, background .2s;
   }
@@ -383,359 +338,266 @@
      RESPONSIVE
      ═══════════════════════════════════════════════════════════════ */
   @media (max-width:600px){
-    h1{ font-size:22px; }
-    .wrap{ padding:16px 14px 0; }
+    h1{ font-size:1.375rem; }
+    .wrap{ padding:1rem 0.875rem 0; }
     .virus-grid{ grid-template-columns:1fr; }
     .emoji-selector{ grid-template-columns:repeat(4,1fr); }
   }
 
-  /* Landscape-only lock — see the HTML comment on .orientation-lock for
-     why this exists instead of a stacked-portrait layout. Hidden by
-     default; driven entirely by checkViewportGate() (game-ui.js) toggling
-     .viewport-blocked on <html>, not a pure CSS media query — a plain
-     `orientation:portrait` query only catches aspect ratio, not an
-     absolute-size problem (a small-but-landscape desktop window), and the
-     game needs to catch both. */
+  /* Rotate / enlarge-window message, shown when game-ui.js
+     (checkViewportGate()) sets .viewport-blocked on <html>. */
   .orientation-lock{
     display:none; position:fixed; inset:0; z-index:6000;
-    flex-direction:column; align-items:center; justify-content:center; gap:16px;
-    background:var(--bg); text-align:center; padding:24px; box-sizing:border-box;
+    flex-direction:column; align-items:center; justify-content:center; gap:1rem;
+    background:var(--bg); text-align:center; padding:1.5rem; box-sizing:border-box;
   }
-  .orientation-lock-icon{ font-size:48px; color:var(--stealth); }
-  .orientation-lock-text{ font-size:15px; color:var(--muted); max-width:320px; line-height:1.5; }
+  .orientation-lock-icon{ font-size:3rem; color:var(--stealth); }
+  .orientation-lock-text{ font-size:0.9375rem; color:var(--muted); max-width:20rem; line-height:1.5; }
   :root.viewport-blocked .orientation-lock{ display:flex; }
   :root.viewport-blocked .header-outer, :root.viewport-blocked .wrap{ display:none; }
 
   /* ═══════════════════════════════════════════════════════════════
      GAME SCREEN — board, cards, log, end screen
      ═══════════════════════════════════════════════════════════════ */
-  .game-screen{ display:none; flex-direction:column; gap:6px; padding-bottom:6px; }
+  .game-screen{ display:none; flex-direction:column; gap:0.375rem; padding-bottom:0.375rem; }
   .game-screen.visible{ display:flex; }
 
-  /* Overall layout: game-main-row is a flex row of two items —
-     game-left-col (itself a grid) and the narration column, now on the
-     right. Neither sets an explicit height, so flex's default
-     align-items:stretch makes the narration column match game-left-col's
-     full stack height (side banner through hand row) automatically. */
-  /* #game-stage-viewport / #game-stage — the whole board+banners+log
-     assembly (.game-main-row) is built at one fixed "designed" size (see
-     .tissue-board, .card-face etc. — none of it is viewport-unit-based any
-     more) and then scaled as a SINGLE rigid unit by fitGameStage()
-     (game-ui.js) to fit whatever screen it's actually on. That's the fix
-     for banners/boards ever drifting out of sync with each other: they're
-     not independently sized at all, just one photograph of a fixed layout
-     shrunk or grown together. -viewport is the sizing/clipping frame
-     (height is set in JS to the scaled result so the page never reserves
-     the pre-scale, unscaled height as blank space below); -stage is the
-     transform target, always at its one true natural size pre-transform.
-     justify-content:center here handles horizontal centering — see
-     fitGameStage()'s own comment for why transform-origin:top center
-     keeps that centering exact through any scale factor. */
-  /* align-items:flex-start (not the flex default, stretch) is required
-     here, not cosmetic — fitGameStage() (game-ui.js) sets this viewport's
-     own height to the ALREADY-SCALED result (natural height × scale) so
-     the page never reserves the pre-scale height as blank space below.
-     Stretch would then try to force #game-stage's own (pre-transform)
-     layout height down to match that shorter explicit height, squashing
-     its actual content — on top of, and fighting with, the transform
-     that's separately shrinking it. flex-start leaves #game-stage's own
-     height exactly as tall as its content needs, full stop; the transform
-     is the only thing that ever visually shrinks it. */
+  /* Layout: .game-main-row is a flex row — .game-left-col (a grid: phase
+     panel, board, banners, hand) and the mission log on the right.
+     #game-stage holds all of it at one fixed natural size and is scaled as
+     a single unit by fitGameStage() (game-ui.js), so banners and boards
+     always stay in line. #game-stage-viewport is the frame: its height is
+     set to the scaled height (no blank space below). align-items:
+     flex-start keeps the stage at its natural height before scaling. */
   #game-stage-viewport{ width:100%; overflow:hidden; display:flex; justify-content:center; align-items:flex-start; }
   #game-stage{ flex-shrink:0; transform-origin:top center; }
-  .game-main-row{ display:flex; justify-content:center; gap:14px; }
-  /* flex:1 (not width:fit-content/flex:0 1 auto) — tried switching this to
-     a content-sized flex-basis so the column wouldn't grow past the
-     board's own actual width (see alignBannerWidths(), game-ui.js, for the
-     dead-space problem that was solving), but flex-basis:auto forces the
-     browser to compute this grid's intrinsic (max-content) size, which
-     means resolving boards-wrap's own max-content contribution — and that
-     silently collapsed the board column down near column 1's width instead
-     of the boards' real formula-driven size, on every browser tested.
-     Something about the nested flex-in-grid-in-flex structure doesn't
-     resolve right under intrinsic sizing (this was with .tissue-board's
-     old viewport-unit flex-basis formula — it's a fixed px value now, see
-     .tissue-board, which may or may not still hit the same quirk; not
-     re-tested since flex:1 + alignBannerWidths() below already works).
-     flex:1 sidesteps intrinsic sizing entirely (flex-basis:0 + grow, so the
-     browser never needs the content's natural size upfront), which is why
-     the board renders at its correct width again — the resulting dead
-     space is instead clamped away in JS, after render, by
-     alignBannerWidths() setting this column's max-width to exactly what
-     its content needs. min-width:0 still lets it shrink below that if
-     #game-stage is ever scaled down past the column's own natural size. */
+  /* Extra gap before the mission log (width is to spare; height limits). */
+  .game-main-row{ display:flex; justify-content:center; gap:1.75rem; position:relative; }
+  /* Log open with room to the right (see fitGameStage(), game-ui.js): a
+     spacer keeps the collapsed tab's slot so the board doesn't move, and
+     the log opens over the free space to its right. */
+  .game-main-row.log-overhang::after{ content:''; width:2.5rem; flex-shrink:0; }
+  .narration-col.overhang{ position:absolute; top:0; left:calc(100% - 2.5rem); }
+  /* flex:1, not a content-sized basis: sizing this grid from its content
+     collapsed the board column in every browser tested. The leftover space
+     is trimmed in JS (alignBannerWidths() sets max-width). */
   .game-left-col{
     display:grid; flex:1; min-width:0; position:relative;
-    /* Widened again (180→208px) once .virus-info-panel-mutation's value
-       got its own bordered badge box (matching replication speed's) — the
-       fixed-width label (.virus-info-panel-label, 122px, sized for
-       "Replication Speed") plus that row's own "HIGH"/"MEDIUM" badge no
-       longer fit in 180px even though "Replication Speed" alone did.
-       208px is comfortably above the ~200px that combination needs —
-       fixed, not a viewport formula, since #game-stage as a whole gets
-       scaled to fit the screen (see fitGameStage(), game-ui.js) rather
-       than each piece separately chasing the viewport on its own. */
-    grid-template-columns:208px auto;
-    gap:6px 14px;
+    /* Column 1 (phase panel, virus panel, hint) is a fixed 13rem — wide
+       enough for "Replication Speed" plus its badge. The stage as a whole
+       is scaled to the screen. */
+    grid-template-columns:13rem auto;
+    gap:0.375rem 0.875rem;
   }
   .side-col{ grid-column:1; grid-row:2; }
   #immune-banner{ grid-column:2; grid-row:1; }
   #boards-wrap{ grid-column:2; grid-row:2; }
-  /* Top-aligned with Active Cards (both start on row 3) — spanning into
-     row 4 too (nothing else occupies column 1 there) means its own height
-     doesn't inflate row 3's track and push row 4 further down than Active
-     Cards' actual height calls for; that used to leave a bigger gap above
-     Cards In Hand than the one above Active Cards. */
-  #virus-info-panel{ grid-column:1; grid-row:3 / 5; align-self:start; }
+  /* Grid: row 1 Immune System · row 2 phase panel + boards ·
+     row 3 virus panel + Active Cards · row 4 hint + Cards In Hand. */
+  #virus-info-panel{ grid-column:1; grid-row:3; align-self:start; }
   #virus-banner-top{ grid-column:2; grid-row:3; align-self:start; }
   #hand-panel{ grid-column:2; grid-row:4; }
+  #hint-banner{ grid-column:1; grid-row:4; align-self:center; }
 
-  /* The left-hand side — capped to the board row's own height (grid
-     stretch). Phase tracker on top, virus identity/traits below it;
-     score isn't shown during play. */
+  /* Left column beside the boards: the phase tracker. */
   .side-col{
-    display:flex; flex-direction:column; gap:10px; box-sizing:border-box; overflow:hidden;
+    display:flex; flex-direction:column; gap:0.625rem; box-sizing:border-box; overflow:hidden;
   }
   .phase-panel{
-    display:flex; flex-direction:column; gap:6px; box-sizing:border-box;
-    border:1px solid var(--border); border-radius:8px; background:var(--panel);
-    padding:8px 7px;
-    /* margin-top is set precisely in JS (alignPhasePanel(), game-ui.js) to
-       match the board's actual top cell row — a fixed clamp() formula
-       drifted out of alignment whenever the organ art/title above the
-       grid didn't scale in exact lockstep with it. */
+    display:flex; flex-direction:column; gap:0.375rem; box-sizing:border-box;
+    border:1px solid var(--border); border-radius:0.5rem; background:var(--panel);
+    padding:0.5rem 0.4375rem;
+    /* margin-top set in JS (alignPhasePanel()) to line up with the
+       board's first cell row. */
   }
-  .phase-col{ display:flex; flex-direction:column; gap:6px; }
+  .phase-col{ display:flex; flex-direction:column; gap:0.375rem; }
   .phase-step{
-    display:flex; align-items:center; gap:6px;
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:.5px; text-transform:uppercase;
-    color:var(--muted); border:1px solid transparent; border-radius:6px; padding:6px;
+    display:flex; align-items:center; gap:0.375rem;
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:.5px; text-transform:uppercase;
+    color:var(--muted); border:1px solid transparent; border-radius:0.375rem; padding:0.375rem;
     transition:color .2s, border-color .2s, background .2s;
   }
-  /* Fixed width + centered, instead of sizing to each emoji glyph's own
-     (slightly different) natural width — otherwise the label text next to
-     a narrow icon (🧬) starts closer to the border than one next to a wide
-     icon (🛡️), so the 5 labels don't read as a clean lined-up column. */
-  .phase-step-icon{ font-size:13px; line-height:1; width:16px; flex-shrink:0; text-align:center; }
-  /* Colored to match the mission log's own highlight for that phase —
-     pink for spread/mutation, blue for immune response, green for the
-     player's own pick/play cards turn (same as line-virus/line-immune/
-     line-player in the narration feed). */
+  /* Fixed-width icons so the five labels line up. */
+  .phase-step-icon{ font-size:0.8125rem; line-height:1; width:1rem; flex-shrink:0; text-align:center; }
+  /* Current step: same colours as the mission log — pink for spread and
+     mutation, cyan for immune response, green for the player's steps. */
   .phase-step.current{
     color:var(--stealth); border-color:var(--stealth); background:rgba(57,255,20,.1);
-    box-shadow:0 0 8px rgba(57,255,20,.25);
+    box-shadow:0 0 0.5rem rgba(57,255,20,.25);
   }
   .phase-step[data-phase="virus_growth"].current,
   .phase-step[data-phase="mutation"].current{
     color:var(--accent2); border-color:var(--accent2); background:rgba(224,34,122,.1);
-    box-shadow:0 0 8px rgba(224,34,122,.25);
+    box-shadow:0 0 0.5rem rgba(224,34,122,.25);
   }
   .phase-step[data-phase="immune_response"].current{
     color:var(--accent); border-color:var(--accent); background:rgba(0,229,255,.1);
-    box-shadow:0 0 8px rgba(0,229,255,.25);
+    box-shadow:0 0 0.5rem rgba(0,229,255,.25);
   }
-  /* Pick Cards, while current, doubles as the button to reopen its popup
-     after the player closes it — same glow, just clickable with a hint. */
+  /* Pick Cards, while current, reopens the draft pop-up when clicked. */
   .phase-step.reopenable{ cursor:pointer; }
-  .phase-step.reopenable:hover{ box-shadow:0 0 12px rgba(57,255,20,.4); }
+  .phase-step.reopenable:hover{ box-shadow:0 0 0.75rem rgba(57,255,20,.4); }
 
-  /* Virus identity — left column, top-aligned with Active Cards. Real art
-     when the preset has it. Mutation rate's value word picks up the
-     virus's own accent colour (--virus-color, same one used on the select
-     screen); replication speed gets a bigger, bordered badge instead of
-     plain text since mutations can change it mid-game and that deserves
-     more visual weight than a fixed trait. */
+  /* Virus panel (column 1, beside Active Cards): art + name, then
+     replication speed and mutation rate as badges (speed changes in game,
+     so it gets colour states). */
   .virus-info-panel{
-    display:flex; flex-direction:column; align-items:center; gap:4px; box-sizing:border-box;
-    border:1px solid var(--border); border-radius:8px; background:var(--panel);
-    padding:8px 6px; text-align:center;
+    display:flex; flex-direction:column; align-items:center; gap:0.25rem; box-sizing:border-box;
+    border:1px solid var(--border); border-radius:0.5rem; background:var(--panel);
+    padding:0.5rem 0.375rem; text-align:center;
   }
-  /* Icon beside the name (not stacked above it) — frees the icon from
-     sharing vertical space with the name text, so it can run bigger. */
-  .virus-info-panel-head{ display:flex; align-items:center; gap:8px; }
-  .virus-info-panel-icon{ font-size:36px; line-height:1; flex:0 0 auto; }
-  .virus-info-panel-icon img{ width:46px; height:46px; object-fit:contain; }
+  /* Icon beside the name, so it can be larger. */
+  .virus-info-panel-head{ display:flex; align-items:center; gap:0.5rem; }
+  .virus-info-panel-icon{ font-size:2.25rem; line-height:1; flex:0 0 auto; }
+  .virus-info-panel-icon img{ width:2.875rem; height:2.875rem; object-fit:contain; }
   .virus-info-panel-name{
-    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:.5px; color:var(--text);
+    font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:.5px; color:var(--text);
     line-height:1.3; word-break:break-word; text-align:left;
   }
-  /* Mutation rate and replication speed as a two-column table — both
-     rows share the same full-width row box (.virus-info-panel-stats'
-     children stretch via width:100%) with justify-content:space-between,
-     so the LABELS start at the same left edge ("R" of Replication and
-     "M" of Mutation align) and the VALUE badges end at the same right
-     edge, regardless of the two labels/values being different lengths.
-     A fixed shared column width (the earlier version of this) couldn't
-     get both of those aligned at once — right-aligning the label to a
-     shared column made the label TEXT start at different x's per row,
-     and centering independently made neither edge line up. */
-  .virus-info-panel-stats{ display:flex; flex-direction:column; gap:4px; width:100%; }
+  /* Label left, badge right on each row, so labels and badges line up. */
+  .virus-info-panel-stats{ display:flex; flex-direction:column; gap:0.25rem; width:100%; }
   .virus-info-panel-mutation, .virus-info-panel-speed{
-    display:flex; align-items:center; justify-content:space-between; gap:6px; width:100%;
+    display:flex; align-items:center; justify-content:space-between; gap:0.375rem; width:100%;
   }
   .virus-info-panel-label{
     white-space:nowrap;
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:.5px;
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:.5px;
     text-transform:uppercase; color:var(--muted); text-align:left;
   }
   .virus-info-panel-accent{
-    font-family:'Orbitron',monospace; font-size:14px; font-weight:700; letter-spacing:.5px;
+    font-family:'Orbitron',monospace; font-size:0.875rem; font-weight:700; letter-spacing:.5px;
     text-transform:uppercase; text-align:center; color:var(--virus-color, var(--stealth));
-    border:1px solid var(--border); border-radius:6px;
-    padding:1px 8px; background:rgba(255,255,255,.05);
+    border:1px solid var(--border); border-radius:0.375rem;
+    padding:1px 0.5rem; background:rgba(255,255,255,.05);
   }
   .virus-info-panel-speed-value{
-    position:relative; font-family:'Orbitron',monospace; font-size:14px; font-weight:700; letter-spacing:.5px;
-    text-align:center; color:var(--text); border:1px solid var(--border); border-radius:6px;
-    padding:1px 8px; background:rgba(255,255,255,.05);
+    position:relative; font-family:'Orbitron',monospace; font-size:0.875rem; font-weight:700; letter-spacing:.5px;
+    text-align:center; color:var(--text); border:1px solid var(--border); border-radius:0.375rem;
+    padding:1px 0.5rem; background:rgba(255,255,255,.05);
     transition:color .3s, border-color .3s, background .3s;
   }
-  /* Penalized (Antiviral / Protein Vaccine's temporary speed reduction). */
+  /* Speed lowered (Antiviral / Protein Vaccine): pink. */
   .virus-info-panel-speed-value.speed-penalized{
     color:var(--accent2); border-color:var(--accent2); background:rgba(224,34,122,.12);
   }
-  /* Boosted (Replication Boost's own temporary speed increase — see
-     replicationBoostAmount, game.js) — the virus's own theme colour, set as
-     --virus-color on this panel's wrapper (renderVirusInfoPanel(),
-     game-ui.js), rather than a fixed hue, so it reads as "more of this
-     virus" regardless of which one is active. */
+  /* Speed boosted (Replication Boost): the virus's own colour. */
   .virus-info-panel-speed-value.speed-boosted{
     color:var(--virus-color, var(--stealth)); border-color:var(--virus-color, var(--stealth));
     background:color-mix(in srgb, var(--virus-color, var(--stealth)) 12%, transparent);
   }
-  /* --rise-distance is set per-element by flashSpeedDelta() (game-ui.js),
-     measured live from the badge up to the phase panel's own bottom edge
-     (the "phases" banner at the top of this same column) — not a fixed
-     guess, since the real distance depends on #game-stage's current scale
-     (see fitGameStage()). Stays fully opaque for most of the rise and only
-     starts fading in the final stretch, so it reads as "arriving at and
-     fading into the phase banner" rather than fading evenly the whole way
-     up. 90px is just the pre-JS/no-JS fallback. --drift-x (also set per-
-     element) nudges the X position progressively as it climbs, so each
-     one wanders slightly off its own straight vertical line instead of
-     the whole stream reading as identical parallel columns. */
+  /* Floating +1/−1 after a speed change (flashSpeedDelta(), game-ui.js).
+     --rise-distance (badge → phase panel) and --drift-x are set per
+     floater; it stays opaque most of the way, then fades near the top. */
   @keyframes speed-delta-float{
     0%{ opacity:0; transform:translate(-50%, 0) scale(.8); }
-    12%{ opacity:1; transform:translate(calc(-50% + var(--drift-x, 0px) * 0.25), calc(-0.12 * var(--rise-distance, 90px))) scale(1.25); }
-    70%{ opacity:1; transform:translate(calc(-50% + var(--drift-x, 0px) * 0.7), calc(-0.78 * var(--rise-distance, 90px))) scale(1); }
-    100%{ opacity:0; transform:translate(calc(-50% + var(--drift-x, 0px)), calc(-1 * var(--rise-distance, 90px))) scale(.95); }
+    12%{ opacity:1; transform:translate(calc(-50% + var(--drift-x, 0px) * 0.25), calc(-0.12 * var(--rise-distance, 5.625rem))) scale(1.25); }
+    70%{ opacity:1; transform:translate(calc(-50% + var(--drift-x, 0px) * 0.7), calc(-0.78 * var(--rise-distance, 5.625rem))) scale(1); }
+    100%{ opacity:0; transform:translate(calc(-50% + var(--drift-x, 0px)), calc(-1 * var(--rise-distance, 5.625rem))) scale(.95); }
   }
   .speed-delta-flash{
-    /* top:-26px (not 0) — anchoring at the badge's own top edge meant a
-       floater was still opaque (opacity hits 1 at just 12% of the rise,
-       see the keyframe below) while it had barely climbed at all, sitting
-       right on top of the actual replication-speed number and briefly
-       masking the very thing it's announcing a change to. Starting
-       already clear above the badge (roughly its own height) means the
-       number underneath is never covered, not even for a frame — left:50%
-       (the CSS default, no per-element override — see flashSpeedDelta(),
-       game-ui.js) is what makes every floater share the same X, this is
-       just about Y. */
-    position:absolute; top:-26px; left:50%; font-family:'Orbitron',monospace; font-size:18px; font-weight:800;
+    /* Starts just above the badge so it never covers the number. */
+    position:absolute; top:-1.625rem; left:50%; font-family:'Orbitron',monospace; font-size:1.125rem; font-weight:800;
     pointer-events:none; animation:speed-delta-float 3s ease-out forwards; white-space:nowrap;
-    text-shadow:0 0 4px var(--bg), 0 0 9px var(--bg), 0 1px 3px rgba(0,0,0,.7);
+    text-shadow:0 0 0.25rem var(--bg), 0 0 0.5625rem var(--bg), 0 1px 0.1875rem rgba(0,0,0,.7);
   }
   .speed-delta-flash.up{ color:var(--stealth); }
   .speed-delta-flash.down{ color:var(--accent2); }
-  /* The number itself growing then shrinking back — a second, more
-     literal cue alongside the floating +1/-1 above, for exactly the
-     moment effective replication speed changes. */
+  /* The speed number itself pulses on a change. */
   @keyframes speed-value-pulse{
     0%{ transform:scale(1); }
     40%{ transform:scale(1.5); }
     100%{ transform:scale(1); }
   }
   .virus-info-panel-speed-value.speed-pulse{ animation:speed-value-pulse .6s ease-out; }
-  /* Mission log / narrator — left of the board, always visible (no popup,
-     no collapse toggle). Stretches to match game-left-col's full height
-     via game-main-row's flex default (align-items:stretch). Each phase's
-     events are appended here one line at a time as they happen. */
+  /* ── Mission log ── right of the board; full board-column height when
+     open. Lines are added newest-first. */
   .narration-col{
-    width:280px; flex-shrink:0; box-sizing:border-box;
-    display:flex; flex-direction:column; gap:6px; overflow:hidden;
-    border:1px solid var(--border); border-radius:8px; background:var(--panel);
-    padding:9px;
+    width:17.5rem; flex-shrink:0; box-sizing:border-box;
+    display:flex; flex-direction:column; gap:0.375rem; overflow:hidden;
+    border:1px solid var(--border); border-radius:0.5rem; background:var(--panel);
+    padding:0.875rem;
   }
-  /* Wider on a screen with room to spare, so more of each narration line
-     fits on one row instead of wrapping — keyed to actual viewport width
-     (not tied into #game-stage's own transform:scale() sizing) since
-     that's the literal "is there screen width free" question, independent
-     of however big the board itself currently happens to be scaled. */
-  @media (min-width:1400px){ .narration-col{ width:320px; } }
-  @media (min-width:1700px){ .narration-col{ width:360px; } }
+  /* Wider on wide screens (by window width) so lines wrap less. */
+  @media (min-width:1400px){ .narration-col{ width:20rem; } }
+  @media (min-width:1700px){ .narration-col{ width:22.5rem; } }
   .narration-title{
-    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2px; color:var(--muted);
+    font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:2px; color:var(--muted);
     text-transform:uppercase; text-align:center; flex-shrink:0;
   }
+  /* Header doubles as the collapse/expand toggle. */
+  .narration-toggle{
+    display:flex; align-items:center; justify-content:center; gap:0.5rem; flex-shrink:0;
+    background:none; border:none; padding:0.125rem 0; cursor:pointer; color:var(--muted);
+    font:inherit; position:relative;
+  }
+  .narration-toggle:hover, .narration-toggle:hover .narration-title{ color:var(--accent); }
+  .narration-toggle-icon{ font-size:0.875rem; line-height:1; }
+  /* Collapsed (default): a narrow tab with a vertical label, as tall as
+     the Immune System banner (height set in alignNarrationHeight()). */
+  .narration-col.collapsed{ width:2.5rem; padding:0.5rem 0.25rem; align-self:flex-start; }
+  .narration-col.collapsed .narration-toggle{ flex-direction:column; flex:1; justify-content:flex-start; gap:0.625rem; }
+  .narration-col.collapsed .narration-title{ writing-mode:vertical-rl; letter-spacing:1px; }
+  .narration-col.collapsed .narration-feed{ display:none; }
+  /* New lines while collapsed — a small pulsing dot on the tab. */
+  .narration-unread{
+    display:none; width:0.5rem; height:0.5rem; border-radius:50%;
+    background:var(--stealth); box-shadow:0 0 0.375rem var(--stealth);
+    animation:scroll-arrow-pulse 1.2s ease-in-out infinite;
+  }
+  .narration-col.collapsed.has-unread .narration-unread{ display:block; }
   .narration-feed{
     flex:1; min-height:0; overflow-y:auto;
-    display:flex; flex-direction:column; gap:5px;
+    display:flex; flex-direction:column; gap:0.3125rem;
   }
   .narration-line{
-    padding:5px 7px; border-radius:5px; background:rgba(255,255,255,.03);
+    padding:0.3125rem 0.4375rem; border-radius:0.3125rem; background:rgba(255,255,255,.03);
     border-left:2px solid var(--border);
-    font-size:13px; color:var(--text); line-height:1.4;
+    font-size:0.8125rem; color:var(--text); line-height:1.4;
     opacity:0; animation:narration-line-in .35s ease forwards;
   }
   @keyframes narration-line-in{
-    from{ opacity:0; transform:translateX(-6px); }
+    from{ opacity:0; transform:translateX(-0.375rem); }
     to{ opacity:1; transform:translateX(0); }
   }
-  /* Wraps everything narrated during one turn (virus growth, immune
-     response, mutation, then whatever the player plays) so the "— Turn N —"
-     label reads as a header sitting above that turn's own events instead
-     of getting buried underneath them as later events insert above it
-     (newest-first) — see the newTurn option on appendNarrationLine(),
-     game-ui.js. */
+  /* One turn's lines, under its "— Turn N —" header. */
   .narration-turn-group{
-    display:flex; flex-direction:column; gap:5px;
+    display:flex; flex-direction:column; gap:0.3125rem;
     transition:opacity .3s ease;
   }
-  /* Groups are always prepended (newest-first — see appendNarrationLine(),
-     game-ui.js), so the current turn is always the first .narration-turn-
-     group and every later sibling is a previous turn — dim those down so
-     the active turn is the obvious visual focus, without hiding history
-     entirely (still fully readable, just quieter). */
+  /* Earlier turns are dimmed so the current turn stands out. */
   .narration-feed > .narration-turn-group:not(:first-child){
     opacity:.55;
   }
   .narration-line.turn-marker{
-    font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1.5px; color:var(--muted);
+    font-family:'Orbitron',monospace; font-size:0.5rem; letter-spacing:1.5px; color:var(--muted);
     text-align:center; background:none; border-left:none;
     border-bottom:1px solid var(--border);
-    border-radius:0; padding:0 0 4px;
+    border-radius:0; padding:0 0 0.25rem;
   }
   .narration-line.line-virus{ border-left-color:var(--accent2); }
   .narration-line.line-immune{ border-left-color:var(--accent); }
   .narration-line.line-immune-header{ font-family:'Orbitron',monospace; letter-spacing:.5px; color:var(--accent); }
   .narration-line.line-mutation{ border-left-color:var(--accent2); }
-  /* Marks a line as interactive — a mutation line reopens its popup (see
-     showMutationToast()), the Pick Cards entry reopens the draft popup
-     (see updatePickCardsEntry()) — visually distinct from plain narration
-     even at rest, not just on hover, via a tinted background and a
-     trailing "expand" affordance icon; deliberately neutral/not tied to
-     any one line's own category colour so the same class reads
-     consistently everywhere it's used. */
+  /* Clickable lines (mutation details, Pick Cards): tinted with a ⤢ icon. */
   .narration-line.narration-line-clickable{
-    cursor:pointer; position:relative; padding-right:26px;
+    cursor:pointer; position:relative; padding-right:1.625rem;
     background:rgba(255,255,255,.06);
     transition:background .15s, border-color .15s;
   }
   .narration-line.narration-line-clickable::after{
-    content:'⤢'; position:absolute; top:50%; right:6px; transform:translateY(-50%);
-    font-size:16px; color:var(--muted); opacity:.85; pointer-events:none;
+    content:'⤢'; position:absolute; top:50%; right:0.375rem; transform:translateY(-50%);
+    font-size:1rem; color:var(--muted); opacity:.85; pointer-events:none;
   }
   .narration-line.narration-line-clickable:hover{ background:rgba(255,255,255,.13); }
   .narration-line.narration-line-clickable:hover::after{ color:var(--text); opacity:1; }
   .narration-line.line-player{ border-left-color:var(--stealth); }
   .narration-line.line-player-header{ font-family:'Orbitron',monospace; letter-spacing:.5px; color:var(--stealth); }
 
-  /* A header + the cards under it (e.g. "Immune System" + each card played
-     that turn) render as one block with a single highlight line on the
-     left, instead of every line inside getting its own. */
+  /* A header plus its lines (e.g. "Immune System" + cards played) as one
+     block with a single highlight bar. */
   .narration-group{
-    display:flex; flex-direction:column; gap:3px;
-    padding:5px 7px; border-radius:5px; background:rgba(255,255,255,.03);
+    display:flex; flex-direction:column; gap:0.1875rem;
+    padding:0.3125rem 0.4375rem; border-radius:0.3125rem; background:rgba(255,255,255,.03);
     border-left:2px solid var(--border);
     opacity:0; animation:narration-line-in .35s ease forwards;
   }
@@ -745,19 +607,12 @@
     padding:0; border-left:none; border-radius:0; background:none;
   }
 
-  /* Whichever banner corresponds to whoever must act this phase gets a
-     highlighted border the instant it's their turn — immune banner during
-     the immune system's phase, the whole hand banner during "play cards"
-     (during "pick cards" only the Select button, not the whole draft
-     banner, since picking isn't the final commit yet). The immune banner's
-     highlight pulses right away since it's just showing the system is
-     actively resolving; the player-facing ones (.turn-reminder) only start
-     pulsing after 5-10s of inactivity — see resetTurnReminder() in
-     game-ui.js — so the nudge reads as "you've been idle," not as
-     something flashing at them the moment their turn begins. */
+  /* Whoever acts this phase gets a highlighted banner: the Immune System
+     banner pulses during its phase; the player's banners light up on their
+     turn and only pulse (.turn-reminder) after 5–10 s idle. */
   @keyframes turn-active-pulse{
-    0%,100%{ box-shadow:0 0 8px var(--turn-glow, rgba(57,255,20,.4)); }
-    50%{ box-shadow:0 0 16px var(--turn-glow, rgba(57,255,20,.7)); }
+    0%,100%{ box-shadow:0 0 0.5rem var(--turn-glow, rgba(57,255,20,.4)); }
+    50%{ box-shadow:0 0 1rem var(--turn-glow, rgba(57,255,20,.7)); }
   }
   .immune-banner.turn-active{
     animation:turn-active-pulse 1.6s ease-in-out infinite;
@@ -770,204 +625,135 @@
     animation:turn-active-pulse 1.6s ease-in-out infinite;
   }
 
-  /* Small label distinguishing each banner's role (immune banner's title
-     doubles as its own label, so this is only needed on the virus side). */
+  /* Banner side labels ("Active Cards", "Cards In Hand"). */
   .banner-label{
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1.5px; color:var(--muted);
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:1.5px; color:var(--muted);
     text-transform:uppercase; flex-shrink:0;
   }
-  /* Sits beside the cards instead of above them, so it doesn't cost the
-     banner a whole header row — the cards get its full height instead.
-     Two lines (each label's own text has a manual <br>) keeps it short
-     enough that the label never dictates the banner's height, only the
-     cards do — and a fixed width keeps every banner's card row starting
-     at the same offset, so they all line up with each other. */
+  /* Vertical label beside the cards (fixed width so every banner's cards
+     start at the same offset). */
   .banner-label-side{
     writing-mode:vertical-rl; transform:rotate(180deg); text-align:center;
-    width:33px; flex-shrink:0; line-height:1.35;
+    width:2.0625rem; flex-shrink:0; line-height:1.35;
   }
 
-  /* Virus — top banner: label + played/active cards (incl. tropism/traits)
-     share one row at the banner's full height, so the cards read as big as
-     the banner itself instead of splitting it with a text header. Virus
-     identity/speed/mutation live in virus-info-panel, not repeated here. */
+  /* ── Card banners ── Active Cards: the virus's tropism and active
+     effects. */
   .virus-banner-top{
     position:relative; z-index:1; width:100%; box-sizing:border-box; margin:0 auto;
-    display:flex; align-items:center; gap:10px;
-    border:1px solid var(--border); border-radius:8px;
-    /* Tint layered over an opaque backing, not a bare transparent fill —
-       otherwise the page's own faint grid pattern (body::before) shows
-       through since nothing behind this banner is solid. */
+    display:flex; align-items:center; gap:0.625rem;
+    border:1px solid var(--border); border-radius:0.5rem;
+    /* Tint over a solid backing, so the page grid doesn't show through. */
     background:linear-gradient(rgba(57,255,20,.04), rgba(57,255,20,.04)), var(--bg);
-    padding:8px 12px;
+    padding:0.5rem 0.75rem;
   }
-  /* Bigger than the default in-play size in all three card banners now
-     that their labels no longer cost a header row — there's room to use.
-     Active Cards (virus-banner-top) is slightly smaller than the other
-     two specifically to free up a bit more vertical room for the board
-     below it — Cards In Hand and Immune System stay at the full size. */
-  #immune-banner .card-face, #hand-panel .card-face{
-    width:92px;
+  /* Card sizes: Immune System and Active Cards match; Cards In Hand is a
+     bit larger (it's the row the player picks from). */
+  #hand-panel .card-face{
+    width:5.25rem;
   }
-  #virus-banner-top .card-face{
-    width:76px;
+  #immune-banner .card-face, #virus-banner-top .card-face{
+    width:4.75rem;
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     CARD ART — small in-play card faces + the (i) info button that
-     opens the large-art modal. Cards ship as transparent PNGs (title
-     + icon + flavour text baked in as light-coloured text) designed to
-     sit on a dark navy backdrop, which is what --card-bg supplies here.
+     CARD FACES — transparent PNG art on the dark --card-bg.
+     .card-face is an unclipped shell (so the ⓘ and turns badges can hang
+     over the corners); .card-face-art is the clipped card itself.
      ═══════════════════════════════════════════════════════════════ */
-  /* .card-face is a plain positioning shell now — overflow:visible (the
-     default), no border/background/clipping of its own — purely so the
-     corner badges (.card-info-btn/.card-face-turns-badge, both children
-     of THIS element) can hang half outside its bounds without being cut
-     off. All the actual card-rectangle styling (border, rounded corners,
-     art image, clipping) lives on .card-face-art, the one child that
-     really is card-shaped. */
   .card-face{
-    position:relative; width:62px; aspect-ratio:302/400; flex-shrink:0;
+    position:relative; width:3.875rem; aspect-ratio:302/400; flex-shrink:0;
     cursor:pointer; transition:transform .15s;
   }
   .card-face:hover{ transform:translateY(-2px); }
   .card-face-art{
-    position:absolute; inset:0; border-radius:7px; overflow:hidden;
+    position:absolute; inset:0; border-radius:0.4375rem; overflow:hidden;
     background-color:var(--card-bg); border:1px solid var(--card-border);
     background-size:cover; background-position:center;
     transition:border-color .2s, box-shadow .2s;
   }
   .card-face:hover .card-face-art{ border-color:var(--accent); }
-  .card-face.selected .card-face-art{ border-color:var(--stealth); box-shadow:0 0 10px rgba(57,255,20,.3); }
-  /* Hand shown but not actually playable yet (any phase but your own
-     play_cards turn) — dimmed, no hover feedback, not clickable. */
+  .card-face.selected .card-face-art{ border-color:var(--stealth); box-shadow:0 0 0.625rem rgba(57,255,20,.3); }
+  /* Hand cards when it isn't your Play Cards step: dimmed, not clickable. */
   .card-face.inactive{ cursor:default; opacity:.55; }
   .card-face.inactive:hover{ transform:none; }
   .card-face.inactive:hover .card-face-art{ border-color:var(--card-border); }
   .card-face-art.card-face-placeholder{
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:4px; padding:4px; text-align:center;
+    gap:0.25rem; padding:0.25rem; text-align:center;
   }
-  .card-face-icon{ font-size:16px; }
-  .card-face-name{ font-family:'Orbitron',monospace; font-size:8px; letter-spacing:.3px; color:var(--text); line-height:1.2; }
-  /* Sits on the card's top-right CORNER, not inside it — shifted by
-     exactly half its own size so the glyph is centred on the corner point
-     (half on the card, half hanging off). No filled backdrop of its own —
-     just the ⓘ glyph's own built-in ring — a text-shadow halo instead of
-     a solid disc keeps it legible against busy art without reading as a
-     circle painted on top of the card. */
-  /* Sized/offset to fit inside the banner rows' own vertical slack
-     (.immune-banner-cards etc. — see their min-height comment) without
-     the container's overflow clipping its top edge — a 20px box centred
-     exactly on the corner needed more headroom than that slack leaves.
-     display:flex centring (not line-height matched to a fixed height) so
-     the ⓘ glyph's own metrics can't clip against the box regardless of
-     font quirks. Background is the same dark navy as the card art itself
-     (--card-bg), sized close to the glyph rather than a bigger padded
-     disc, with no border — just enough backdrop to read against busy art. */
+  .card-face-icon{ font-size:1rem; }
+  .card-face-name{ font-family:'Orbitron',monospace; font-size:0.5rem; letter-spacing:.3px; color:var(--text); line-height:1.2; }
+  /* ⓘ button centred on the top-right corner, on a small --card-bg disc
+     so it reads over busy art; sized to fit the banner rows' spare height
+     without being clipped. */
   .card-info-btn{
-    position:absolute; top:-5px; right:-5px; z-index:2;
-    width:16px; height:16px;
+    position:absolute; top:-0.3125rem; right:-0.3125rem; z-index:2;
+    width:1rem; height:1rem;
     display:flex; align-items:center; justify-content:center;
     background:var(--card-bg); border:none; border-radius:50%;
     color:var(--muted);
-    font-size:12px; font-weight:700; line-height:1; cursor:pointer; padding:0;
+    font-size:0.75rem; font-weight:700; line-height:1; cursor:pointer; padding:0;
   }
   .card-info-btn:hover{ color:var(--stealth); }
-  /* Turns-remaining badge for still-active effects (e.g. mRNA Vaccine
-     boost) — same corner-badge treatment as .card-info-btn above,
-     mirrored to the bottom-right corner instead so the two never
-     collide, and sized/offset the same way to fit the banner rows'
-     own vertical slack without clipping (see that comment). Coloured
-     (not just dark/neutral) specifically because a countdown is
-     time-sensitive — it should read as "notice me," where the info
-     button is deliberately more understated. */
+  /* Turns-remaining badge on the bottom-right corner — coloured, since a
+     countdown should catch the eye. */
   .card-face-turns-badge{
-    position:absolute; bottom:-4px; right:-4px; z-index:2;
-    font-family:'Orbitron',monospace; font-size:10px; font-weight:800; line-height:1;
-    color:#fff; background:var(--accent2); border:none; border-radius:999px;
-    min-width:16px; height:16px; box-sizing:border-box; padding:0 4px;
+    position:absolute; bottom:-0.25rem; right:-0.25rem; z-index:2;
+    font-family:'Orbitron',monospace; font-size:0.625rem; font-weight:800; line-height:1;
+    color:#fff; background:var(--accent2); border:none; border-radius:62.4375rem;
+    min-width:1rem; height:1rem; box-sizing:border-box; padding:0 0.25rem;
     display:flex; align-items:center; justify-content:center;
-    box-shadow:0 2px 6px rgba(0,0,0,.5);
+    box-shadow:0 2px 0.375rem rgba(0,0,0,.5);
   }
 
-  /* Immune banner — top of the board, matches the board's width. Only
-     ever shows currently-active/played cards (real card-faces, not
-     icons); label sits beside them in one row instead of on its own
-     header row above, same treatment as the virus's Active Cards banner.
-     width:100% here is just the pre-JS fallback — .tissue-board no longer
-     stretches to fill its grid column (see its own flex-basis comment), so
-     matching "the board's width" now takes actually measuring it; see
-     alignBannerWidths() (game-ui.js), which overrides this with an exact
-     px width. margin:0 auto centers it within the (wider) grid column in
-     the meantime / if JS hasn't run yet. */
+  /* Immune System banner (top of the board). Its width is set in JS to
+     match the boards (alignBannerWidths()); 100% is only a fallback. */
   .immune-banner{
-    display:flex; align-items:center; gap:10px; width:100%; box-sizing:border-box; margin:0 auto;
-    border:1px solid var(--border); border-radius:8px;
-    /* Same opaque-backed tint as .virus-banner-top above, same reason. */
+    display:flex; align-items:center; gap:0.625rem; width:100%; box-sizing:border-box; margin:0 auto;
+    border:1px solid var(--border); border-radius:0.5rem;
+    /* Tint over a solid backing (as .virus-banner-top). */
     background:linear-gradient(rgba(0,229,255,.06), rgba(0,229,255,.06)), var(--bg);
-    padding:8px 12px; transition:border-color .3s;
+    padding:0.5rem 0.75rem; transition:border-color .3s;
   }
   .immune-banner-cards, .virus-banner-cards{
-    display:flex; align-items:center; gap:16px; flex-wrap:nowrap; overflow-x:auto; flex:1; min-width:0;
+    display:flex; align-items:center; gap:1rem; flex-wrap:nowrap; overflow-x:auto; flex:1; min-width:0;
   }
-  /* Matches the card's own height (same formula as the .card-face width
-     clamp below, converted via its aspect-ratio) so these banners stay
-     the same height whether they hold real cards or just the "— none —"
-     placeholder text, instead of shrinking to fit a text line. The +10px
-     pads out just enough vertical slack around the card — overflow-x
-     here forces overflow-y to compute as auto too (a CSS quirk: one axis
-     non-visible drags the other off "visible"), so with too little slack
-     the card's own :hover lift (translateY(-2px)) AND the half-off
-     corner badges (.card-info-btn/.card-face-turns-badge) had nowhere to
-     go and got clipped by that now-scrollable box. Active Cards uses its
-     own smaller card width (76px, see #virus-banner-top .card-face). */
-  .immune-banner-cards, .hand-cards{
-    min-height:calc(92px * 400 / 302 + 10px);
+  /* Card rows keep a card's height even when empty ("— none —"), plus
+     a little slack so the hover lift and corner badges aren't clipped
+     (overflow-x makes these rows clip vertically too). */
+  .hand-cards{
+    min-height:calc(5.25rem * 400 / 302 + 0.625rem);
   }
-  .virus-banner-cards{
-    min-height:calc(76px * 400 / 302 + 10px);
+  .immune-banner-cards, .virus-banner-cards{
+    min-height:calc(4.75rem * 400 / 302 + 0.625rem);
   }
   .immune-banner-title{
-    font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1.5px;
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:1.5px;
     text-transform:uppercase; flex-shrink:0; color:var(--accent);
   }
-  .banner-empty{ font-size:10px; color:var(--muted); font-family:'Nunito',sans-serif; }
-  /* Power-ups / currently-active cards get a distinct static glow so they
-     read as an ongoing status rather than a one-off play — no pulsing,
-     since an animated card reads as "needs your attention/action," which
-     these don't (they're just quietly still in effect). */
+  .banner-empty{ font-size:0.625rem; color:var(--muted); font-family:'Nunito',sans-serif; }
+  /* Effects still in force: a steady (not pulsing) glow — green for the
+     virus, cyan in the Immune System banner. */
   .card-face.power-up .card-face-art{
-    border-color:var(--stealth); box-shadow:0 0 10px rgba(57,255,20,.5);
+    border-color:var(--stealth); box-shadow:0 0 0.625rem rgba(57,255,20,.5);
   }
-  /* Immune System banner's own active cards get the cyan accent instead of
-     the virus's green — same "quietly still in effect" glow, just tinted
-     to whichever side it belongs to. */
   #immune-banner .card-face.power-up .card-face-art{
-    border-color:var(--accent); box-shadow:0 0 10px rgba(0,229,255,.5);
+    border-color:var(--accent); box-shadow:0 0 0.625rem rgba(0,229,255,.5);
   }
-  /* The ONE card whose reveal step is what's actually resolving on the
-     board right now (see immune-banner-card-active, game-ui.js) — every
-     card played this turn stays visible here once revealed, so on a
-     multi-card turn this pulsing highlight is what tells the player which
-     one the board is showing at this exact moment, rather than them
-     reading an earlier (already-settled) card's still-visible face as
-     current. Pulsing, unlike power-up's static glow above, precisely
-     because this DOES want to draw attention to "happening right now". */
+  /* The immune card currently playing out on the board pulses, so it's
+     clear which of this turn's cards is happening now. */
   @keyframes immune-banner-card-active-pulse{
-    0%,100%{ box-shadow:0 0 8px rgba(0,229,255,.5); }
-    50%{ box-shadow:0 0 16px rgba(0,229,255,.95); }
+    0%,100%{ box-shadow:0 0 0.5rem rgba(0,229,255,.5); }
+    50%{ box-shadow:0 0 1rem rgba(0,229,255,.95); }
   }
   .immune-banner-card-active .card-face-art{
     border-color:var(--accent);
     animation:immune-banner-card-active-pulse 1s ease-in-out infinite;
   }
-  /* Scroll hint — shown next to a card row via JS when it overflows.
-     Clickable too (see updateScrollArrow(), game-ui.js), not just a
-     passive hint — the row itself still scrolls the normal way (drag/
-     wheel) regardless. */
+  /* ◂ ▸ arrows beside a card row that overflows (clickable). */
   .scroll-arrow{
-    display:none; flex-shrink:0; color:var(--stealth); font-size:16px;
+    display:none; flex-shrink:0; color:var(--stealth); font-size:1rem;
     animation:scroll-arrow-pulse 1.2s ease-in-out infinite;
     cursor:pointer;
   }
@@ -975,184 +761,104 @@
   .scroll-arrow:hover{ color:var(--text); }
   @keyframes scroll-arrow-pulse{ 0%,100%{ opacity:.35; } 50%{ opacity:1; } }
 
-  /* flex-wrap:nowrap is deliberate: multi-line flex decides how many items
-     fit per line using each item's un-shrunk flex-basis, then only applies
-     flex-shrink within a line afterwards — so with the boards' own
-     (non-zero, formula-based) flex-basis, "wrap" would trigger on a narrow
-     screen well before shrinking ever got a chance to make them fit on
-     one line, breaking into an off-center 2-over-1 layout. Forcing a
-     single line makes shrink (see .tissue-board) the only option, which is
-     what we actually want here. */
-  .boards-wrap{ display:flex; gap:14px; flex-wrap:nowrap; justify-content:center; align-items:flex-start; }
-  /* flex-shrink (not flex-grow) + min-width:0 lets each board shrink to fit
-     when space is actually tight (narrow/portrait screens) instead of
-     wrapping to a second row. Deliberately NOT flex-grow:1 — that used to
-     stretch each board to an equal third of the row's full width
-     regardless of the board's own (much narrower) content, leaving big
-     gaps between boards on wide screens even though the flex `gap` itself
-     was small; flex-grow:0 + justify-content:center on .boards-wrap keeps
-     the three boards sitting close together at their natural size instead,
-     which is what actually sells "the virus can spread sideways between
-     them". The board's own width formula lives HERE (on flex-basis), not
-     on .tissue-grid inside it — putting a `width:100%` on a descendant of
-     a flex-basis:auto item is a classic circular-percentage trap (the
-     browser needs the item's own resolved width to resolve that 100%, but
-     is using the descendant's width to compute the item's content-based
-     size in the first place), and produced wildly inconsistent board
-     sizes per tissue in practice. Giving flex-basis an explicit,
-     non-percentage formula sidesteps that entirely; .tissue-grid below
-     just fills it with a plain width:100%. */
-  /* Fixed natural size, deliberately NOT viewport-dependent — the whole
-     #game-stage this lives in (see its own CSS, near .game-main-row) is
-     assembled at this one fixed "designed" size and then scaled as a
-     single rigid unit to fit whatever viewport it's actually shown on (see
-     fitGameStage(), game-ui.js). A per-element vw/vh formula here would
-     reintroduce exactly the drift that used to cause boards/banners to
-     size independently of each other. flex-shrink:0 for the same reason —
-     the outer transform is now the ONLY thing that ever makes this
-     smaller, so this box's own natural width is always this exact value,
-     never something flex quietly negotiated down on a narrow window. */
+  /* ── Boards ── three tissue boards side by side, always on one line. */
+  .boards-wrap{ display:flex; gap:0.875rem; flex-wrap:nowrap; justify-content:center; align-items:flex-start; }
+  /* Each board has a fixed natural width (flex-basis, no grow/shrink);
+     the whole stage is scaled to the screen instead (fitGameStage()). The
+     width sits on the flex-basis, not on the grid inside, to avoid a
+     circular percentage width. */
   .tissue-board{
     display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0;
     flex-grow:0; flex-shrink:0;
-    flex-basis:195px;
+    flex-basis:12.1875rem;
   }
-  /* Per-tissue accent, matching the physiology-style organ art: lung pink,
-     liver green, intestine brown. Drives both the organ art's glow and the
-     line traced around the board — bright when targeted, dull otherwise. */
+  /* Tissue accent colours (organ glow, cell glow): lung pink, liver
+     green, intestine brown. */
   .tissue-board[data-tissue="lung"]{ --tissue-color:#ff3fa0; }
-  /* --antibody-color overrides just the Antibody card's own visuals (Y
-     glyph, placement glow, Escape poof) to a darker green than liver's
-     regular --tissue-color (mint) — everything else liver-themed (organ
-     glow, board border, Cytokine) still uses --tissue-color as normal.
-     Lung/intestine don't set this, so their antibody visuals fall back to
-     their own --tissue-color unchanged (see each usage's var() fallback). */
+  /* --antibody-color: liver's Antibody visuals use a darker green than
+     its mint accent (others fall back to --tissue-color). */
   .tissue-board[data-tissue="liver"]{ --tissue-color:#34d399; --antibody-color:#1e8449; }
   .tissue-board[data-tissue="intestine"]{ --tissue-color:#c9975a; }
-  /* Query container for the title/organ below — sizing those off THIS
-     wrapper's resolved width (cqw), not raw viewport width (vw), is what
-     keeps them inside the board's own box at any #game-stage scale (see
-     fitGameStage(), game-ui.js): vw-based sizing didn't know or care how
-     small the whole stage had been scaled down to, so at small scales the
-     title text and organ art kept demanding their full viewport-relative
-     size and spilled sideways into the neighbouring board — the "tissue
-     grids overlap" bug. cqw sizes off the board's own box instead, which
-     shrinks/grows in exact lockstep with everything else in the stage, so
-     there's nothing left for it to drift out of sync with. Deliberately
-     NOT on .tissue-board itself: container-type
-     imposes size containment, which makes an element report zero intrinsic
-     (max-content) size to ITS OWN ancestors — putting it on .tissue-board
-     broke boards-wrap's ability to size the board-column grid track (see
-     .game-left-col) to fit the boards at all, collapsing every board down
-     to its flex-shrink floor regardless of viewport size. This wrapper
-     sizes from .tissue-board (a normal, uncontained flex item) same as
-     .tissue-grid-wrap below does, so the containment boundary starts one
-     level lower and never reaches the grid-track calculation above it. */
+  /* Organ art + title. The header is the size container (cqw units), so
+     they scale with the board and never spill into the next one. It's not
+     on .tissue-board itself: size containment there broke the grid
+     column's sizing. */
   .tissue-board-header{
     display:flex; flex-direction:column; align-items:center; align-self:stretch;
     container-type:inline-size;
   }
   .tissue-board-title{
-    position:relative; z-index:1; font-family:'Orbitron',monospace; font-size:clamp(11px, 8cqw, 22px);
+    position:relative; z-index:1; font-family:'Orbitron',monospace; font-size:clamp(0.6875rem, 8cqw, 1.375rem);
     letter-spacing:1.5px; color:#f2f2f7; text-transform:uppercase;
-    text-shadow:0 0 4px var(--bg), 0 0 8px var(--bg), 0 0 12px var(--bg);
-    /* Safety net for the longest label ("Intestine") at the narrowest
-       board widths — truncates instead of spilling into the next board
-       if 8cqw still doesn't quite fit. */
+    text-shadow:0 0 0.25rem var(--bg), 0 0 0.5rem var(--bg), 0 0 0.75rem var(--bg);
+    /* Truncate rather than overflow at very small widths. */
     max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .tissue-board.inactive .tissue-board-title{ color:var(--muted); }
   .tissue-board-organ{
-    position:relative; z-index:0; margin-bottom:-14px;
-    width:clamp(20px, 28cqw, 90px); height:auto; object-fit:contain;
-    filter:drop-shadow(0 0 8px var(--tissue-color));
+    position:relative; z-index:0; margin-bottom:-0.875rem;
+    /* aspect-ratio reserves the art's square before the large PNG loads,
+       so the layout doesn't jump (titles against the Immune System banner,
+       bottom rows clipped) when it arrives. 5rem: fallback without cqw. */
+    width:5rem; width:clamp(1.25rem, 28cqw, 5.625rem); height:auto; aspect-ratio:1; object-fit:contain;
+    filter:drop-shadow(0 0 0.5rem var(--tissue-color));
     transition:filter .3s, opacity .3s;
   }
   .tissue-board.inactive .tissue-board-organ{ opacity:.35; filter:grayscale(.6) drop-shadow(0 0 2px rgba(255,255,255,.15)); }
-  /* No border around the column for now — removed, revisit later.
-     align-self:stretch overrides the tissue-board's own align-items:center
-     just for this one child, so it actually takes on the board's full
-     flexed width — title/organ above it stay centered as before, but
-     without this, .tissue-grid's width:100% (below) would have nothing
-     but its own shrink-to-fit size to resolve against and collapse. */
+  /* Stretch to the board's full width so the grid's width:100% works. */
   .tissue-grid-wrap{ align-self:stretch; }
-  /* .tissue-board's own flex-basis is a fixed pixel size now, not a
-     viewport formula — see its own comment for why. This element just
-     fills whatever width that resolved to; getting the whole assembly to
-     actually fit any given screen (laptop, landscape iPad, ...) is
-     fitGameStage()'s job (game-ui.js), scaling the entire #game-stage
-     (board, banners, phase panel, mission log together) as one unit rather
-     than this grid trying to solve it alone. */
-  /* Solid backing so the page's own faint grid pattern (body::before)
-     doesn't show through each cell's own semi-transparent fill — every
-     cell state below tints against this opaque layer instead of the
-     pattern behind it. */
-  .tissue-grid{ display:grid; gap:3px; margin:0 auto; width:100%; background:var(--bg); }
+  /* Solid backing so the page grid doesn't show through the cells. */
+  .tissue-grid{ display:grid; gap:0.1875rem; margin:0 auto; width:100%; background:var(--bg); }
   .tissue-cell{
     position:relative; container-type:inline-size;
-    aspect-ratio:1; border-radius:5px; cursor:pointer;
+    aspect-ratio:1; border-radius:0.3125rem; cursor:pointer;
     transition:transform .1s, background .2s, box-shadow .2s;
     border:1px solid rgba(255,255,255,.95);
     background:rgba(80,140,255,.16);
-    box-shadow:0 0 8px var(--tissue-color, rgba(0,229,255,.85)), 0 0 3px var(--tissue-color, rgba(0,229,255,.9)),
-      inset 0 0 5px color-mix(in srgb, var(--tissue-color, #00e5ff) 45%, transparent);
+    box-shadow:0 0 0.5rem var(--tissue-color, rgba(0,229,255,.85)), 0 0 0.1875rem var(--tissue-color, rgba(0,229,255,.9)),
+      inset 0 0 0.3125rem color-mix(in srgb, var(--tissue-color, #00e5ff) 45%, transparent);
   }
   .tissue-cell:hover{ transform:scale(1.15); z-index:1; }
-  /* Horizontal/Vertical Spread target a whole TISSUE now, not a chosen
-     cell (balance pass: guaranteed player-chosen precision was too strong)
-     — while one of those is selected
-     (#boards-wrap gets .targeting-tissue, see _syncTissueTargetingClass(),
-     game-ui.js), an individual cell popping up on hover would still read
-     as "I'm choosing this exact cell", so that's suppressed here in
-     favour of a whole-board glow instead — :has() reflects whichever
-     cell is currently hovered without any extra JS wiring. */
+  /* While a spread card (targets a whole tissue) is selected, hovering
+     highlights the whole board instead of popping a single cell. */
   #boards-wrap.targeting-tissue .tissue-cell:hover{ transform:none; z-index:auto; }
   #boards-wrap.targeting-tissue .tissue-board:has(.tissue-cell:hover) .tissue-grid{
-    box-shadow:0 0 16px 2px var(--tissue-color, var(--accent));
-    border-radius:6px;
+    box-shadow:0 0 1rem 2px var(--tissue-color, var(--accent));
+    border-radius:0.375rem;
   }
   .tissue-cell.state-healthy{ background:rgba(80,140,255,.16); }
-  /* A cell NK Cell/T-Cell/DNA-RNA Sensing cleared reads as just another
-     empty healthy cell the instant its own brief poof animation ends —
-     easy to lose track of which one it was. Kept lightly white-tinted well
-     past that (see recentlyClearedCells, game-ui.js) so it's still findable
-     for the rest of the turn. */
+  /* Just cleared by NK Cell / T-Cell: lightly tinted for the rest of
+     the immune and mutation phases, so it's easy to spot. */
   .tissue-cell.state-healthy.cell-recently-cleared{
-    background:rgba(255,255,255,.24); box-shadow:0 0 6px rgba(255,255,255,.4);
+    background:rgba(255,255,255,.24); box-shadow:0 0 0.375rem rgba(255,255,255,.4);
   }
   .tissue-cell.state-infected{
     background:rgba(57,255,20,.12);
-    box-shadow:0 0 6px rgba(57,255,20,.5);
+    box-shadow:0 0 0.375rem rgba(57,255,20,.5);
   }
   .tissue-cell.state-infected::before{
     content:'🦠'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     font-size:65cqw; line-height:1; pointer-events:none;
   }
-  /* Latent cells read as a muted/transparent version of an infected cell
-     (same virus icon, low opacity) rather than a distinct solid colour —
-     it's the same virus, just lying low. */
+  /* Dormant (Latency): a faint version of an infected cell. */
   .tissue-cell.state-dormant{ background:rgba(138,109,255,.18); }
   .tissue-cell.state-dormant::before{
     content:'🦠'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     font-size:65cqw; line-height:1; pointer-events:none; opacity:.35;
   }
-  /* Antibody — a bold rounded "Y" (the actual antibody shape), tinted per
-     tissue via --tissue-color, instead of the old per-tissue art asset.
-     Scoped to exclude the cytokine-* variants below — those show a bell
-     instead, not a Y, so the two protection sources stay visually
-     distinct on the board. */
+  /* Antibody: a bold "Y" in the tissue colour (Cytokine cells show a
+     bell instead). */
   .tissue-cell.state-immune{ background:rgba(0,229,255,.12); }
   .tissue-cell.state-immune:not(.cytokine-blue):not(.cytokine-orange):not(.cytokine-red)::before{
     content:'Y'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     font-family:'Nunito',sans-serif; font-weight:800; font-size:85cqw; line-height:1;
     color:var(--antibody-color, var(--tissue-color, var(--accent))); pointer-events:none;
   }
-  /* One-shot pop + glow the moment a cell is newly protected — see
-     game-ui.js buildImmuneSteps() (flashClass: 'cell-antibody-flash'). */
+  /* Antibody placed: pop + glow (flash class 'cell-antibody-flash'). */
   @keyframes cell-antibody-pop{
     0%{ box-shadow:0 0 0 rgba(255,255,255,0); }
-    40%{ box-shadow:0 0 18px 4px var(--antibody-color, var(--tissue-color, var(--accent))); }
-    100%{ box-shadow:0 0 6px var(--antibody-color, var(--tissue-color, var(--accent))); }
+    40%{ box-shadow:0 0 1.125rem 0.25rem var(--antibody-color, var(--tissue-color, var(--accent))); }
+    100%{ box-shadow:0 0 0.375rem var(--antibody-color, var(--tissue-color, var(--accent))); }
   }
   @keyframes cell-antibody-glyph-pop{
     0%{ transform:scale(.3); opacity:0; }
@@ -1161,24 +867,16 @@
   }
   .tissue-cell.cell-antibody-flash{ animation:cell-antibody-pop 1s ease-out; }
   .tissue-cell.cell-antibody-flash::before{ animation:cell-antibody-glyph-pop .6s ease-out; }
-  /* Cytokine-shielded cells (as opposed to Antibody's permanent, per-tissue
-     art above) show an alarm bell tinted to the cytokine's own colour,
-     instead of the antibody art — the two protection sources need to read
-     as visually distinct on the board, not just in the side banner. */
+  /* Cytokine shield: a bell in the cytokine's colour. */
   .tissue-cell.cytokine-blue, .tissue-cell.cytokine-orange, .tissue-cell.cytokine-red{
     background-image:none;
   }
-  .tissue-cell.cytokine-blue{   background-color:rgba(58,160,255,.22);  box-shadow:0 0 8px #3aa0ff; }
-  .tissue-cell.cytokine-orange{ background-color:rgba(255,157,63,.22); box-shadow:0 0 8px #ff9d3f; }
-  .tissue-cell.cytokine-red{    background-color:rgba(255,77,77,.22);  box-shadow:0 0 8px #ff4d4d; }
-  /* Drawn as a CSS mask (not an emoji) specifically so it can be tinted to
-     each cytokine colour — an emoji glyph always renders in its own fixed
-     colour regardless of `color`/`background-color`, so blue/orange/red
-     would otherwise all show the exact same yellow bell. */
+  .tissue-cell.cytokine-blue{   background-color:rgba(58,160,255,.22);  box-shadow:0 0 0.5rem #3aa0ff; }
+  .tissue-cell.cytokine-orange{ background-color:rgba(255,157,63,.22); box-shadow:0 0 0.5rem #ff9d3f; }
+  .tissue-cell.cytokine-red{    background-color:rgba(255,77,77,.22);  box-shadow:0 0 0.5rem #ff4d4d; }
+  /* The bell is a CSS mask (not an emoji) so it can take each colour. */
   .tissue-cell.cytokine-blue::after, .tissue-cell.cytokine-orange::after, .tissue-cell.cytokine-red::after{
-    /* Shifted up slightly (translateY) so the bell's own bottom edge clears
-       the turns-remaining badge sitting in the cell's bottom-right corner
-       (.cytokine-turns-badge) instead of the two overlapping. */
+    /* Nudged up to clear the turns badge in the corner. */
     content:''; position:absolute; inset:0; margin:auto; width:76cqw; height:68cqw; pointer-events:none;
     transform:translateY(-10%);
     -webkit-mask-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='6' r='4'/><path d='M50 10C38 10 30 20 30 35L30 55L20 70L80 70L70 55L70 35C70 20 62 10 50 10Z'/><rect x='15' y='70' width='70' height='8' rx='4'/><circle cx='50' cy='88' r='7'/></svg>");
@@ -1190,29 +888,17 @@
   .tissue-cell.cytokine-blue::after{   background-color:#3aa0ff; }
   .tissue-cell.cytokine-orange::after{ background-color:#ff9d3f; }
   .tissue-cell.cytokine-red::after{    background-color:#ff4d4d; }
-  /* Turns-remaining badge — Cytokine protection is temporary (unlike
-     Antibody's permanent barrier), so shows a countdown, more relevant
-     the longer it lasts on easier difficulty bands. */
+  /* Cytokine countdown (turns until the shield expires). */
   .cytokine-turns-badge{
     position:absolute; bottom:1px; right:1px; z-index:1;
     font-family:'Orbitron',monospace; font-size:26cqw; font-weight:700; line-height:1.4;
-    color:#fff; background:rgba(0,0,0,.65); border-radius:3px; padding:0 3px; pointer-events:none;
+    color:#fff; background:rgba(0,0,0,.65); border-radius:0.1875rem; padding:0 0.1875rem; pointer-events:none;
   }
-  /* T-Cell/NK Cell/DNA-RNA Sensing clearing a cell — two beats, both run
-     as opaque overlays (not the real cell's own box) so they fully cover
-     the cell's real state, which has already silently flipped to plain
-     healthy by the time this class is added (see highlightCells()/
-     revealBoardCells() in game-ui.js) — without an opaque overlay, that
-     instant colour swap would show through underneath whatever's
-     animating on top and read as "cell flashes healthy", not "the
-     infected cell got cleared".
-     Beat 1 (::before) — a chip matching the real infected cell's own
-     look (colour + virus glyph) visibly balls itself up: shrinks, twists,
-     and fades out entirely by ~58%, like paper being crumpled into a fist.
-     Beat 2 (::after) — starting right as beat 1 finishes, a soft blurred
-     cloud puffs outward from that same spot and dissipates — the "poof".
-     Both share one 0.9s clock so they hand off from one to the other
-     without a JS-driven delay. */
+  /* T-Cell / NK Cell clear ("poof"). The cell is already healthy
+     underneath, so both layers are opaque overlays:
+       ::before — an infected-looking chip crumples up and vanishes;
+       ::after  — then a soft cloud puffs out from the same spot.
+     Both run on one 0.9 s animation. */
   @keyframes cell-crumple-chip{
     0%{ transform:scale(1) rotate(0deg); opacity:1; }
     35%{ transform:scale(.55) rotate(-14deg); opacity:1; }
@@ -1224,12 +910,12 @@
     0%{ transform:scale(.2); opacity:0; filter:blur(0px); }
     45%{ transform:scale(.25); opacity:0; filter:blur(0px); }
     58%{ transform:scale(.55); opacity:.95; filter:blur(1px); }
-    100%{ transform:scale(1.9); opacity:0; filter:blur(6px); }
+    100%{ transform:scale(1.9); opacity:0; filter:blur(0.375rem); }
   }
   .tissue-cell.cell-tcell-poof::before{
     content:'🦠'; position:absolute; inset:0; z-index:2; display:flex; align-items:center; justify-content:center;
     font-size:60cqw; line-height:1; pointer-events:none; border-radius:inherit;
-    background:rgba(57,255,20,.16); box-shadow:0 0 6px rgba(57,255,20,.5);
+    background:rgba(57,255,20,.16); box-shadow:0 0 0.375rem rgba(57,255,20,.5);
     animation:cell-crumple-chip .9s ease-out forwards;
   }
   .tissue-cell.cell-tcell-poof::after{
@@ -1237,10 +923,7 @@
     background:radial-gradient(circle, rgba(210,255,220,.95), rgba(210,255,220,0) 70%);
     animation:cell-poof-cloud .9s ease-out forwards;
   }
-  /* Antibody Escape — by the time this class is added the cell is already
-     plain 'healthy' (the real Y glyph is gone), so this renders its own
-     temporary "Y" that floats straight up and fades, as if the antibody
-     itself got shaken loose and drifted away. */
+  /* Antibody Escape: a "Y" floats up and fades. */
   @keyframes cell-antibody-escape-poof{
     0%{ transform:translateY(0) scale(1); opacity:1; }
     100%{ transform:translateY(-70%) scale(1.3); opacity:0; }
@@ -1251,17 +934,9 @@
     color:var(--antibody-color, var(--tissue-color, var(--accent))); pointer-events:none;
     animation:cell-antibody-escape-poof .9s ease-out forwards;
   }
-  /* Cytokine Neutralisation — same drift-up-and-fade as Antibody Escape's
-     poof above (shares its keyframes), but the exact SVG bell mask a live
-     cytokine-shielded cell shows (.cytokine-blue/orange/red::after above),
-     not an emoji — an emoji bell always renders in its own fixed (yellow)
-     colour regardless of which cytokine it just replaced, and reads as a
-     different shape entirely from the one that was actually just sitting
-     there. One class per colour (rather than a shared class + CSS custom
-     property) since by the time this class is applied the cell is already
-     plain 'healthy' — its own .cytokine-* class is long gone — so
-     playSelectedCard() (game-ui.js) picks which of these three to add
-     based on which colour of Cytokine Neutralisation was actually played. */
+  /* Cytokine Neutralisation: the same float-and-fade, using the bell mask
+     in the removed shield's colour (one class per colour, chosen by
+     playSelectedCard() — the cell's own cytokine class is already gone). */
   .tissue-cell[class*="cell-cytokine-neutralise-poof-"]::after{
     content:''; position:absolute; inset:0; margin:auto; width:60cqw; height:55cqw; pointer-events:none;
     -webkit-mask-image:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='6' r='4'/><path d='M50 10C38 10 30 20 30 35L30 55L20 70L80 70L70 55L70 35C70 20 62 10 50 10Z'/><rect x='15' y='70' width='70' height='8' rx='4'/><circle cx='50' cy='88' r='7'/></svg>");
@@ -1274,117 +949,115 @@
   .tissue-cell.cell-cytokine-neutralise-poof-blue::after{   background-color:#3aa0ff; }
   .tissue-cell.cell-cytokine-neutralise-poof-orange::after{ background-color:#ff9d3f; }
   .tissue-cell.cell-cytokine-neutralise-poof-red::after{    background-color:#ff4d4d; }
-  /* Every tissue renders its REAL cell data now, active or not (see
-     renderBoards(), game-ui.js) — so a plain healthy cell in an inactive
-     board still needs to read as muted/"not in play", but WITHOUT hiding
-     a real pre-fortified cell (state-immune / cytokine-*) sitting right
-     next to it, which should still pop with its normal vivid styling. */
+  /* Inactive tissue: plain cells muted, but real shields keep their
+     normal look. */
   .tissue-board.inactive .tissue-cell.state-healthy{
     background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.3); box-shadow:none; cursor:default;
   }
   .tissue-board.inactive .tissue-cell:hover{ transform:none; }
-  /* A tissue that lost tropism keeps its infected cells frozen in place
-     rather than clearing them (see _checkLoss(), game.js) — muted here so
-     they read as "no longer actively spreading" at a glance, but kept
-     distinct from a dormant/latent cell's own look (purple tint, .35
-     opacity icon, above): different opacity (.55) and still the normal
-     green tint rather than dormant's purple, so "frozen infection" and
-     "lying-low latency" never look like the same state on the board. */
+  /* Frozen infection in a tissue that lost tropism: faded (but still
+     green, unlike the purple dormant cells). */
   .tissue-board.inactive .tissue-cell.state-infected{
     background:rgba(57,255,20,.06); box-shadow:none;
   }
   .tissue-board.inactive .tissue-cell.state-infected::before{ opacity:.55; }
 
-  /* Virus spread — a newly infected cell "grows" into existence, synced to
-     its narration line appearing in the mission log. */
+  /* Cell animations synced to the mission log:
+     new infection "grows" in (cell-infect-pop) … */
   @keyframes cell-infect-pop{
     0%{ transform:scale(.3); box-shadow:0 0 0 rgba(57,255,20,0); }
-    60%{ transform:scale(1.3); box-shadow:0 0 16px rgba(57,255,20,.9); }
+    60%{ transform:scale(1.3); box-shadow:0 0 1rem rgba(57,255,20,.9); }
     100%{ transform:scale(1); }
   }
   .tissue-cell.cell-infect-pop{ animation:cell-infect-pop .6s ease-out; }
 
-  /* A dormant cell waking up two turns after being planted — bigger and
-     showier than a normal infection pop, since this is the latent virus
-     finally "exploding" into the open rather than routine spread. */
+  /* … a dormant cell waking up "explodes" (bigger, pink → green) … */
   @keyframes cell-explode-pop{
     0%{ transform:scale(.4); box-shadow:0 0 0 rgba(224,34,122,0); }
-    40%{ transform:scale(1.7); box-shadow:0 0 26px 8px rgba(224,34,122,.95); }
-    70%{ transform:scale(.85); box-shadow:0 0 20px rgba(57,255,20,.9); }
-    100%{ transform:scale(1); box-shadow:0 0 6px rgba(57,255,20,.5); }
+    40%{ transform:scale(1.7); box-shadow:0 0 1.625rem 0.5rem rgba(224,34,122,.95); }
+    70%{ transform:scale(.85); box-shadow:0 0 1.25rem rgba(57,255,20,.9); }
+    100%{ transform:scale(1); box-shadow:0 0 0.375rem rgba(57,255,20,.5); }
   }
   .tissue-cell.cell-explode-pop{ animation:cell-explode-pop .8s ease-out; }
 
-  /* Immune system playing a card — a cyan flash on the cell(s) it just
-     touched, synced to its narration line. Distinct color from the virus's
-     green growth pop so the two are easy to tell apart at a glance. */
+  /* … an immune card touches a cell: cyan flash. */
   @keyframes cell-immune-flash{
     0%{ transform:scale(1.35); outline-color:var(--accent); }
     100%{ transform:scale(1); outline-color:transparent; }
   }
   .tissue-cell.cell-immune-flash{
-    outline:3px solid var(--accent); outline-offset:1px;
+    outline:0.1875rem solid var(--accent); outline-offset:1px;
     animation:cell-immune-flash 1s ease-out;
   }
-  /* Cytokine placement — same look as the generic immune flash above, just
-     its own class name so it can carry its own sound cue (see
-     FLASH_SOUND/_immuneFlashClass(), game-ui.js) without Sensing, the other
-     card that falls through to the generic case, getting that cue too. */
+  /* Cytokine placed: same flash under its own class name, so it can
+     have its own sound (FLASH_SOUND, game-ui.js). */
   .tissue-cell.cell-cytokine-flash{
-    outline:3px solid var(--accent); outline-offset:1px;
+    outline:0.1875rem solid var(--accent); outline-offset:1px;
     animation:cell-immune-flash 1s ease-out;
   }
 
   .narration-tissue{ color:var(--text); }
 
-  /* Cards In Hand — same width as the board. Label sits beside the cards
-     (vertical side label, same treatment as the other card banners)
-     instead of its own header row. The cards+controls row and the hint
-     text sit in their own stacked sub-rows (.hand-panel-body) so a long
-     hint/error message wraps onto its own line instead of squeezing the
-     cards row down to nothing — see .hand-panel-row/.play-hint below. */
-  /* width:100% is just the pre-JS fallback, same as .immune-banner/
-     .virus-banner-top — alignBannerWidths() (game-ui.js) overrides it with
-     an exact px width matching the board so all three banners (Immune
-     System, Active Cards, Cards In Hand) line up flush with the boards
-     below/above them instead of stretching across the wider grid column. */
+  /* ── Cards In Hand ── side label, card row with arrows, buttons on the
+     right. Width set in JS to match the boards (100% is a fallback). */
   .hand-panel{
-    display:none; align-items:center; gap:10px;
+    display:none; align-items:center; gap:0.625rem;
     width:100%; box-sizing:border-box; position:relative; z-index:0; margin:0 auto;
-    padding:8px 12px;
-    border:1px solid var(--border); border-radius:8px; background:var(--panel);
+    padding:0.5rem 0.75rem;
+    border:1px solid var(--border); border-radius:0.5rem; background:var(--panel);
   }
-  .hand-panel-body{ display:flex; flex-direction:column; gap:4px; flex:1; min-width:0; }
-  .hand-panel-row{ display:flex; align-items:center; gap:8px; width:100%; }
-  .panel-header{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-  .panel-row{ display:flex; align-items:center; gap:8px; width:100%; }
-  /* align-items:center (not the flex default "normal"/stretch) so cards
-     keep their own aspect-ratio height instead of stretching to fill the
-     row — otherwise they'd swallow the +6px hover buffer above and the
-     hover-lift clipping bug would still happen here specifically. */
+  .hand-panel-body{ display:flex; flex-direction:column; gap:0.25rem; flex:1; min-width:0; }
+  .hand-panel-row{ display:flex; align-items:center; gap:0.5rem; width:100%; }
+  .panel-header{ display:flex; align-items:center; justify-content:space-between; gap:0.625rem; }
+  .panel-row{ display:flex; align-items:center; gap:0.5rem; width:100%; }
+  /* align-items:center keeps the cards' own height (no stretch), leaving
+     room for the hover lift. */
   .hand-cards{
-    display:flex; align-items:center; gap:16px; flex-wrap:nowrap; overflow-x:auto; flex:1; min-width:0;
+    display:flex; align-items:center; gap:1rem; flex-wrap:nowrap; overflow-x:auto; flex:1; min-width:0;
   }
-  .panel-controls{ display:flex; flex-direction:column; align-items:stretch; gap:6px; flex-shrink:0; }
-  .panel-controls .btn{ padding:5px 14px; }
-  .play-hint{ font-size:10px; color:var(--muted); text-align:left; line-height:1.4; }
-  /* Invalid-target feedback — a failed play never spends the card, but the
-     player still needs to know why nothing happened. */
+  .panel-controls{ display:flex; flex-direction:column; align-items:stretch; gap:0.375rem; flex-shrink:0; }
+  .panel-controls .btn{ padding:0.3125rem 0.875rem; }
+  /* ── Hint banner ── (column 1, beside Cards In Hand). Keeps its grid
+     slot while hidden; setPlayHint() (game-ui.js) shows it: pops in and
+     glows green for a hint, pink for an error, plain for "waiting". */
+  .hint-banner{
+    display:flex; align-items:center; gap:0.5rem; box-sizing:border-box;
+    border:1px solid var(--stealth); border-radius:0.5rem;
+    background:linear-gradient(rgba(57,255,20,.08), rgba(57,255,20,.08)), var(--panel);
+    padding:0.5rem 0.625rem;
+    --turn-glow:rgba(57,255,20,.6);
+    opacity:0; visibility:hidden; transform:scale(.9);
+    transition:opacity .25s, transform .25s, visibility 0s .25s;
+  }
+  .hint-banner.visible{
+    opacity:1; visibility:visible; transform:none;
+    transition:opacity .25s, transform .25s;
+    animation:turn-active-pulse 1.6s ease-in-out infinite;
+  }
+  .hint-banner.visible.pop{
+    animation:hint-banner-pop .4s ease-out, turn-active-pulse 1.6s ease-in-out .4s infinite;
+  }
+  @keyframes hint-banner-pop{
+    0%{ transform:scale(.85); }
+    60%{ transform:scale(1.06); }
+    100%{ transform:scale(1); }
+  }
+  .hint-banner.error{ border-color:var(--accent2); --turn-glow:rgba(224,34,122,.6);
+    background:linear-gradient(rgba(224,34,122,.08), rgba(224,34,122,.08)), var(--panel); }
+  .hint-banner.waiting, .hint-banner.waiting.pop{
+    border-color:var(--border); background:var(--panel); animation:none;
+  }
+  .hint-banner.waiting .play-hint{ color:var(--muted); }
+  .play-hint{ font-size:0.75rem; color:var(--text); text-align:left; line-height:1.4; }
   .play-hint.play-hint-error{ color:var(--accent2); }
 
-  /* Pick Cards popup — dismissible (unlike a normal phase) so the board
-     stays fully visible whenever the player wants to check it; reopened
-     via the glowing "Pick Cards" step in the phase tracker while it's the
-     current phase. */
-  /* Opening/closing animates instead of an instant display toggle: the
-     backdrop fades, and the popup itself rises up from the bottom (with a
-     little overshoot), reversing the same way on close. visibility is
-     delayed on the way out (and instant on the way in) so it stays
-     interactive/visible for the full fade rather than vanishing early or
-     eating clicks while hidden. */
+  /* ── Draft pop-up ── can be closed to look at the board (reopened from
+     the phase tracker, the Pick Cards button or the mission log). Fades in
+     and rises with a slight bounce; visibility switches at the end of the
+     fade-out so it stays clickable until then. */
   .draft-popup-overlay{
     position:fixed; inset:0; background:rgba(7,12,24,0.85); z-index:2800;
-    display:flex; align-items:center; justify-content:center; backdrop-filter:blur(6px); padding:20px;
+    display:flex; align-items:center; justify-content:center; backdrop-filter:blur(0.375rem); padding:1.25rem;
     opacity:0; visibility:hidden; pointer-events:none;
     transition:opacity .25s ease, visibility 0s linear .25s;
   }
@@ -1393,70 +1066,46 @@
     transition:opacity .25s ease, visibility 0s linear;
   }
   .draft-popup{
-    display:flex; flex-direction:column; gap:10px;
-    width:100%; max-width:640px; box-sizing:border-box;
-    border:1px solid var(--stealth); border-radius:12px; background:var(--panel);
-    padding:16px 18px; box-shadow:0 0 40px rgba(57,255,20,.18);
-    transform:translateY(50px) scale(.94);
+    display:flex; flex-direction:column; gap:0.625rem;
+    width:100%; max-width:40rem; box-sizing:border-box;
+    border:1px solid var(--stealth); border-radius:0.75rem; background:var(--panel);
+    padding:1rem 1.125rem; box-shadow:0 0 2.5rem rgba(57,255,20,.18);
+    transform:translateY(3.125rem) scale(.94);
     transition:transform .35s cubic-bezier(.34,1.56,.64,1);
   }
   .draft-popup-overlay.open .draft-popup{ transform:translateY(0) scale(1); }
-  /* Always exactly 3 offered — size cards to fill the row evenly instead
-     of the small fixed in-play card size, so the popup makes use of its
-     own width. */
-  .draft-cards{ display:flex; gap:18px; flex:1; min-width:0; }
-  .draft-cards .card-face{ flex:1 1 0; width:auto; max-width:180px; }
-  /* Trade popup reuses .draft-popup above for a consistent look, but as
-     two TABS (give up / receive) rather than two stacked rows — "receive"
-     in particular can offer a long list of card types, too many to fit
-     one row at any size. */
-  .trade-popup{ max-width:95vw; } /* actual width is set inline by renderTradeModal() to hug the receive grid; this is just a viewport safety cap */
-  /* Underline tabs, matching the virus builder's own .builder-tabs/.tab-btn
-     look (same font treatment, bottom-border indicator, no filled pill)
-     rather than a distinct style of its own. */
-  .trade-tabs{ display:flex; gap:8px; border-bottom:1px solid var(--border); }
+  /* Three offered cards share the row evenly. */
+  .draft-cards{ display:flex; gap:1.125rem; flex:1; min-width:0; }
+  .draft-cards .card-face{ flex:1 1 0; width:auto; max-width:11.25rem; }
+  /* ── Trade pop-up ── same look, as two tabs (give / receive). */
+  .trade-popup{ max-width:95vw; } /* width set in JS (renderTradeModal()) to fit the receive grid */
+  /* Underline tabs, like the virus builder's. */
+  .trade-tabs{ display:flex; gap:0.5rem; border-bottom:1px solid var(--border); }
   .trade-tab{
-    flex:1; font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase;
-    padding:8px 12px; border:none; background:none; color:var(--muted); cursor:pointer;
+    flex:1; font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:1px; text-transform:uppercase;
+    padding:0.5rem 0.75rem; border:none; background:none; color:var(--muted); cursor:pointer;
     border-bottom:2px solid transparent; transition:all .2s;
   }
   .trade-tab.active{ color:var(--stealth); border-bottom-color:var(--stealth); }
   .trade-tab:hover:not(.active){ color:var(--text); }
-  /* "Give" is done (3 picked) but not the active tab — a plain green
-     label (no underline) reads as "complete," distinct from "active". */
+  /* A finished tab (3 picked) that isn't active: green label. */
   .trade-tab.complete:not(.active){ color:var(--stealth); }
   .trade-tab-panel{ display:none; }
   .trade-tab-panel.active{ display:block; }
-  /* Bigger than the in-hand size (though still smaller than the draft
-     popup's own full-size art) — laid out in a wrapping grid instead of
-     one horizontal-scrolling row, since both "give" and especially
-     "receive" routinely have far more cards than a single row could ever
-     show at a readable size. Card width here (100px) MUST stay in sync
-     with the inline column width renderTradeModal() (game-ui.js) sets on
-     #trade-receive-cards below, or that grid's columns stop lining up
-     with the actual card size. */
+  /* Trade cards in a wrapping grid. Card width (100px design size) must
+     match RECEIVE_CARD_WIDTH in renderTradeModal() (game-ui.js). */
   .trade-popup .trade-cards-grid{
-    display:flex; flex-wrap:wrap; gap:18px; max-height:420px; overflow-y:auto; padding:8px;
+    display:flex; flex-wrap:wrap; gap:1.125rem; max-height:26.25rem; overflow-y:auto; padding:0.5rem;
   }
-  .trade-popup .trade-cards-grid .card-face{ flex:0 0 auto; width:100px; }
-  /* Receive list is grouped by card function (see TRADE_RECEIVE_ORDER,
-     game-ui.js) — a grid instead of free-wrapping flex so same-function
-     cards consistently line up into clean rows rather than reflowing
-     arbitrarily. Column count is set inline by renderTradeModal()
-     (game-ui.js), not fixed here — always exactly 2 rows split as evenly
-     as possible, since the actual tradeable pool size varies per game. */
+  .trade-popup .trade-cards-grid .card-face{ flex:0 0 auto; width:6.25rem; }
+  /* Receive grid: exactly 2 rows; the column count is set in JS. */
   .trade-popup #trade-receive-cards{
-    display:grid; gap:16px;
+    display:grid; gap:1rem;
   }
-  .draft-popup-footer{ display:flex; align-items:center; justify-content:flex-end; gap:10px; }
+  .draft-popup-footer{ display:flex; align-items:center; justify-content:flex-end; gap:0.625rem; }
 
-  /* Pick Cards reminder — a real button in the hand panel's own control
-     stack (above Trade 3▸1), so a minimised offer stays reachable right
-     alongside the panel's other actions. updatePickCardsButton()
-     (game-ui.js) toggles #pick-cards-btn's visibility. Pulses the whole
-     time it's showing (not just after a period of inactivity like
-     .turn-reminder elsewhere) since a minimised offer is easy to miss
-     otherwise — same glow keyframe as the other turn-active highlights. */
+  /* Pick Cards button (hand panel) — shown while the draft is closed with
+     an offer pending; pulses the whole time. */
   .btn-pick{
     border-color:var(--stealth); color:var(--stealth); background:rgba(57,255,20,.1);
     animation:turn-active-pulse 1.6s ease-in-out infinite;
@@ -1464,41 +1113,24 @@
   }
   .btn-pick:hover{ background:rgba(57,255,20,.22); }
 
-  /* Pick Cards reminder's OTHER copy — a second way back into the popup,
-     this one in the mission log itself, for whenever the player's eyes
-     are already there rather than on the hand panel. updatePickCardsEntry()
-     (game-ui.js) inserts/removes #narration-pick-entry as the current
-     turn's own topmost step (so it reads as part of that turn, not
-     floating disconnected above it) — reuses .narration-line/
-     .narration-line-clickable for a consistent look instead of a bespoke
-     style. Pulses the whole time it's showing, same as the button. */
+  /* The same reminder as a mission-log line (updatePickCardsEntry()). */
   .narration-line.narration-pick-entry{
-    /* Both animations, not just the pulse — .animation is a shorthand, so
-       setting it here would otherwise silently replace .narration-line's
-       own fade-in entirely (same property, more specific selector), which
-       left the entry stuck at that base rule's opacity:0 forever since
-       nothing was left to animate it back to 1. */
+    /* Both animations: `animation` is a shorthand, so listing only the
+       pulse would drop the line's fade-in (leaving it invisible). */
     animation:narration-line-in .35s ease forwards, turn-active-pulse 1.6s ease-in-out infinite;
     --turn-glow:rgba(57,255,20,.6);
   }
 
-  /* Mutation toast — fires once per turn a real mutation happens (see
-     buildMutationSteps/showMutationToast in game-ui.js), timed to appear
-     alongside that turn's mission-log line. Centred over the board itself
-     (absolutely positioned against .game-left-col, which is given
-     position:relative for this) so it reads as a genuine event notice
-     instead of a small sidebar note — but it never gates play: no backdrop
-     behind it, so cards/board stay clickable even if it's still showing
-     when the next phase starts. Bounces in the same way the Pick Cards
-     popup does; border/glow colour flips green/pink the same way the rest
-     of the UI tags gain-vs-loss. */
+  /* ── Mutation toast ── centred over the boards (positioned in JS),
+     with no backdrop so the game stays usable. Bounces in; green border
+     for a gain, pink for a loss, grey for no mutation. */
   .mutation-toast{
     position:absolute; top:50%; left:50%; z-index:1500;
-    width:min(420px, 92%); box-sizing:border-box;
-    display:flex; flex-direction:column; gap:14px;
-    border:2px solid var(--stealth); border-radius:14px; background:var(--panel);
-    padding:24px 26px;
-    box-shadow:0 0 50px rgba(57,255,20,.4), 0 12px 34px rgba(0,0,0,.55);
+    width:min(26.25rem, 92%); box-sizing:border-box;
+    display:flex; flex-direction:column; gap:0.875rem;
+    border:2px solid var(--stealth); border-radius:0.875rem; background:var(--panel);
+    padding:1.5rem 1.625rem;
+    box-shadow:0 0 3.125rem rgba(57,255,20,.4), 0 0.75rem 2.125rem rgba(0,0,0,.55);
     opacity:0; visibility:hidden; pointer-events:none;
     transform:translate(-50%,-50%) scale(.85);
     transition:opacity .25s ease, transform .3s cubic-bezier(.34,1.56,.64,1), visibility 0s linear .25s;
@@ -1508,196 +1140,150 @@
     transform:translate(-50%,-50%) scale(1);
     transition:opacity .25s ease, transform .35s cubic-bezier(.34,1.56,.64,1), visibility 0s linear;
   }
-  .mutation-toast.loss{ border-color:var(--accent2); box-shadow:0 0 50px rgba(224,34,122,.4), 0 12px 34px rgba(0,0,0,.55); }
-  /* No mutation this turn — neither a gain nor a loss, so it gets its own
-     muted grey/blue treatment instead of borrowing the green/pink used to
-     tell those two apart. */
-  .mutation-toast.neutral{ border-color:var(--muted); box-shadow:0 0 50px rgba(124,156,196,.25), 0 12px 34px rgba(0,0,0,.55); }
-  .mutation-toast-header{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .mutation-toast.loss{ border-color:var(--accent2); box-shadow:0 0 3.125rem rgba(224,34,122,.4), 0 0.75rem 2.125rem rgba(0,0,0,.55); }
+  .mutation-toast.neutral{ border-color:var(--muted); box-shadow:0 0 3.125rem rgba(124,156,196,.25), 0 0.75rem 2.125rem rgba(0,0,0,.55); }
+  .mutation-toast-header{ display:flex; align-items:center; justify-content:space-between; gap:0.5rem; }
   .mutation-toast-title{
-    font-family:'Orbitron',monospace; font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted);
+    font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted);
   }
   .mutation-toast-close{
-    background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:0; line-height:1;
+    background:none; border:none; color:var(--muted); font-size:1.125rem; cursor:pointer; padding:0; line-height:1;
   }
   .mutation-toast-close:hover{ color:var(--text); }
-  .mutation-toast-body{ display:flex; align-items:center; gap:18px; }
-  .mutation-toast-body .card-face{ width:110px; }
+  .mutation-toast-body{ display:flex; align-items:center; gap:1.125rem; }
+  .mutation-toast-body .card-face{ width:6.875rem; }
   .mutation-toast-generic{
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
-    width:110px; aspect-ratio:302/400; flex-shrink:0; border-radius:9px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem;
+    width:6.875rem; aspect-ratio:302/400; flex-shrink:0; border-radius:0.5625rem;
     background-color:var(--card-bg); border:1px solid var(--card-border);
   }
-  .mutation-toast-generic-icon{ font-size:38px; }
-  .mutation-toast-generic-arrow{ font-size:26px; font-weight:800; }
+  .mutation-toast-generic-icon{ font-size:2.375rem; }
+  .mutation-toast-generic-arrow{ font-size:1.625rem; font-weight:800; }
   .mutation-toast-generic-arrow.gain{ color:var(--stealth); }
   .mutation-toast-generic-arrow.loss{ color:var(--accent2); }
-  .mutation-toast-info{ display:flex; flex-direction:column; gap:6px; min-width:0; }
+  .mutation-toast-info{ display:flex; flex-direction:column; gap:0.375rem; min-width:0; }
   .mutation-toast-direction{
-    font-family:'Orbitron',monospace; font-size:22px; letter-spacing:.5px; font-weight:800;
+    font-family:'Orbitron',monospace; font-size:1.375rem; letter-spacing:.5px; font-weight:800;
   }
   .mutation-toast-direction.gain{ color:var(--stealth); }
   .mutation-toast-direction.loss{ color:var(--accent2); }
   .mutation-toast-direction.neutral{ color:var(--text); }
-  .mutation-toast-category{ font-size:15px; color:var(--text); font-weight:600; }
-  .mutation-toast-text{ font-size:15px; color:var(--muted); line-height:1.45; }
+  .mutation-toast-category{ font-size:0.9375rem; color:var(--text); font-weight:600; }
+  .mutation-toast-text{ font-size:0.9375rem; color:var(--muted); line-height:1.45; }
 
-  /* Light tint, no blur — the final board (win or lose) stays clearly
-     visible below the panel instead of getting hidden under a near-opaque
-     backdrop, so the player can actually see how the mission ended. The
-     panel sits at the TOP (align-items:flex-start, not center) so it never
-     covers the board — see .game-over below, which hides every banner
-     around the board once the game ends so the full board is what's left
-     underneath. The panel itself keeps a solid background so its own text
-     stays legible against whatever's on the board behind it. */
-  /* No backdrop tint (was a light rgba wash) — the final cell grid should
-     read at full brightness on the win/lose screen, not muted underneath
-     this overlay. .end-screen-panel's own solid-ish background/border/
-     shadow already reads clearly as a distinct panel without needing the
-     rest of the screen dimmed behind it. */
+  /* ── End screen ── no backdrop, so the final board stays fully
+     visible; the panel sits at the top, under the header. */
   .end-screen{
     display:none; position:fixed; inset:0; z-index:2500; background:none;
-    align-items:flex-start; justify-content:center; padding-top:36px; box-sizing:border-box;
+    align-items:flex-start; justify-content:center; padding-top:2.25rem; box-sizing:border-box;
   }
   .end-screen.visible{ display:flex; }
   .end-screen-panel{
-    display:flex; align-items:center; flex-direction:column; gap:18px;
-    background:rgba(11,6,22,0.94); border:1px solid var(--border); border-radius:14px;
-    padding:24px 30px; box-shadow:0 0 50px rgba(0,0,0,.55);
-    max-width:420px; box-sizing:border-box;
-    /* Scaled by alignEndScreenBoard() (game-ui.js) to match #game-stage's
-       own gameStageScale, so the banner shrinks/grows in step with the
-       board on a smaller/larger screen instead of staying fixed-size while
-       the board beneath it scales. Same anchor as #game-stage's own
-       transform-origin — the panel sits right under the header, so scaling
-       from its top keeps that edge put and lets it shrink downward. */
+    display:flex; align-items:center; flex-direction:column; gap:1.125rem;
+    background:rgba(11,6,22,0.94); border:1px solid var(--border); border-radius:0.875rem;
+    padding:1.5rem 1.875rem; box-shadow:0 0 3.125rem rgba(0,0,0,.55);
+    max-width:26.25rem; box-sizing:border-box;
+    /* Scaled with the stage (alignEndScreenBoard(), game-ui.js), from its
+       top edge. */
     transform-origin:top center;
   }
-  /* Real text for both outcomes now (no more text-you-win.png/
-     text-you-lose.png art) — same font treatment, just a different colour
-     per outcome. See renderEndScreen(), game-ui.js. */
+  /* "You Win" / "Game Over" — colour per outcome. */
   .end-title-text{
-    font-family:'Orbitron',monospace; font-size:34px; font-weight:800;
+    font-family:'Orbitron',monospace; font-size:2.125rem; font-weight:800;
     letter-spacing:2px; text-transform:uppercase;
   }
-  .end-title-text.win{ color:var(--accent); text-shadow:0 0 20px rgba(0,229,255,.6); }
-  .end-title-text.lose{ color:var(--accent2); text-shadow:0 0 20px rgba(224,34,122,.6); }
-  .end-screen p{ color:var(--muted); font-size:12px; max-width:420px; text-align:center; }
+  .end-title-text.win{ color:var(--accent); text-shadow:0 0 1.25rem rgba(0,229,255,.6); }
+  .end-title-text.lose{ color:var(--accent2); text-shadow:0 0 1.25rem rgba(224,34,122,.6); }
+  .end-screen p{ color:var(--muted); font-size:0.75rem; max-width:26.25rem; text-align:center; }
 
-  /* Score gets its own highlighted block on its own line — not just
-     trailing text in end-copy above — so it actually reads as the number
-     that matters. Only shown on a win (see renderEndScreen(), game-ui.js);
-     hidden entirely on a loss rather than showing a 0/stale value. */
+  /* Score: its own block, wins only. */
   .end-score-block{
-    display:none; flex-direction:column; align-items:center; gap:3px;
+    display:none; flex-direction:column; align-items:center; gap:0.1875rem;
   }
   .end-score-block.visible{ display:flex; }
   .end-score-label{
-    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:2.5px; color:var(--muted);
+    font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:0.15625rem; color:var(--muted);
     text-transform:uppercase;
   }
   .end-score-value{
-    font-family:'Orbitron',monospace; font-size:30px; font-weight:800; letter-spacing:1px;
-    color:var(--stealth); text-shadow:0 0 14px rgba(57,255,20,.55);
+    font-family:'Orbitron',monospace; font-size:1.875rem; font-weight:800; letter-spacing:1px;
+    color:var(--stealth); text-shadow:0 0 0.875rem rgba(57,255,20,.55);
   }
-  /* Gold, not the score's own green — reads as a distinct achievement
-     rather than more of the same number. */
+  /* "New High Score" in gold. */
   .end-score-badge{
     display:none;
-    font-family:'Orbitron',monospace; font-size:11px; letter-spacing:1.5px; font-weight:700;
-    color:#ffd35c; text-shadow:0 0 10px rgba(255,211,92,.6); text-transform:uppercase;
+    font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:1.5px; font-weight:700;
+    color:#ffd35c; text-shadow:0 0 0.625rem rgba(255,211,92,.6); text-transform:uppercase;
   }
   .end-score-badge.visible{ display:block; }
 
-  .end-screen-buttons{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
-  /* Equal width regardless of label length ("To Patient" vs "Play Again")
-     — .back-btn itself just sizes to its own content otherwise. Wide
-     enough for "Play Again" (the longer label) on one line at this
-     font-size/letter-spacing plus the icon; white-space:nowrap is a
-     safety net against wrapping if either label ever changes. */
-  .end-screen-buttons .back-btn{ width:150px; justify-content:center; white-space:nowrap; }
+  .end-screen-buttons{ display:flex; gap:0.625rem; flex-wrap:wrap; justify-content:center; }
+  /* Equal-width buttons, one line each. */
+  .end-screen-buttons .back-btn{ width:9.375rem; justify-content:center; white-space:nowrap; }
 
-  /* Once the mission ends, every banner around the board is dead weight —
-     the player just wants to see the final board clearly, not the phase
-     tracker/hand/mission log. Toggled by renderEndScreen()/renderGame()
-     (game-ui.js), which also clears it the moment a new game starts. */
+  /* After the game, hide everything around the board (.game-over is
+     toggled in game-ui.js) and let the boards use the full width. */
   .game-screen.game-over .side-col,
   .game-screen.game-over .immune-banner,
   .game-screen.game-over .virus-info-panel,
   .game-screen.game-over .virus-banner-top,
   .game-screen.game-over .hand-panel,
+  .game-screen.game-over .hint-banner,
   .game-screen.game-over .narration-col{
     display:none;
   }
-  /* boards-wrap normally sits in column 2 beside the phase-tracker/
-     virus-info column — spanning both now that column 1 is empty lets it
-     use the freed-up width instead of leaving a dead gap on the left. */
   .game-screen.game-over #boards-wrap{
     grid-column:1 / -1;
   }
 
-  /* Shared platform footer — dropped on this page to free vertical space. */
-  footer{ display:none; }
 
   /* ═══════════════════════════════════════════════════════════════
-     CARD INFO MODAL — opened via a card's (i) button: the small card
-     face (same art used everywhere else in the game now — see
-     openCardInfo(), game-ui.js) beside two labelled sections: what the
-     card actually does in this game, then the real biology it's based
-     on. Two separate sections instead of one description block so a
-     player can tell at a glance which part is "the rules" and which
-     part is "the science."
+     CARD INFO MODAL — opened by a card's ⓘ: the card face beside
+     "In This Game" (rules) and "The Biology" (science).
      ═══════════════════════════════════════════════════════════════ */
   .card-info-overlay{
     display:none; position:fixed; inset:0; z-index:4000; background:rgba(7,4,14,.94);
-    align-items:center; justify-content:center; backdrop-filter:blur(8px); padding:20px;
+    align-items:center; justify-content:center; backdrop-filter:blur(0.5rem); padding:1.25rem;
   }
   .card-info-overlay.open{ display:flex; }
   .card-info-panel{
-    position:relative; display:flex; gap:22px; flex-wrap:wrap; align-items:flex-start; justify-content:center;
-    background:var(--panel); border:1px solid var(--muted); border-radius:16px; padding:30px;
-    max-width:560px; width:100%; max-height:90vh; overflow:auto;
-    box-shadow:0 0 30px rgba(124,156,196,.12);
+    position:relative; display:flex; gap:1.375rem; flex-wrap:wrap; align-items:flex-start; justify-content:center;
+    background:var(--panel); border:1px solid var(--muted); border-radius:1rem; padding:1.875rem;
+    max-width:35rem; width:100%; max-height:90vh; overflow:auto;
+    box-shadow:0 0 1.875rem rgba(124,156,196,.12);
   }
   .card-info-image{
-    width:120px; min-width:120px; aspect-ratio:302/400; border-radius:10px; overflow:hidden;
+    width:7.5rem; min-width:7.5rem; aspect-ratio:302/400; border-radius:0.625rem; overflow:hidden;
     background-color:var(--card-bg); background-size:cover; background-position:center;
     border:1px solid var(--card-border); position:relative; flex-shrink:0;
   }
   .card-info-image.card-face-placeholder{
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.5rem;
   }
-  .card-info-image.card-face-placeholder .card-face-icon{ font-size:30px; }
-  .card-info-image.card-face-placeholder .card-face-name{ font-size:9px; }
-  .card-info-text{ flex:1; min-width:220px; }
-  .card-info-title{ font-family:'Orbitron',monospace; font-size:15px; letter-spacing:1px; color:var(--stealth); margin-bottom:14px; }
-  .card-info-section + .card-info-section{ margin-top:16px; }
+  .card-info-image.card-face-placeholder .card-face-icon{ font-size:1.875rem; }
+  .card-info-image.card-face-placeholder .card-face-name{ font-size:0.5625rem; }
+  .card-info-text{ flex:1; min-width:13.75rem; }
+  .card-info-title{ font-family:'Orbitron',monospace; font-size:0.9375rem; letter-spacing:1px; color:var(--stealth); margin-bottom:0.875rem; }
+  .card-info-section + .card-info-section{ margin-top:1rem; }
   .card-info-subheader{
-    font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px; text-transform:uppercase;
-    color:var(--muted); margin-bottom:5px;
+    font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:1px; text-transform:uppercase;
+    color:var(--muted); margin-bottom:0.3125rem;
   }
-  /* white-space:pre-line so a CARD_BIOLOGY_TEXT entry with a blank-line
-     paragraph break (game-ui.js — currently only the T-Cell Evasion/
-     MHC-I entry needs two paragraphs) actually renders as one, since
-     this is set via plain .textContent, not HTML. */
-  .card-info-desc{ font-size:13px; color:var(--text); line-height:1.7; white-space:pre-line; }
-  .card-info-panel .modal-close{ position:absolute; top:14px; right:16px; font-size:20px; }
+  /* pre-line: a blank line in the biology text becomes a paragraph break. */
+  .card-info-desc{ font-size:0.8125rem; color:var(--text); line-height:1.7; white-space:pre-line; }
+  .card-info-panel .modal-close{ position:absolute; top:0.875rem; right:1rem; font-size:1.25rem; }
 </style>
 </head>
 <body>
 
-<!-- Landscape-only lock — the board/banner layout is tuned for landscape
-     iPad and desktop/laptop widths and deliberately doesn't have a
-     stacked-portrait fallback (see .game-main-row); rather than cram it
-     sideways, portrait viewports get this prompt instead. Pure CSS (no JS
-     needed) via the orientation media query below, so it applies
-     immediately on rotation/resize without waiting for a render pass. -->
+<!-- Shown instead of the game in portrait or a too-small window
+     (checkViewportGate(), game-ui.js). -->
 <div class="orientation-lock">
   <div class="orientation-lock-icon">↻</div>
   <div class="orientation-lock-text">Rotate your device to landscape<br>to play Stealth Mission.</div>
 </div>
 
-<!-- Header (will be populated by shared UI) -->
+<!-- Header (filled in by games/shared/ui.js) -->
 <div class="header-outer"></div>
 
 <!-- Main content -->
@@ -1713,9 +1299,7 @@
 
     <div class="virus-grid" id="virus-grid"></div>
 
-    <!-- Custom-built viruses (+ the "Design New" entry point) sit on their
-         own row below the presets — small button-style tiles, since a
-         custom virus has just a name and no real-world blurb to show. -->
+    <!-- Custom viruses + "Design New": small tiles below the presets. -->
     <div class="custom-virus-row" id="custom-virus-row"></div>
 
     <div class="detail" id="virus-detail">
@@ -1735,31 +1319,22 @@
     <div id="game-stage-viewport">
     <div id="game-stage">
     <div class="game-main-row">
-      <!-- Grid: column 1 is the single side banner (now on the left),
-           stretched to match the board row's height exactly; column 2 is
-           sized to the board's own width (immune banner, board+side-col
-           row, virus banners). -->
+      <!-- .game-left-col grid: column 1 = phase panel / virus panel /
+           hint banner; column 2 = Immune System, boards, Active Cards,
+           Cards In Hand. -->
       <div class="game-left-col">
-        <!-- Single narrow side banner — height matches the board row
-             exactly (grid stretch). Score isn't shown here; it only
-             appears on the end screen once the mission is won. -->
         <div class="side-col">
           <div class="phase-panel" id="phase-panel">
             <div class="phase-col" id="phase-col"></div>
           </div>
         </div>
 
-        <!-- Immune system: active effects only, no held-hand display.
-             Highlighted while it's the immune system's phase. -->
+        <!-- Immune System banner: its cards played and effects in force. -->
         <div class="immune-banner" id="immune-banner"></div>
 
         <div class="boards-wrap" id="boards-wrap"></div>
 
-        <!-- Virus identity/traits — left column, top-aligned with the
-             Active Cards banner it sits beside. Replication speed sits
-             right under the name (it can change mid-game via mutations,
-             so it's the more actively-watched of the two), mutation rate
-             below that. -->
+        <!-- Virus panel: art, name, replication speed, mutation rate. -->
         <div class="virus-info-panel" id="virus-info-panel">
           <div class="virus-info-panel-head">
             <div class="virus-info-panel-icon" id="virus-info-panel-icon"></div>
@@ -1771,45 +1346,37 @@
           </div>
         </div>
 
-        <!-- Virus: top banner = played/active cards + traits, bottom banner
-             = cards in hand — both sized to just the card row's height, with
-             controls (instruction/button) moved to the right of the cards.
-             Highlighted while it's the player's turn to act. -->
+        <!-- Active Cards (the virus's active effects) and Cards In Hand;
+             highlighted on the player's turn. -->
         <div class="virus-banner-top" id="virus-banner-top"></div>
 
         <div class="hand-panel" id="hand-panel">
           <span class="banner-label banner-label-side">Cards<br>In Hand</span>
-          <!-- Cards + buttons on their own row, the hint/error text on a
-               second row below — keeps them from ever competing for the
-               same horizontal space (a long error message used to force
-               hand-cards to shrink down to almost nothing). -->
+          <!-- Hint/error text lives in its own banner beside this one
+               (#hint-banner) so the cards get this banner's full height. -->
           <div class="hand-panel-body">
             <div class="hand-panel-row">
               <div class="scroll-arrow scroll-arrow-back" id="hand-cards-arrow-back">◂</div>
               <div class="hand-cards" id="hand-cards"></div>
               <div class="scroll-arrow" id="hand-cards-arrow">▸</div>
               <div class="panel-controls">
-                <!-- Shown only while a draft offer is pending and its own
-                     popup has been minimised — see updatePickCardsButton()
-                     (game-ui.js), which toggles this instead of the popup. -->
+                <!-- Shown while the draft pop-up is closed with an offer
+                     pending (updatePickCardsButton(), game-ui.js). -->
                 <button class="btn btn-pick" id="pick-cards-btn" onclick="showDraftPopup()" style="display:none;">👉 Pick Cards</button>
                 <button class="btn btn-trade" id="trade-btn" onclick="openTradeModal()" title="Trade 3 cards for 1 of your choice">Trade 3▸1</button>
                 <button class="btn btn-primary" id="end-turn-btn" onclick="endStealthTurn()">End Turn</button>
               </div>
             </div>
-            <div class="play-hint" id="play-hint"></div>
           </div>
         </div>
+        <!-- Hint banner (column 1, beside Cards In Hand) — see
+             setPlayHint(), game-ui.js. -->
+        <div class="hint-banner" id="hint-banner" aria-live="polite">
+          <div class="play-hint" id="play-hint"></div>
+        </div>
 
-        <!-- Mutation toast — fired from showMutationToast() (game-ui.js)
-             once per turn a real mutation happens. Absolutely positioned
-             against .game-left-col (see its CSS, position:relative) so it
-             appears centred over the board itself rather than tucked in
-             the mission log — deliberately prominent since a mutation is a
-             notable turn event. No backdrop, so the board/hand stay usable
-             even if it's still up when the next phase starts. Dismissible
-             via the ✕ and always auto-expires on its own (see
-             hideMutationToast()). -->
+        <!-- Mutation toast: centred over the boards (positioned against
+             .game-left-col), no backdrop; closes itself, or via ✕. -->
         <div class="mutation-toast" id="mutation-toast">
           <div class="mutation-toast-header">
             <span class="mutation-toast-title">Mutation</span>
@@ -1826,35 +1393,28 @@
         </div>
       </div>
 
-      <!-- Mission log / narrator — always visible, now right of the board,
-           so the board is never blocked by a popup. Every autonomous phase
-           (virus growth, immune response, mutation) reveals its events
-           here one line at a time instead of an overlay gated on Continue. -->
-      <div class="narration-col" id="narration-col">
-        <div class="narration-title">Mission Log</div>
+      <!-- Mission log, right of the board. Collapsed to a tab by default;
+           the header opens/closes it (toggleNarration()). -->
+      <div class="narration-col collapsed" id="narration-col">
+        <button class="narration-toggle" id="narration-toggle" onclick="toggleNarration()" aria-expanded="false" title="Show mission log">
+          <span class="narration-toggle-icon" aria-hidden="true">«</span>
+          <span class="narration-title">Mission Log</span>
+          <span class="narration-unread" aria-hidden="true"></span>
+        </button>
         <div class="narration-feed" id="narration-feed"></div>
       </div>
     </div>
     </div>
     </div>
 
-    <!-- End screen overlay — light tint (see .end-screen), not an opaque
-         backdrop, so the final board stays visible behind this panel.
-         Deliberately a SIBLING of #game-stage, not a descendant — it's
-         position:fixed (see its own CSS) and a `transform` on any ancestor
-         makes that ancestor a new containing block for fixed/absolute
-         descendants, which would silently turn this from "pinned to the
-         viewport" into "pinned to the scaled stage". Same reasoning for
-         the draft/trade popup overlays below. -->
+    <!-- End screen, draft and trade pop-ups sit OUTSIDE #game-stage: a
+         transform on an ancestor would pin these position:fixed overlays
+         to the scaled stage instead of the window. -->
     <div class="end-screen" id="end-screen">
       <div class="end-screen-panel">
         <div class="end-title-text" id="end-title-text"></div>
         <p id="end-copy"></p>
-        <!-- Score gets its own highlighted block, not just inline text in
-             end-copy above — see renderEndScreen() (game-ui.js), which
-             also toggles end-score-badge on/off depending on whether this
-             run actually beat the saved best. Only populated/shown on a
-             win (score isn't tracked as a loss-screen concept currently). -->
+        <!-- Score block (wins only); the badge shows on a new high score. -->
         <div class="end-score-block" id="end-score-block">
           <div class="end-score-label">Final Score</div>
           <div class="end-score-value" id="end-score-value"></div>
@@ -1867,9 +1427,8 @@
       </div>
     </div>
 
-    <!-- Pick Cards popup — dismissible so the board stays fully visible;
-         closing it doesn't lose the offer, it minimises into the Pick
-         Cards mission-log entry above instead. -->
+    <!-- Draft pop-up: can be closed; the offer stays (reopen via the Pick
+         Cards button, phase tracker or mission log). -->
     <div class="draft-popup-overlay" id="draft-popup-overlay" onclick="if(event.target===this) hideDraftPopup()">
       <div class="draft-popup">
         <div class="panel-header">
@@ -1888,22 +1447,15 @@
     </div>
 
 
-    <!-- Trade popup — give up exactly 3 hand cards for 1 card of choice
-         from anything that exists in this virus's own deck. Reuses the
-         draft popup's own classes (.draft-popup/.draft-cards/etc.) for a
-         consistent look instead of a near-duplicate stylesheet. -->
+    <!-- Trade pop-up: give up 3 hand cards for 1 card of your choice.
+         Reuses the draft pop-up's classes. -->
     <div class="draft-popup-overlay" id="trade-popup-overlay" onclick="if(event.target===this) hideTradeModal()">
       <div class="draft-popup trade-popup">
         <div class="panel-header">
           <span class="banner-label">Trade 3 cards for 1 of choice</span>
           <button class="modal-close" onclick="hideTradeModal()" title="Close" aria-label="Close">✕</button>
         </div>
-        <!-- Two steps, not one long scroll — give/receive each have their
-             own tab (see switchTradeTab(), game-ui.js) since "receive" in
-             particular can offer a LOT of card types at once. Cards wrap
-             across multiple rows within each tab (.trade-cards-grid)
-             instead of a single horizontal-scrolling strip, for the same
-             reason. -->
+        <!-- Two tabs (give / receive), each a wrapping card grid. -->
         <div class="trade-tabs">
           <button class="trade-tab" id="trade-tab-give" onclick="switchTradeTab('give')">Hand in 3 cards</button>
           <button class="trade-tab" id="trade-tab-receive" onclick="switchTradeTab('receive')">Receive 1</button>
@@ -1942,8 +1494,6 @@
   </div>
 </div>
 
-<!-- Footer (will be populated by shared UI) -->
-
 <!-- ═══ BUILDER MODAL ═══ -->
 <div class="modal-overlay" id="builder-modal">
   <div class="builder-modal">
@@ -1960,8 +1510,7 @@
         <button class="tab-btn" onclick="switchTab('identity')">5. Save</button>
       </div>
 
-      <!-- Fixed height, sized to the tallest tab (Identity) — so the modal
-           doesn't resize/jump as the player switches between tabs. -->
+      <!-- Fixed height (tallest tab), so the modal doesn't jump between tabs. -->
       <div class="builder-tab-panels">
         <div class="tab-content active" id="tab-tropism">
           <div class="form-group">
@@ -2047,7 +1596,7 @@
   </div>
 </div>
 
-<!-- Load shared UI system -->
+<!-- Header/menu settings for games/shared/ui.js -->
 <script>
 const STEALTH_GAME_CONFIG = {
   gameTitle: 'Stealth Mission',
@@ -2060,29 +1609,28 @@ const STEALTH_GAME_CONFIG = {
   backLinkHref: '../../index.html',
   showHelpButton: true,
   showMenuButton: true,
-  // Show this game's own header (with a Fullscreen button) even when
-  // embedded in the platform's iframe, instead of the hub's generic modal
-  // bar — the hub hides its own bar for this game (see OWN_HEADER_GAMES).
+  // Show this page's own header even inside the platform's iframe (the
+  // platform hides its own game bar for Stealth — OWN_HEADER_GAMES).
   showHeaderWhenEmbedded: true,
   showFullscreenButton: true,
-  // Icon alone is clear enough here (matches the rest of the header's
-  // icon-forward look) — drops the "FULLSCREEN"/"EXIT FULLSCREEN" label.
+  // Icon-only Fullscreen button.
   fullscreenIconOnly: true,
+  showFooter: false,
   menuType: 'simple',
 };
 </script>
 
-<script src="../shared/ui.js?cachebust=219"></script>
+<script src="../shared/ui.js?cachebust=221"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=219"></script>
-<script src="board.js?cachebust=219"></script>
-<script src="cards.js?cachebust=219"></script>
-<script src="game.js?cachebust=219"></script>
-<script src="game-ui.js?cachebust=219"></script>
+<script src="config.js?cachebust=221"></script>
+<script src="board.js?cachebust=221"></script>
+<script src="cards.js?cachebust=221"></script>
+<script src="game.js?cachebust=221"></script>
+<script src="game-ui.js?cachebust=221"></script>
 
 <script>
-// Initialize shared UI with game config
+// Build the shared header and menu.
 initUI(STEALTH_GAME_CONFIG);
 
 // ════════════════════════════════════════════════
@@ -2095,7 +1643,7 @@ const VIRUS_CARDS = {
   'infect-horizontal': { icon: '↔️', name: 'Horizontal Spread', desc: 'Infect a random healthy cell next to an already-infected cell in the same row.' },
   'infect-vertical': { icon: '⬇️', name: 'Vertical Spread', desc: 'Infect a random healthy cell directly below an already-infected cell.' },
   'spread-speed-plus': { icon: '⚡', name: 'Replication Boost +1', desc: 'Increases the replication speed by +1 for the next spread phase. Stacks if played more than once in the same turn.' },
-  'latency': { icon: '😴', name: 'Latency', desc: 'Place a dormant cell. This is invisible to the immune system and wakes and infects nearby cells in the spread phase of a later turn. Must be placed within one row of the current infection front.' },
+  'latency': { icon: '😴', name: 'Latency', desc: 'Place a dormant cell. This is invisible to the immune system and wakes and infects nearby cells in the spread phase of a later turn. Must be placed within two rows of the current infection front.' },
   'cytokine-neutralise-blue': { icon: '🔕', name: 'Cytokine Neutralisation (Blue)', desc: 'Remove a block of Blue cytokines from cells.' },
   'cytokine-neutralise-orange': { icon: '🔕', name: 'Cytokine Neutralisation (Orange)', desc: 'Remove a block of Orange cytokines from cells.' },
   'cytokine-neutralise-red': { icon: '🔕', name: 'Cytokine Neutralisation (Red)', desc: 'Remove a block of Red cytokines from cells.' },
@@ -2107,15 +1655,10 @@ const VIRUS_CARDS = {
   'mhc1-downreg-liver': { icon: '🚫', name: 'T-Cell Evasion: Liver', desc: 'Primes a hidden defence in Liver for 1 turn. The next T cell card the immune system plays here in that time is fully cancelled.' },
   'mhc1-downreg-intestine': { icon: '🚫', name: 'T-Cell Evasion: Intestine', desc: 'Primes a hidden defence in Intestine for 1 turn. The next T cell card the immune system plays here in that time is fully cancelled.' },
   'antigenic-drift': { icon: '🧬', name: 'Antigenic Drift', desc: 'The virus\'s surface proteins mutate often. Gain Antibody Escape cards more frequently.' },
-  // Builder-only marker, same as Tropism/Antigenic Drift above — a
-  // speed_loss mutation (game.js _runMutationPhase()) is a pure stat
-  // penalty with no playable card behind it, but still gets its own card
-  // face here purely for the mutation toast's display (see
-  // _mutationCardId(), game-ui.js).
+  // Mutation-toast card only (a speed_loss mutation has no playable card).
   'replication-loss': { icon: '⚡', name: 'Replication Loss', desc: 'The virus\'s replication speed decreases by -1.' },
-  // Builder-only marker, standing in for all 3 T-Cell Evasion tissue
-  // variants at once — see generateDeck(), which expands it into the real
-  // mhc1-downreg-lung/liver/intestine cards rather than pushing this id.
+  // Builder-only marker for all three T-Cell Evasion cards (expanded in
+  // generateDeck()).
   'mhc1-downreg': { icon: '🚫', name: 'T-Cell Evasion', desc: 'Increased chance of a T cell Evasion card. This card primes a hidden defence for 1 turn. The next T cell card the immune system plays in that time is fully cancelled.' },
 };
 
@@ -2199,22 +1742,14 @@ function generateDeck(tissue, replication, mutation, abilities){
   let deck = [];
   tissue.forEach(t => deck.push(t));
   deck.push('infect-horizontal', 'infect-vertical');
-  // Replication Boost, Antibody Escape (all 3 tissues) and Cytokine
-  // Neutralisation (all 3 colours) are standard kit now, included for
-  // every virus — StealthDeck._buildFromLoadout (cards.js) is what
-  // actually varies their COUNTS per virus/tissue relevance, not whether
-  // they're in the deck at all.
+  // Standard kit for every virus (StealthDeck, cards.js, sets how many
+  // copies of each).
   deck.push('spread-speed-plus');
   deck.push('antibody-escape-lung', 'antibody-escape-liver', 'antibody-escape-intestine');
   deck.push('cytokine-neutralise-blue', 'cytokine-neutralise-orange', 'cytokine-neutralise-red');
-  // Activate Tregs and T-Cell Evasion are opt-in abilities (see
-  // ABILITY_IDS) — Influenza/Hepatitis bake T-Cell Evasion, and Norovirus
-  // bakes Activate Tregs, into their own `abilities` array (see PRESETS
-  // below) so each stays available there even though both are otherwise
-  // custom-virus-only picks.
-  // 'mhc1-downreg' is a single builder-facing marker standing in for all
-  // 3 tissue variants — expand it here rather than pushing the marker id
-  // itself, which isn't a real card.
+  // Abilities: Activate Tregs / T-Cell Evasion are opt-in for custom
+  // viruses (the presets have theirs in `abilities`). The 'mhc1-downreg'
+  // marker expands into the three per-tissue cards.
   abilities.forEach(a => {
     if (a === 'mhc1-downreg') deck.push('mhc1-downreg-lung', 'mhc1-downreg-liver', 'mhc1-downreg-intestine');
     else deck.push(a);
@@ -2222,9 +1757,7 @@ function generateDeck(tissue, replication, mutation, abilities){
   return deck;
 }
 
-// Renders each card in the loadout preview using the same card-face system
-// as in-game (real art where it exists, a generated placeholder otherwise)
-// instead of a separate emoji-only preview.
+// Loadout preview on the select screen, drawn with the in-game card faces.
 function renderDeckPreview(container, cardIds){
   container.innerHTML = '';
   cardIds.forEach(id => {
@@ -2267,24 +1800,13 @@ function selectEmoji(emoji, e){
 }
 
 const TROPISM_IDS = ['lung-tropism', 'liver-tropism', 'intestine-tropism'];
-// Cytokine Neutralisation is standard kit for every virus (see
-// generateDeck()) — not opt-in. Activate Tregs and T-Cell Evasion ARE
-// opt-in here for custom-built viruses; Influenza/Hepatitis instead get
-// T-Cell Evasion, and Norovirus gets Activate Tregs, baked directly into
-// their own `abilities` array on the PRESETS entry instead of through this
-// picker. Antigenic Drift is a passive trait, not a real playable card —
-// it's pushed into the deck id list below purely so it shows up in deck
-// previews (STEALTH_CARD_DEFS has no entry for it, so _buildFromLoadout,
-// cards.js, silently skips it when building the actual draw pile); its
-// real effect is read straight off loadout.abilities by
-// _effectiveMutationTable() (game.js). 'mhc1-downreg' is a similar
-// builder-only marker — see generateDeck(), which expands it into the 3
-// real per-tissue cards instead of pushing the marker itself.
+// Builder ability choices. Antigenic Drift is a passive trait, not a
+// playable card: it shows in previews but StealthDeck skips it, and its
+// effect is read from loadout.abilities (_effectiveMutationTable(),
+// game.js). 'mhc1-downreg' is expanded by generateDeck().
 const ABILITY_IDS = ['latency', 'antigenic-drift', 'activate-tregs', 'mhc1-downreg'];
 
-// Renders a row of real in-game card faces (art + (i) info button) for a
-// builder tab, instead of plain checkboxes — lets the player see exactly
-// what they're picking, same as the deck preview on the select screen.
+// A builder tab's choices as real card faces (with ⓘ info).
 function renderBuilderCardRow(containerId, cardIds, onToggle){
   const container = document.getElementById(containerId);
   container.innerHTML = '';
@@ -2318,9 +1840,7 @@ function updateSpeed(){
   else document.getElementById('speed-desc').textContent = 'SUPER FAST. Spread quickly to win, but the virus is also easily boxed in by the immune system';
 }
 
-// Mutation rate is a 3-position slider (same control as replication speed),
-// not three separate buttons — MUTATION_LEVELS maps the slider's raw 0-2
-// value to the actual rate name.
+// Mutation rate slider positions 0–2 → rate name.
 const MUTATION_LEVELS = ['low', 'medium', 'high'];
 
 function setMutation(rate){
@@ -2345,25 +1865,18 @@ function toggleAbility(ability){
   updateBuilderNextState();
 }
 
-// Save & Play only appears (and only enables) on the last tab, once a
-// name and icon have actually been entered — replication/mutation/tissue/
-// abilities are all optional builds-your-own choices with sane defaults,
-// so they don't gate the button.
+// The Save button: shown on the last tab only, enabled once a name and an
+// icon are chosen (the other choices have defaults).
 function updateBuilderValidity(){
   const valid = builderState.name.trim().length > 0 && !!builderState.emoji;
   const onLastTab = document.getElementById('tab-identity').classList.contains('active');
   const btn = document.getElementById('builder-save-btn');
-  // Always visible on the last tab — just disabled (not clickable) until
-  // a name has been entered, rather than disappearing entirely.
   btn.style.display = onLastTab ? '' : 'none';
   btn.disabled = !valid;
 }
 
-// tropism needs at least 1 pick, immune evasion needs at least 1 (of its
-// max 2). Replication/mutation have sane slider defaults already, so they
-// never block progress. Shared by the Next button's disabled state AND by
-// switchTab()'s guard below — a tab click was a way to skip straight past
-// an unmet requirement without going through Next at all.
+// Tabs that must have a choice before moving on: Organ (≥1 tissue) and
+// Immune Evasion (≥1 ability). Used by Next and by clicking tab headers.
 function isBuilderTabSatisfied(tabName){
   if(tabName === 'tropism') return builderState.tissue.length > 0;
   if(tabName === 'abilities') return builderState.abilities.length > 0;
@@ -2379,9 +1892,7 @@ function updateBuilderNextState(){
 
 const BUILDER_TAB_ORDER = ['tropism', 'replication', 'mutation', 'abilities', 'identity'];
 
-// Shared by both a tab-button click and the "Next" button — keeps the tab
-// buttons, tab content, and the Next/Save & Play footer buttons in sync
-// regardless of how the tab changed.
+// Switches the builder to a tab (keeps tab buttons and footer in sync).
 function activateTab(tabName){
   const idx = BUILDER_TAB_ORDER.indexOf(tabName);
   document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
@@ -2392,9 +1903,8 @@ function activateTab(tabName){
   updateBuilderNextState();
 }
 
-// Clicking a tab header directly (rather than Next) skipped the
-// tropism/abilities gating entirely — moving forward past any unmet tab
-// is now blocked the same way Next is; moving backward is always allowed.
+// Tab header click: going back is always allowed; going forward only past
+// completed tabs.
 function switchTab(tabName){
   const targetIdx = BUILDER_TAB_ORDER.indexOf(tabName);
   const current = document.querySelector('.tab-content.active');
@@ -2458,8 +1968,7 @@ function saveCustomVirus(){
 // ════════════════════════════════════════════════
 //  VIRUS SELECTION & RENDERING
 // ════════════════════════════════════════════════
-// Caps how many custom builds can pile up in the row — past this, the
-// player has to delete one before "Design New" is clickable again.
+// Maximum saved custom viruses ("Design New" is disabled at the limit).
 const MAX_CUSTOM_VIRUSES = 6;
 
 function renderViruses(){
@@ -2484,35 +1993,20 @@ function renderViruses(){
   newCard.innerHTML = `<span class="vcard-compact-icon">+</span> Design New`;
   customRow.appendChild(newCard);
 
-  // Keep the detail banner (replication speed/mutation rate/deck preview)
-  // in sync with selectedVirus every time the grid re-renders, rather than
-  // requiring every caller that clears selectedVirus to also remember to
-  // hide it separately — backToSelect() used to null selectedVirus (and
-  // correctly cleared every card's own .selected class via the fresh
-  // createVirusCard()/createCompactVirusCard() calls above) without ever
-  // hiding this banner, so it stayed showing the last-picked virus's
-  // details with no card marked selected underneath it — and since
-  // deploy() bails out on `if(!selectedVirus) return;`, Start Mission
-  // silently did nothing from that state.
+  // Keep the detail panel in sync with the selection (hidden when nothing
+  // is selected — Start Mission would do nothing then).
   document.getElementById('virus-detail').classList.toggle('visible', !!selectedVirus);
 }
 
-// Compact button-style tile for a custom-built virus — just an icon, name
-// and delete control, since (unlike the presets) there's no real-world
-// blurb to show and it's not worth a full card's worth of space.
+// Small tile for a custom virus: icon, name, delete.
 function createCompactVirusCard(virus){
   const card = document.createElement('div');
   card.className = 'vcard-compact';
   card.id = 'card-' + virus.id;
   if(selectedVirus && selectedVirus.id === virus.id) card.classList.add('selected');
-  // Custom builds get a warm orange accent — distinct from the presets'
-  // platform pink/cyan/green, so a home-made strain reads as its own kind
-  // of tile rather than pretending to be one of the "real-world" viruses.
+  // Custom viruses use orange, distinct from the presets' colours.
   card.style.setProperty('--virus-color', virus.color || '#ff9d3f');
-  // virus.name is free text from the "Design Your Virus" name field, unlike
-  // every other field here — inserted as a text node (not interpolated into
-  // the innerHTML template like the rest) so a crafted name can't break out
-  // into markup/attributes.
+  // The name is user text: added as a text node, never as HTML.
   card.innerHTML = `
     <span class="vcard-compact-icon">${virus.icon || '🧬'}</span>
     <button class="vcard-compact-delete" onclick="deleteVirus('${virus.id}', event)">✕</button>
@@ -2522,7 +2016,7 @@ function createCompactVirusCard(virus){
   return card;
 }
 
-// Full card — presets only now (custom viruses use the compact tile above).
+// Full card for a preset virus.
 function createVirusCard(virus){
   const card = document.createElement('div');
   card.className = 'vcard';
@@ -2533,8 +2027,7 @@ function createVirusCard(virus){
   const iconHtml = virus.iconImg
     ? `<img class="vcard-icon-img" src="${virus.iconImg}" alt="">`
     : `<div class="vcard-icon">${virus.icon}</div>`;
-  // The real-world info blurb takes over the subheader role — no separate
-  // game-mechanic tagline line above it any more.
+  // Real-world blurb + "Learn more".
   const infoHtml = virus.info ? `
     <div class="vcard-sub">${virus.info}</div>
     <button class="vcard-info-btn" onclick="openVirusInfo('${virus.id}', event)">ⓘ Learn more</button>
@@ -2554,25 +2047,15 @@ function selectVirus(id){
   document.querySelectorAll('.vcard, .vcard-compact').forEach(c => c.classList.remove('selected'));
   document.getElementById('card-' + id).classList.add('selected');
 
-  // Tropism card(s) (which tissue(s) this virus starts infecting) plus its
-  // fixed traits (Antigenic Drift/Latency/T-Cell Evasion — whichever this
-  // virus's own `abilities` carries) — not the full deck (see
-  // generateDeck()): Antibody Escape, Cytokine Neutralisation, etc. are
-  // things the player draws and discovers over the course of the mission,
-  // not part of the starting loadout, so showing the whole deck here
-  // spoiled all of it up front before the mission even begins.
+  // Preview shows the starting loadout only (tropism + abilities); the
+  // rest of the deck is discovered during the mission.
   const deck = [...selectedVirus.tissue, ...(selectedVirus.abilities || [])];
   const sub = selectedVirus.sub || selectedVirus.tagline;
   const detail = document.getElementById('virus-detail');
-  // Presets always carry their own platform color; a custom build falls
-  // back to the same orange used for its tile in the row above, not green.
+  // Presets have their own colour; custom viruses use orange.
   detail.style.setProperty('--virus-color', selectedVirus.color || '#ff9d3f');
   document.getElementById('virus-detail-title').textContent = `${selectedVirus.name} — ${sub}`;
-  // Same markup/classes as the in-game virus-info-panel (game-ui.js
-  // renderVirusInfoPanel) — mutation rate as muted text with a coloured
-  // accent word, replication speed as its own bordered badge — so a
-  // player already sees exactly what they'll see once deployed, not a
-  // differently-styled preview.
+  // Same markup as the in-game virus panel, so it looks identical.
   document.getElementById('virus-detail-traits').innerHTML = `
     <div class="virus-info-panel-speed"><span class="virus-info-panel-label">Replication Speed</span> <span class="virus-info-panel-speed-value">${selectedVirus.replication}</span></div>
     <div class="virus-info-panel-mutation"><span class="virus-info-panel-label">Mutation Rate</span> <span class="virus-info-panel-accent">${_cap(selectedVirus.mutation)}</span></div>
@@ -2588,7 +2071,7 @@ function deleteVirus(id, e){
   saved = saved.filter(v => v.id !== id);
   localStorage.setItem('iq_saved_viruses', JSON.stringify(saved));
   selectedVirus = null;
-  renderViruses(); // also syncs #virus-detail's visibility to selectedVirus — see renderViruses()
+  renderViruses(); // also hides the detail panel (nothing selected)
 }
 
 function findVirusById(id){
@@ -2710,10 +2193,7 @@ function renderHelpStep(){
 // ════════════════════════════════════════════════
 initEmojiSelector();
 renderViruses();
-// checkViewportGate() (game-ui.js) — needed even on the select screen, not
-// just in-game: it's what hides .header-outer/.wrap in favour of
-// .orientation-lock, so a portrait/too-small visitor never sees the virus
-// picker at all, matching this page's landscape-only design.
+// Show the rotate/enlarge message on the select screen too.
 checkViewportGate();
 </script>
 </body>

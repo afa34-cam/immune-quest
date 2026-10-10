@@ -1,0 +1,14 @@
+{
+  "name": "Immune Quest",
+  "short_name": "Immune Quest",
+  "description": "Free educational games about infections, the immune system, vaccines and treatments.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#070c18",
+  "theme_color": "#070c18",
+  "icons": [
+    { "src": "assets/icons/app-icon.jpg", "sizes": "1024x1024", "type": "image/jpeg", "purpose": "any" }
+  ]
+}

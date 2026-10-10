@@ -1,13 +1,24 @@
 // ════════════════════════════════════════════════════════════════════════════════
-//  SHARED UI SYSTEM — Header, Footer, Menu
-//  Each game page sets a CONFIG object before including this file
+//  IMMUNE QUEST — shared UI (platform page and every game)
+//  The page sets a config object, then calls initUI(config).
+//
+//  Contents
+//    1. Config defaults & initUI()
+//    2. Header (logo, back link, MENU / ? / Fullscreen) & fullscreen
+//    3. Footer
+//    4. Menu — full (platform page; markup lives in index.html)
+//    5. Menu — simple (games; built here), star rating, and the
+//       settings / share / feedback actions
+//    6. Utility
 // ════════════════════════════════════════════════════════════════════════════════
 
-// Set by renderHeader() from config.fullscreenIconOnly, read back by
-// setFullscreenButtonLabel() so a later fullscreen-state toggle keeps
-// rendering the same icon-only/labelled form the button was created with.
+// Remembers config.fullscreenIconOnly so later fullscreen-state updates
+// keep the same button form.
 let _fullscreenIconOnly = false;
 
+// ════════════════════════════════════════════════════════════════════════════════
+//  1. CONFIG DEFAULTS & initUI()
+// ════════════════════════════════════════════════════════════════════════════════
 const DEFAULT_CONFIG = {
   // Branding
   gameTitle: 'IMMUNE QUEST',
@@ -24,11 +35,9 @@ const DEFAULT_CONFIG = {
   // Menu
   showHelpButton: false,
   showMenuButton: true,
-  // Drops the "FULLSCREEN"/"EXIT FULLSCREEN" label, leaving just the icon
-  // — opt-in per game rather than the default, since the label is the only
-  // thing making that button's purpose obvious on games that don't already
-  // have an icon-heavy header.
+  // Fullscreen button shows only its icon (no "FULLSCREEN" label).
   fullscreenIconOnly: false,
+  showFooter: true,
   menuType: 'full', // 'full' for main hub, 'simple' for games
   
   // Menu items (only for simple menu in games)
@@ -42,7 +51,7 @@ function initUI(userConfig) {
   const CONFIG = { ...DEFAULT_CONFIG, ...userConfig };
   
   renderHeader(CONFIG);
-  renderFooter(CONFIG);
+  if(CONFIG.showFooter) renderFooter(CONFIG);
   
   if(CONFIG.menuType === 'full') {
     setupFullMenu();
@@ -52,38 +61,33 @@ function initUI(userConfig) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-//  HEADER
+//  2. HEADER & FULLSCREEN
 // ════════════════════════════════════════════════════════════════════════════════
 function renderHeader(config) {
   const embedded = window.self !== window.top;
 
-  // When this game is loaded inside the platform's game modal (iframe), by
-  // default that modal already shows its own IMMUNEQUEST branding +
-  // Fullscreen/Exit bar — rendering a second bar here would just duplicate
-  // it. A game can opt out of this suppression (showHeaderWhenEmbedded) to
-  // show its own branded header instead of the generic hub bar; the hub
-  // hides its bar for exactly those games (see OWN_HEADER_GAMES).
+  // Inside the platform's game modal, the platform shows its own bar, so
+  // no header here — unless the game asks for its own
+  // (showHeaderWhenEmbedded; the platform then hides its bar —
+  // OWN_HEADER_GAMES, index.html).
   if (embedded && !config.showHeaderWhenEmbedded) return;
 
   const headerOuter = document.querySelector('.header-outer') || createHeaderOuter();
 
   let logoWrapContent = '';
   if(config.showBackLink) {
-    // Embedded: a real navigation would just navigate the iframe itself
-    // rather than closing the platform's game modal, so ask the parent to
-    // close it instead. Standalone: normal link.
+    // Embedded: ask the platform to close the game modal (a normal link
+    // would only navigate the iframe). Standalone: a normal link.
     const backLinkAttrs = embedded
       ? `href="javascript:void(0)" onclick="exitEmbeddedGame()"`
       : `href="${config.backLinkHref}"`;
-    // Icon (the leading arrow) is split into its own span from the label
-    // text so a page can bump just the icon's size (see .hdr-icon) without
-    // also growing the text next to it — config.backLinkText ships as
-    // "← LABEL", split on the first space.
+    // The arrow gets its own span (.hdr-icon) so it can be sized apart
+    // from the label ("← LABEL" is split on the first space).
     const backLinkSpace = config.backLinkText.indexOf(' ');
     const backLinkIcon = backLinkSpace === -1 ? config.backLinkText : config.backLinkText.slice(0, backLinkSpace);
     const backLinkLabel = backLinkSpace === -1 ? '' : config.backLinkText.slice(backLinkSpace + 1);
     logoWrapContent = `<a class="back-link" ${backLinkAttrs}><span class="hdr-icon">${backLinkIcon}</span> ${backLinkLabel}</a>
-      <div style="width:1px; height:20px; background:var(--border);"></div>`;
+      <div style="width:1px; height:1.25rem; background:var(--border);"></div>`;
   }
 
   const logoHtml = config.gameLogo
@@ -91,22 +95,24 @@ function renderHeader(config) {
     .replace(/<span>/g, `<span style="color: ${config.gameLogoSpanColor};">`)
     .replace(/<\/span>/g, '</span>');
 
-  let headerRightContent = '';
+  let helpHtml = '', menuHtml = '', fullscreenHtml = '';
   if(config.showHelpButton) {
-    headerRightContent += `<button class="help-btn" id="help-trigger" onclick="openHelp && openHelp()" title="Tutorial">?</button>`;
+    helpHtml = `<button class="help-btn" id="help-trigger" onclick="openHelp && openHelp()" title="Tutorial">?</button>`;
   }
   if(config.showMenuButton) {
-    headerRightContent += `<button class="menu-btn" id="menu-trigger" onclick="openMenu()"><span class="hdr-icon">☰</span> MENU</button>`;
+    menuHtml = `<button class="menu-btn" id="menu-trigger" onclick="openMenu()"><span class="hdr-icon">☰</span> MENU</button>`;
   }
-  if(config.showFullscreenButton) {
-    // Remembered so setFullscreenButtonLabel() (called later, on actual
-    // fullscreen state changes) keeps rendering the same icon-only/labelled
-    // form instead of resetting back to the labelled default.
+  // Standalone: no button where the browser has no Fullscreen API (e.g.
+  // iPhone Safari). Embedded: the platform handles fullscreen.
+  const fullscreenSupported = embedded || !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  if(config.showFullscreenButton && fullscreenSupported) {
     _fullscreenIconOnly = !!config.fullscreenIconOnly;
-    headerRightContent += _fullscreenIconOnly
+    fullscreenHtml = _fullscreenIconOnly
       ? `<button class="menu-btn icon-only" id="fullscreen-trigger" onclick="toggleGameFullscreen()" title="Fullscreen"><span class="hdr-icon">⛶</span></button>`
       : `<button class="menu-btn" id="fullscreen-trigger" onclick="toggleGameFullscreen()" title="Fullscreen"><span class="hdr-icon">⛶</span> FULLSCREEN</button>`;
   }
+  // Same order on every page of the platform: MENU, ?, Fullscreen.
+  const headerRightContent = menuHtml + helpHtml + fullscreenHtml;
 
   const headerHtml = `
     <div class="logo-wrap">
@@ -144,28 +150,24 @@ function exitEmbeddedGame() {
   }
 }
 
-// Fullscreen target lives in the parent document (the hub's modal wrapper),
-// so an embedded game asks the hub to toggle it rather than requesting
-// fullscreen on its own (much smaller) iframe document. Standalone, there's
-// no parent to ask — toggle fullscreen on this page directly.
+// Embedded: ask the platform to toggle fullscreen (its modal is the
+// fullscreen target). Standalone: toggle this page.
 function toggleGameFullscreen() {
   if (window.self !== window.top) {
     window.parent.postMessage({ type: 'iq_toggle_fullscreen' }, '*');
     return;
   }
-  if (document.fullscreenElement) {
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
     (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
   } else {
     const el = document.documentElement;
-    (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el).catch(() => {});
+    (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)?.catch?.(() => {});
   }
 }
 
-// Keeps the header's Fullscreen button reading "Maximise"/"Minimise" to
-// match its actual state. Embedded, the fullscreen target is the hub's
-// modal wrapper (not this page), so the hub broadcasts state changes via
-// postMessage (iq_fullscreen_state) rather than this page checking its own
-// (meaningless, since it's just the iframe) document.fullscreenElement.
+// Keeps the Fullscreen button's icon/label in step with the real state.
+// Embedded, the platform reports the state by postMessage
+// (iq_fullscreen_state).
 function setFullscreenButtonLabel(isFullscreen) {
   const btn = document.getElementById('fullscreen-trigger');
   if (!btn) return;
@@ -183,11 +185,11 @@ if (window.self !== window.top) {
   });
 } else {
   ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange']
-    .forEach(evt => document.addEventListener(evt, () => setFullscreenButtonLabel(!!document.fullscreenElement)));
+    .forEach(evt => document.addEventListener(evt, () => setFullscreenButtonLabel(!!(document.fullscreenElement || document.webkitFullscreenElement))));
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-//  FOOTER
+//  3. FOOTER
 // ════════════════════════════════════════════════════════════════════════════════
 function renderFooter(config) {
   let footer = document.querySelector('footer');
@@ -201,7 +203,7 @@ function renderFooter(config) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-//  MENU — FULL (for main hub, uses existing modal in page HTML)
+//  4. MENU — FULL (platform page; the modal's markup is in index.html)
 // ════════════════════════════════════════════════════════════════════════════════
 function setupFullMenu() {
   // Full menu is already in the page HTML from the original index
@@ -243,13 +245,10 @@ function closeMenu() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-//  MENU — SIMPLE (for game pages) — tabbed, matching the main hub's own
-//  menu: a game-specific landing tab (quick actions), then the same
-//  About/Settings/Share/Feedback tabs the hub offers. Content here mirrors
-//  the hub's tabs so it reads identically; actions (share, feedback,
-//  settings) delegate to the hub via postMessage when embedded, since
-//  those need the hub's own URL/context to be correct (e.g. sharing the
-//  hub link, not this game's iframe URL) — see gameShare() etc. below.
+//  5. MENU — SIMPLE (game pages): a game-specific first tab (quick actions),
+//  then the same About / Settings / Share / Feedback tabs as the platform.
+//  When embedded, the actions are passed to the platform page (they need
+//  its URL — e.g. sharing the platform link, not the iframe's).
 // ════════════════════════════════════════════════════════════════════════════════
 function setupSimpleMenu(config) {
   let modal = document.getElementById('menu-modal');
@@ -261,10 +260,7 @@ function setupSimpleMenu(config) {
   }
 
   const embedded = window.self !== window.top;
-  // Every landing button carries its own icon span now (font-size set by
-  // .menu-item-icon, ui.css) instead of a same-size character inline with
-  // the label text — lets the icon read bigger without also blowing up
-  // the label's own font size.
+  // Each button's icon has its own span, so it can be larger than the label.
   let landingHtml = '';
   if(config.showHelpButton) {
     landingHtml += `<button class="menu-item" onclick="openHelp && openHelp(); closeMenu();"><span class="menu-item-icon">?</span> Tutorial</button>`;
@@ -285,7 +281,7 @@ function setupSimpleMenu(config) {
   const landingLabel = (config.gameTitle || 'Game').split(' ')[0];
 
   modal.innerHTML = `
-    <div class="modal" style="max-width:640px;">
+    <div class="modal" style="max-width:40rem;">
       <div class="modal-header">
         <div class="modal-title">Menu</div>
         <button class="modal-close" onclick="closeMenu()">✕</button>
@@ -308,7 +304,7 @@ function setupSimpleMenu(config) {
             <div class="modal-section-title">About</div>
             <div class="about-text">
               <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
-              <span style="color:var(--muted)">Version 1.0 © 2026<br> Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5) & Google Gemini.</span>
+              <span style="color:var(--muted)">Version 1.0<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span>
             </div>
           </div>
         </div>
@@ -326,7 +322,7 @@ function setupSimpleMenu(config) {
                 <span class="toggle-slider"></span>
               </label>
             </div>
-            <div style="font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px;">
+            <div style="font-size:0.8125rem; color:var(--muted); line-height:1.5; margin-top:0.5rem;">
               We use <a href="https://www.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent3);">GoatCounter</a>, a privacy-first analytics tool, to count which games are opened and how often. It uses no cookies and never stores IP addresses or any other personal data — every visit is completely anonymous. These numbers help us show evidence of public engagement when reporting to the University and funding bodies.
             </div>
           </div>
@@ -362,7 +358,7 @@ function setupSimpleMenu(config) {
         <div class="modal-tab-content" id="gtab-feedback">
           <div class="modal-section">
             <div class="modal-section-title">Send feedback</div>
-            <div class="feedback-rating-row" style="margin-top:6px;">
+            <div class="feedback-rating-row" style="margin-top:0.375rem;">
               <span class="feedback-rating-label">Rate Immune Quest (optional)</span>
               <div class="star-rating" id="game-feedback-rating" data-value="0">
                 <span class="star" data-value="1">★</span>
@@ -372,9 +368,9 @@ function setupSimpleMenu(config) {
                 <span class="star" data-value="5">★</span>
               </div>
             </div>
-            <textarea class="feedback-area" id="game-feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..." style="margin-top:10px;"></textarea>
+            <textarea class="feedback-area" id="game-feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..." style="margin-top:0.625rem;"></textarea>
             <button class="feedback-submit" onclick="gameSubmitFeedback()">Send →</button>
-            <div id="game-feedback-confirm" style="font-size:10px;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
+            <div id="game-feedback-confirm" style="font-size:0.75rem;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
           </div>
         </div>
 
@@ -391,10 +387,8 @@ function setupSimpleMenu(config) {
   setupStarRating('game-feedback-rating');
 }
 
-// Star rating — plain click/hover-painted spans, own copy of the same pair
-// of functions index.html defines for its own feedback tab (small enough,
-// and different enough in ID, that sharing one implementation across the
-// two separate menu systems wasn't worth the indirection).
+// Star rating (plain spans; the chosen value is in data-value). Used by
+// both the platform's feedback tab and the games' menus.
 function paintStarRating(containerId, value) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -419,12 +413,9 @@ function switchGameTab(name) {
   document.getElementById('gtab-' + name)?.classList.add('active');
 }
 
-// Settings/Share/Feedback actions delegate to the hub when embedded, since
-// they need the hub's own URL/DOM (e.g. sharing the hub link, not this
-// game's iframe URL) — see the iq_set_tracking/iq_reset_progress/iq_share/
-// iq_submit_feedback handlers in the hub's own postMessage listener.
-// Standalone, there's no parent to delegate to, so fall back to acting on
-// this page directly.
+// Settings/Share/Feedback: embedded, passed to the platform page
+// (iq_set_tracking / iq_reset_progress / iq_share / iq_submit_feedback);
+// standalone, done here.
 function gameSetTracking(on) {
   if (window.self !== window.top) {
     window.parent.postMessage({ type: 'iq_set_tracking', on }, '*');
@@ -433,10 +424,7 @@ function gameSetTracking(on) {
   }
 }
 
-// Purely a local playback preference (unlike tracking above) — localStorage
-// is already shared between the hub and a same-origin game iframe, so there
-// is no cross-page state to delegate to a parent for; every game just reads
-// this key directly before playing a sound.
+// Sound on/off — the setting is shared localStorage, read by every game.
 function gameSetSound(on) {
   localStorage.setItem('iq_sound_muted', on ? '0' : '1');
 }
@@ -464,9 +452,8 @@ function gameShare(kind) {
   }
 }
 
-// Confirms a share action back in this page's own UI — mainly for "copy
-// link", where the label needs to flip to "Copied!" even though the
-// clipboard write happened on the hub's document, not this one.
+// Confirms a share in this page's UI (e.g. "Copied!"), since the
+// clipboard write happened on the platform page.
 function gameShareDone(kind) {
   if (kind === 'copy') {
     const label = document.getElementById('game-copy-label');
@@ -474,13 +461,9 @@ function gameShareDone(kind) {
   }
 }
 
-// Same anonymous Google Apps Script Web App + Sheet index.html's own
-// submitFeedback() posts to — see feedback-apps-script/README.md at the
-// repo root for setup. Only reachable from here when the game is opened
-// standalone (window.self === window.top); embedded (the normal case,
-// launched from the hub) relays through the hub's OWN submitFeedback()
-// instead, via postMessage below, so every game funnels through that one
-// call rather than each needing its own copy of the endpoint URL.
+// Feedback: embedded games pass it to the platform's submitFeedback();
+// standalone pages post straight to the same anonymous Google Apps Script
+// endpoint (setup: feedback-apps-script/README.md).
 const GAME_FEEDBACK_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwBJVOQ3tAi_5TDrMexUD_KIYuj2MDPN5jLyXPlwukk_SEzGnINQVTPCX-a8geL6Cr9/exec';
 
 function gameSubmitFeedback() {
@@ -492,9 +475,7 @@ function gameSubmitFeedback() {
   if (window.self !== window.top) {
     window.parent.postMessage({ type: 'iq_submit_feedback', text, rating }, '*');
   } else {
-    // mode:'no-cors', no explicit Content-Type — see submitFeedback()'s
-    // own comment (index.html) for why: keeps this a CORS "simple
-    // request" so Apps Script never needs to handle a preflight.
+    // no-cors + plain-text body = a CORS "simple request" (no preflight).
     fetch(GAME_FEEDBACK_ENDPOINT, {
       method: 'POST',
       mode: 'no-cors',
@@ -514,14 +495,12 @@ if (window.self !== window.top) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-//  UTILITY
+//  6. UTILITY
 // ════════════════════════════════════════════════════════════════════════════════
 function ensureSharedStyles() {
   if(document.getElementById('shared-ui-styles')) return;
-  // Some games (e.g. stealth) link ui.css directly in <head> so their own
-  // local :root overrides — loaded after it — win the cascade. Appending a
-  // second copy here would land after those overrides and silently undo
-  // them, so skip injection when a ui.css link already exists.
+  // Skip if the page already links ui.css itself (its own overrides come
+  // after it; injecting another copy would undo them).
   const alreadyLinked = [...document.querySelectorAll('link[rel="stylesheet"]')]
     .some(l => (l.getAttribute('href') || '').includes('ui.css'));
   if(alreadyLinked) return;

@@ -2,11 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- iPad home-screen web app: no Safari chrome, status bar overlays the page -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Immune Quest">
+  <meta name="theme-color" content="#070c18">
   <title>Immune Quest</title>
+  <!-- App icon: browser tab, iPad Home Screen, and the web-app manifest -->
+  <link rel="icon" type="image/jpeg" href="assets/icons/app-icon.jpg">
+  <link rel="apple-touch-icon" href="assets/icons/app-icon.jpg">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <style>
+    /* ═══ IMMUNE QUEST — platform page styles ═══
+       Contents: theme · background layers · rotate/enlarge message ·
+       header · 3-column layout (games list, patient, chart) · menu &
+       modals · unlock toast · game modal & self-report panel ·
+       responsive. Sizes are rem, scaled by the root font-size in
+       games/shared/ui.css. */
     :root {
       --bg:       #070c18;
       --panel:    #0d1525;
@@ -23,12 +39,18 @@
       --stealth:  #39ff14;
     }
     * { box-sizing:border-box; margin:0; padding:0; }
+    /* Root font-size (the fluid scale for this page's rem sizes) lives in
+       games/shared/ui.css, shared with the games. */
     body {
       background:var(--bg); color:var(--text);
       font-family:'Nunito',sans-serif;
-      min-height:100vh; overflow-x:hidden;
+      min-height:100vh; min-height:100dvh; overflow-x:hidden;
       display:flex; flex-direction:column;
     }
+    /* While a game is open, stop the landing page underneath from scrolling
+       (iPad touch-scroll chaining / fullscreen exit could otherwise leave it
+       scrolled down, hiding the header on return). */
+    html.game-open, html.game-open body { overflow:hidden; }
 
     /* Blueprint grid */
     body::before {
@@ -36,7 +58,7 @@
       background-image:
         linear-gradient(rgba(0,180,255,0.04) 1px, transparent 1px),
         linear-gradient(90deg, rgba(0,180,255,0.04) 1px, transparent 1px);
-      background-size:44px 44px;
+      background-size:2.75rem 2.75rem;
       pointer-events:none; z-index:0;
     }
 
@@ -59,40 +81,33 @@
       0%{transform:translateY(100vh);opacity:0} 10%{opacity:0.45} 90%{opacity:0.18} 100%{transform:translateY(-10vh);opacity:0}
     }
 
-    /* Landscape/minimum-size gate for the hub itself — same mechanism and
-       thresholds-in-spirit as Stealth Mission's own .orientation-lock
-       (games/stealth/index.html) and this page's own game-modal version
-       above: below a certain window size, or in portrait, this replaces
-       the header+main content with a "rotate / make your window bigger"
-       message instead of letting the layout squeeze into something
-       cramped. Skipped entirely while the game modal is open — that has
-       its own separate gate (.game-orientation-lock above) scoped to just
-       the game area, so the two never fight over the same screen. Driven
-       by checkHubViewportGate() (JS, below) rather than a pure
-       `@media(orientation:portrait)` query, for the same reason as both
-       the versions above: that only catches aspect ratio, not an
-       absolute-size problem like a small-but-landscape desktop window. */
+    /* Rotate / enlarge-window message for the landing page (portrait or
+       too small), set by checkHubViewportGate() (JS, because a CSS
+       orientation query can't catch a small landscape window). Not used
+       while a game is open — the game modal has its own (below). */
     .orientation-lock{
       display:none; position:fixed; inset:0; z-index:6000;
-      flex-direction:column; align-items:center; justify-content:center; gap:16px;
-      background:var(--bg); text-align:center; padding:24px; box-sizing:border-box;
+      flex-direction:column; align-items:center; justify-content:center; gap:1rem;
+      background:var(--bg); text-align:center; padding:1.5rem; box-sizing:border-box;
     }
-    .orientation-lock-icon{ font-size:48px; color:var(--accent); }
-    .orientation-lock-text{ font-family:'Nunito',sans-serif; font-size:15px; color:var(--muted); max-width:320px; line-height:1.5; }
+    .orientation-lock-icon{ font-size:3rem; color:var(--accent); }
+    .orientation-lock-text{ font-family:'Nunito',sans-serif; font-size:0.9375rem; color:var(--muted); max-width:20rem; line-height:1.5; }
     :root.hub-viewport-blocked .orientation-lock{ display:flex; }
-    :root.hub-viewport-blocked .header-outer, :root.hub-viewport-blocked .main, :root.hub-viewport-blocked footer{ display:none; }
+    :root.hub-viewport-blocked .header-outer, :root.hub-viewport-blocked .main{ display:none; }
 
     /* Header */
-    .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(10px); }
+    /* Background runs up behind the iPad status bar; padding keeps the
+       logo/buttons below it (insets are 0 on laptops). */
+    .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(0.625rem);
+      padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
     header {
       display:flex; align-items:center; justify-content:space-between;
-      padding:16px 20px;
-      max-width:1400px; margin:0 auto;
+      padding:1rem 1.25rem;
+      max-width:87.5rem; margin:0 auto;
       position:relative;
     }
-    .logo { font-family:'Orbitron',monospace; font-size:21px; font-weight:900; color:var(--accent); letter-spacing:2px; text-shadow:0 0 18px rgba(0,229,255,0.45);}
+    .logo { font-family:'Orbitron',monospace; font-size:1.3125rem; font-weight:900; color:var(--accent); letter-spacing:2px; text-shadow:0 0 1.125rem rgba(0,229,255,0.45);}
     .logo span { color:var(--accent2); }
-    .header-tagline { font-family:'Orbitron',monospace; font-size:12px; color:var(--text); letter-spacing:3px; text-transform:uppercase; text-shadow:0 0 10px rgba(0,229,255,0.3); }
 
     /* ══════════════════════════════════════════════════════════════
        3-COLUMN LAYOUT
@@ -100,15 +115,13 @@
     .main {
       position:relative; z-index:1;
       display:grid;
-      grid-template-columns: 185px 1fr 185px; /* ← LEFT | CENTRE | RIGHT */
-      max-width:1400px;  /* ← overall page width cap */
+      grid-template-columns: 13rem 1fr 13rem; /* ← LEFT | CENTRE | RIGHT */
+      max-width:87.5rem;  /* ← overall page width cap */
       margin:0 auto;
-      padding:24px 20px 20px; /* ← TOP | HORIZONTAL | BOTTOM */
-      /* Column gap scales with viewport width instead of staying fixed, so
-         narrowing the window doesn't dump all the lost space onto the centre
-         (patient) column alone — the gap gives some of it back too. Caps at
-         150px, matching the original fixed gap once .main hits its 1400px max-width. */
-      gap:0px clamp(24px, 11vw, 150px);
+      padding:1.5rem 1.25rem 1.25rem; /* ← TOP | HORIZONTAL | BOTTOM */
+      /* Column gap grows with the window (up to 9.375rem), so the centre
+         column doesn't take all of the change. */
+      gap:0px clamp(1.5rem, 11vw, 9.375rem);
       align-items:start;
     }
 
@@ -117,33 +130,33 @@
        ══════════════════════════════════════════════════════════════ */
     .left-col {
       display:flex; flex-direction:column;
-      gap:18px;        /* ← vertical spacing between items */
-      padding-top:40px; /* ← top offset within column */
+      gap:1.125rem;        /* ← vertical spacing between items */
+      padding-top:2.5rem; /* ← top offset within column */
     }
 
     .panel-label {
-      font-family:'Orbitron',monospace; font-size:9px;
+      font-family:'Orbitron',monospace; font-size:0.6875rem;
       letter-spacing:2px; color:var(--muted);
-      text-transform:uppercase; margin-bottom:6px;
+      text-transform:uppercase; margin-bottom:0.375rem;
     }
 
     /* Health status */
-    .health-status-wrap { display:flex; flex-direction:column; align-items:center; gap:5px; width:100%; }
-    .health-bar-label   { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
-    .health-pct         { font-family:'Orbitron',monospace; font-size:22px; font-weight:700; color:var(--accent3); text-shadow:0 0 10px rgba(57,255,20,0.5); line-height:1; }
-    .power-track        { width:100%; height:15px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:4px; overflow:hidden; position:relative; }
-    .power-fill         { height:100%; width:25%; background:linear-gradient(90deg,#39ff14,#00e5ff); border-radius:3px; transition:width 1.2s ease; animation:scanline 2s linear infinite; }
-    @keyframes scanline { 0%,100%{box-shadow:inset 0 0 8px rgba(255,255,255,0.2)} 50%{box-shadow:inset 0 0 18px rgba(255,255,255,0.5)} }
+    .health-status-wrap { display:flex; flex-direction:column; align-items:center; gap:0.3125rem; width:100%; }
+    .health-bar-label   { font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+    .health-pct         { font-family:'Orbitron',monospace; font-size:1.375rem; font-weight:700; color:var(--accent3); text-shadow:0 0 0.625rem rgba(57,255,20,0.5); line-height:1; }
+    .power-track        { width:100%; height:0.9375rem; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:0.25rem; overflow:hidden; position:relative; }
+    .power-fill         { height:100%; width:25%; background:linear-gradient(90deg,#39ff14,#00e5ff); border-radius:0.1875rem; transition:width 1.2s ease; animation:scanline 2s linear infinite; }
+    @keyframes scanline { 0%,100%{box-shadow:inset 0 0 0.5rem rgba(255,255,255,0.2)} 50%{box-shadow:inset 0 0 1.125rem rgba(255,255,255,0.5)} }
     .power-segs { position:absolute; inset:0; display:flex; }
     .seg { flex:1; border-right:1px solid rgba(0,0,0,0.22); }
     .seg:last-child { border-right:none; }
-    .status-text { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; animation:blink 1.6s step-end infinite; }
+    .status-text { font-size:0.75rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; animation:blink 1.6s step-end infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
     /* Game cards */
     .game-card {
-      border:1px solid var(--border); border-radius:10px;
-      padding:9px 11px; background:var(--panel);
+      border:1px solid var(--border); border-radius:0.625rem;
+      padding:0.5625rem 0.6875rem; background:var(--panel);
       cursor:pointer; transition:border-color 0.2s,transform 0.15s,box-shadow 0.2s;
       position:relative; overflow:hidden;
     }
@@ -153,25 +166,25 @@
     .game-card.parasite::before { background:var(--parasite); }
     .game-card.cancer::before   { background:var(--cancer); }
     .game-card.stealth::before  { background:var(--stealth); }
-    .game-card:not(.locked):hover { transform:translateX(3px); }
-    .game-card.virus:hover    { border-color:var(--virus);    box-shadow:-3px 0 14px rgba(0,229,255,0.15); }
-    .game-card.bacteria:hover { border-color:var(--bacteria); box-shadow:-3px 0 14px rgba(255,159,28,0.15); }
-    .game-card.parasite:hover { border-color:var(--parasite); box-shadow:-3px 0 14px rgba(168,85,247,0.15); }
-    .game-card.cancer:hover   { border-color:var(--cancer);   box-shadow:-3px 0 14px rgba(255,77,109,0.15); }
-    .game-card.stealth:hover  { border-color:var(--stealth);  box-shadow:-3px 0 14px rgba(57,255,20,0.15); }
+    .game-card:not(.locked):hover { transform:translateX(0.1875rem); }
+    .game-card.virus:hover    { border-color:var(--virus);    box-shadow:-0.1875rem 0 0.875rem rgba(0,229,255,0.15); }
+    .game-card.bacteria:hover { border-color:var(--bacteria); box-shadow:-0.1875rem 0 0.875rem rgba(255,159,28,0.15); }
+    .game-card.parasite:hover { border-color:var(--parasite); box-shadow:-0.1875rem 0 0.875rem rgba(168,85,247,0.15); }
+    .game-card.cancer:hover   { border-color:var(--cancer);   box-shadow:-0.1875rem 0 0.875rem rgba(255,77,109,0.15); }
+    .game-card.stealth:hover  { border-color:var(--stealth);  box-shadow:-0.1875rem 0 0.875rem rgba(57,255,20,0.15); }
     .game-card.locked { opacity:0.35; cursor:default; filter:grayscale(0.7); }
     .card-top    { display:flex; justify-content:space-between; align-items:flex-start; }
-    .card-icon   { font-size:17px; }
-    .card-score  { font-family:'Orbitron',monospace; font-size:8px; color:var(--accent); text-align:right; line-height:1.4; }
-    .card-score .score-num { font-size:11px; color:var(--accent3); display:block; }
-    .card-name   { font-family:'Orbitron',monospace; font-size:9px; font-weight:700; letter-spacing:1px; margin:3px 0 1px; }
+    .card-icon   { font-size:1.0625rem; }
+    .card-score  { font-family:'Orbitron',monospace; font-size:0.625rem; color:var(--accent); text-align:right; line-height:1.4; }
+    .card-score .score-num { font-size:0.8125rem; color:var(--accent3); display:block; }
+    .card-name   { font-family:'Orbitron',monospace; font-size:0.6875rem; font-weight:700; letter-spacing:1px; margin:0.1875rem 0 1px; }
     .card-name.virus    { color:var(--virus); }
     .card-name.bacteria { color:var(--bacteria); }
     .card-name.parasite { color:var(--parasite); }
     .card-name.cancer   { color:var(--cancer); }
     .card-name.stealth  { color:var(--stealth); }
-    .card-sub    { font-size:10px; color:var(--muted); }
-    .card-status { font-size:9px; margin-top:4px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+    .card-sub    { font-size:0.75rem; color:var(--muted); }
+    .card-status { font-size:0.6875rem; margin-top:0.25rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
     .card-status.available  { color:var(--accent3); }
     .card-status.locked-txt { color:var(--muted); }
     .card-status.complete   { color:var(--accent); }
@@ -191,39 +204,42 @@
       width:100%;
     }
     .patient-wrap-outer {
-      display:flex; flex-direction:column; align-items:center; gap:8px;
+      display:flex; flex-direction:column; align-items:center; gap:0.5rem;
       width:100%; /* fills the centre column */
     }
     .patient-condition-title {
-      font-family:'Orbitron',monospace; font-size:10px; letter-spacing:3px;
+      font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:0.1875rem;
       color:var(--muted); text-transform:uppercase; text-align:center;
     }
     .patient-img-wrap {
       position:relative;
-      width:100%; max-width:600px; margin: 0 auto;
+      width:100%; max-width:37.5rem; margin: 0 auto;
       display:flex; flex-direction:column; align-items:center;
-      padding-top: 30px;
+      padding-top: 1.875rem;
     }
-    .patient-img-inner { position:relative; width:100%; max-width:300px; margin:0 auto; }
+    /* Width is set by layoutPatient() (JS) so the figure fills the height
+       left below the header without overflowing the window; the image keeps
+       its own aspect ratio, so this box always matches the drawn body
+       exactly (positionBlobs() relies on that). */
+    .patient-img-inner { position:relative; width:100%; max-width:18.75rem; margin:0 auto; }
     .patient-img-inner img {
-      width:100%;
-      max-height:720px; /* ← maximum image height; JS also sets this to match left col */
-      display:block; object-fit:contain; mix-blend-mode:screen;
+      width:100%; height:auto;
+      display:block; mix-blend-mode:screen;
     }
 
     /* Tooltip */
     .tooltip {
       position:absolute; background:var(--panel);
-      border:1px solid var(--accent); border-radius:8px;
-      padding:9px 12px; pointer-events:none;
+      border:1px solid var(--accent); border-radius:0.5rem;
+      padding:0.5625rem 0.75rem; pointer-events:none;
       opacity:0; transition:opacity 0.2s;
-      z-index:200; min-width:155px; max-width:185px;
-      box-shadow:0 0 18px rgba(0,229,255,0.18);
+      z-index:200; min-width:9.6875rem; max-width:11.5625rem;
+      box-shadow:0 0 1.125rem rgba(0,229,255,0.18);
     }
     .tooltip.visible { opacity:1; }
-    .tooltip-title  { font-family:'Orbitron',monospace; font-size:10px; margin-bottom:3px; }
-    .tooltip-desc   { font-size:10px; color:var(--muted); line-height:1.5; }
-    .tooltip-action { font-size:9px; margin-top:5px; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+    .tooltip-title  { font-family:'Orbitron',monospace; font-size:0.75rem; margin-bottom:0.1875rem; }
+    .tooltip-desc   { font-size:0.75rem; color:var(--muted); line-height:1.5; }
+    .tooltip-action { font-size:0.6875rem; margin-top:0.3125rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; }
 
     .hotspot-blob {
       position:absolute;
@@ -233,18 +249,18 @@
     .hotspot-blob.locked { cursor:default; opacity:0; pointer-events:none; }
 
     .blob-dot {
-      width:10px; height:10px; border-radius:50%;
+      width:0.625rem; height:0.625rem; border-radius:50%;
       border:1.5px solid currentColor;
       background:rgba(0,0,0,0.8);
       position:relative;
       transition:transform 0.15s;
-      box-shadow:0 0 6px currentColor;
+      box-shadow:0 0 0.375rem currentColor;
     }
     .hotspot-blob:not(.locked):hover .blob-dot { transform:scale(1.3); }
     
     @keyframes hpulse {
-      0%   { opacity:0.85; r:8px; }
-      100% { opacity:0;    r:40px; }
+      0%   { opacity:0.85; r:0.5rem; }
+      100% { opacity:0;    r:2.5rem; }
     }
 
     .blob-label {
@@ -252,10 +268,10 @@
       display: flex; 
       align-items:center;
       white-space:nowrap;
-      font-family:'Orbitron',monospace; font-size:9px;
+      font-family:'Orbitron',monospace; font-size:0.6875rem;
       letter-spacing:1px; color:currentColor;
       opacity:0.95; cursor:pointer;
-      text-shadow:0 0 8px currentColor;
+      text-shadow:0 0 0.5rem currentColor;
       
     }
     
@@ -264,16 +280,16 @@
     /* ══════════════════════════════════════════════════════════════
        RIGHT COLUMN — patient chart
        ══════════════════════════════════════════════════════════════ */
-    .right-col { padding-top:40px; /* ← matches left col top offset */ }
-    .chart-card { border:1px solid var(--border); border-radius:10px; background:var(--panel); overflow:hidden; }
-    .chart-header { background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
-    .chart-header-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--accent); text-transform:uppercase; }
-    .chart-id { font-family:'Share Tech Mono',monospace; font-size:8px; color:var(--muted); }
-    .chart-body { padding:12px 14px; display:flex; flex-direction:column; }
-    .chart-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid rgba(26,45,72,0.7); gap:8px; }
+    .right-col { padding-top:2.5rem; /* ← matches left col top offset */ }
+    .chart-card { border:1px solid var(--border); border-radius:0.625rem; background:var(--panel); overflow:hidden; }
+    .chart-header { background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border); padding:0.625rem 0.875rem; display:flex; justify-content:space-between; align-items:center; }
+    .chart-header-title { font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px; color:var(--accent); text-transform:uppercase; }
+    .chart-id { font-family:'Share Tech Mono',monospace; font-size:0.625rem; color:var(--muted); }
+    .chart-body { padding:0.75rem 0.875rem; display:flex; flex-direction:column; }
+    .chart-row { display:flex; justify-content:space-between; align-items:center; padding:0.375rem 0; border-bottom:1px solid rgba(26,45,72,0.7); gap:0.5rem; }
     .chart-row:last-child { border-bottom:none; }
-    .chart-key { font-size:10px; color:var(--muted); white-space:nowrap; font-family:'Share Tech Mono',monospace; }
-    .chart-val { font-family:'Orbitron',monospace; font-size:10px; color:var(--text); text-align:right; }
+    .chart-key { font-size:0.75rem; color:var(--muted); white-space:nowrap; font-family:'Share Tech Mono',monospace; }
+    .chart-val { font-family:'Orbitron',monospace; font-size:0.75rem; color:var(--text); text-align:right; }
     .chart-val.danger  { color:var(--accent2); }
     .chart-val.warning { color:var(--bacteria); }
     .chart-val.ok      { color:var(--accent3); }
@@ -281,169 +297,178 @@
 
     /* Relapse notification banner */
     .relapse-banner {
-      display:none; margin-bottom:12px;
+      display:none; margin-bottom:0.75rem;
       background:rgba(255,77,109,0.1); border:1px solid var(--accent2);
-      border-radius:8px; padding:8px 12px;
-      font-size:10px; color:var(--accent2);
+      border-radius:0.5rem; padding:0.5rem 0.75rem;
+      font-size:0.75rem; color:var(--accent2);
       font-family:'Share Tech Mono',monospace; line-height:1.5;
       text-align: center;
       animation:blink-border 2s ease-in-out infinite;
     }
     @keyframes blink-border { 0%,100%{border-color:var(--accent2)} 50%{border-color:transparent} }
     .relapse-banner.visible { display:block; }
-    .relapse-banner strong { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px; display:block; margin-bottom:3px; }
+    .relapse-banner strong { font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:1px; display:block; margin-bottom:0.1875rem; }
 
 
     /* ── Menu button & modal ── */
-    /* Menu button width matches right column (185px), content right-aligned */
+    /* Header buttons (sized for this page in the <style> after ui.css). */
     .menu-btn {
-      background:none; border:1px solid var(--border); border-radius:8px;
-      color:var(--muted); cursor:pointer; padding:7px 12px;
-      font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px;
+      background:none; border:1px solid var(--border); border-radius:0.5rem;
+      color:var(--muted); cursor:pointer; padding:0.4375rem 0.75rem;
+      font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px;
       transition:border-color 0.2s, color 0.2s;
-      display:flex; align-items:center; gap:6px;
+      display:flex; align-items:center; gap:0.375rem;
       justify-content:flex-end;
     }
     .menu-btn:hover { border-color:var(--accent); color:var(--accent); }
-    .menu-btn-icon { font-size:14px; }
 
     .modal-overlay {
       display:none; position:fixed; inset:0;
       background:rgba(7,12,24,0.88); z-index:1000;
       align-items:center; justify-content:center;
-      backdrop-filter:blur(6px);
+      backdrop-filter:blur(0.375rem);
     }
     .modal-overlay.open { display:flex; }
     .modal {
       background:var(--panel); border:1px solid var(--border);
-      border-radius:16px; width:100%; max-width:400px; margin:20px;
+      border-radius:1rem; width:100%; max-width:25rem; margin:1.25rem;
       overflow:hidden;
-      box-shadow:0 0 40px rgba(0,229,255,0.12);
+      box-shadow:0 0 2.5rem rgba(0,229,255,0.12);
     }
     .modal-header {
       background:rgba(0,180,255,0.06); border-bottom:1px solid var(--border);
-      padding:14px 18px; display:flex; justify-content:space-between; align-items:center;
+      padding:0.875rem 1.125rem; display:flex; justify-content:space-between; align-items:center;
     }
-    .modal-title { font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--accent); }
-    .modal-close { background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer; padding:0 4px; }
+    .modal-title { font-family:'Orbitron',monospace; font-size:0.8125rem; letter-spacing:2px; color:var(--accent); }
+    .modal-close { background:none; border:none; color:var(--muted); font-size:1.125rem; cursor:pointer; padding:0 0.25rem; }
     .modal-close:hover { color:var(--text); }
-    .modal-body { padding:18px; display:flex; flex-direction:column; gap:16px; }
+    .modal-body { padding:1.125rem; display:flex; flex-direction:column; gap:1rem; }
 
-    .modal-section { display:flex; flex-direction:column; gap:8px; }
-    .modal-section-title { font-family:'Orbitron',monospace; font-size:9px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
-    /* Divider BETWEEN sections (e.g. Settings tab's Privacy/Sound/Progress),
-       not inside one — was previously a border-bottom on .toggle-row itself
-       (below), which put the line mid-Privacy-section (between the toggle
-       and its own explanatory GoatCounter text) instead of actually
-       separating sections, since that text sits after the toggle-row as a
-       sibling within the SAME section, not after it. */
-    .modal-section + .modal-section { border-top:1px solid var(--border); padding-top:12px; }
+    .modal-section { display:flex; flex-direction:column; gap:0.5rem; }
+    .modal-section-title { font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:2px; color:var(--muted); text-transform:uppercase; }
+    /* Divider between sections of a menu tab. */
+    .modal-section + .modal-section { border-top:1px solid var(--border); padding-top:0.75rem; }
 
-    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:8px 0; }
-    .toggle-label { font-size:12px; color:var(--text); }
-    .toggle-sub   { font-size:10px; color:var(--muted); margin-top:2px; }
+    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0; }
+    .toggle-label { font-size:0.75rem; color:var(--text); }
+    .toggle-sub   { font-size:0.75rem; color:var(--muted); margin-top:2px; }
     .toggle-switch {
-      position:relative; width:40px; height:22px; flex-shrink:0;
+      position:relative; width:2.5rem; height:1.375rem; flex-shrink:0;
     }
     .toggle-switch input { opacity:0; width:0; height:0; }
     .toggle-slider {
       position:absolute; inset:0; background:var(--border);
-      border-radius:11px; cursor:pointer; transition:background 0.2s;
+      border-radius:0.6875rem; cursor:pointer; transition:background 0.2s;
     }
     .toggle-slider::before {
       content:''; position:absolute;
-      width:16px; height:16px; left:3px; top:3px;
+      width:1rem; height:1rem; left:0.1875rem; top:0.1875rem;
       background:#fff; border-radius:50%;
       transition:transform 0.2s;
     }
     .toggle-switch input:checked + .toggle-slider { background:var(--accent); }
-    .toggle-switch input:checked + .toggle-slider::before { transform:translateX(18px); }
+    .toggle-switch input:checked + .toggle-slider::before { transform:translateX(1.125rem); }
 
     .modal-btn {
-      display:flex; align-items:center; gap:10px;
-      padding:10px 14px; border-radius:8px;
+      display:flex; align-items:center; gap:0.625rem;
+      padding:0.625rem 0.875rem; border-radius:0.5rem;
       background:rgba(255,255,255,0.04); border:1px solid var(--border);
-      color:var(--text); cursor:pointer; font-size:12px;
+      color:var(--text); cursor:pointer; font-size:0.75rem;
       transition:border-color 0.2s, background 0.2s;
       text-decoration:none; font-family:'Nunito',sans-serif;
     }
     .modal-btn:hover { border-color:var(--accent); background:rgba(0,229,255,0.06); }
-    .modal-btn-icon { font-size:16px; width:20px; text-align:center; }
+    .modal-btn-icon { font-size:1rem; width:1.25rem; text-align:center; }
 
-    .share-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    .share-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
 
-    .about-text { font-size:11px; color:var(--muted); line-height:1.7; }
+    .about-text { font-size:0.8125rem; color:var(--muted); line-height:1.7; }
     .about-text a { color:var(--accent); text-decoration:none; }
-    .onboarding-dots { display:flex; gap:6px; margin-top:14px; justify-content:center; }
+    .onboarding-dots { display:flex; gap:0.375rem; margin-top:0.875rem; justify-content:center; }
     .onboarding-dots span {
-      width:6px; height:6px; border-radius:50%; background:var(--border);
+      width:0.375rem; height:0.375rem; border-radius:50%; background:var(--border);
       transition:background 0.2s, transform 0.2s;
     }
     .onboarding-dots span.active { background:var(--accent); transform:scale(1.3); }
 
     .modal-tabs { display:flex; border-bottom:1px solid var(--border); }
     .modal-tab {
-      flex:1; padding:10px; text-align:center; cursor:pointer;
-      font-family:'Orbitron',monospace; font-size:8px; letter-spacing:1px;
+      flex:1; padding:0.625rem; text-align:center; cursor:pointer;
+      font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:1px;
       color:var(--muted); border-bottom:2px solid transparent;
       transition:color 0.2s, border-color 0.2s;
     }
     .modal-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
     .modal-tab-content { display:none; }
-    .modal-tab-content.active { display:flex; flex-direction:column; gap:12px; }
+    .modal-tab-content.active { display:flex; flex-direction:column; gap:0.75rem; }
 
     .feedback-area {
       width:100%; background:rgba(255,255,255,0.03); border:1px solid var(--border);
-      border-radius:8px; padding:10px; color:var(--text); font-family:'Nunito',sans-serif;
-      font-size:12px; resize:vertical; min-height:80px; outline:none;
+      border-radius:0.5rem; padding:0.625rem; color:var(--text); font-family:'Nunito',sans-serif;
+      font-size:0.75rem; resize:vertical; min-height:5rem; outline:none;
     }
     .feedback-area:focus { border-color:var(--accent); }
-    /* Star rating — optional, sits above the free-text box, label and
-       stars sharing one row. Plain click/hover-painted spans rather than
-       radio inputs, since there's no need for keyboard-form-submit
-       semantics here (submitFeedback() reads the chosen value straight off
-       the container's data-value). */
-    .feedback-rating-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-    .star-rating { display:flex; gap:4px; font-size:22px; line-height:1; cursor:pointer; }
+    /* Optional star rating above the feedback text (value read from the
+       container's data-value by submitFeedback()). */
+    .feedback-rating-row { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; }
+    .star-rating { display:flex; gap:0.25rem; font-size:1.375rem; line-height:1; cursor:pointer; }
     .star-rating .star { color:rgba(255,255,255,0.15); transition:color .15s; }
     .star-rating .star.filled { color:#ffb400; }
-    .feedback-rating-label { font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-family:'Orbitron',monospace; }
+    .feedback-rating-label { font-size:0.75rem; color:var(--muted); letter-spacing:1px; text-transform:uppercase; font-family:'Orbitron',monospace; }
     .onboarding-next-btn {
-      padding:8px 16px; background:rgba(57,255,20,0.08); border:1px solid var(--accent3);
-      border-radius:8px; color:var(--accent3); font-family:'Orbitron',monospace;
-      font-size:9px; letter-spacing:1px; cursor:pointer; transition:background 0.2s;
+      padding:0.5rem 1rem; background:rgba(57,255,20,0.08); border:1px solid var(--accent3);
+      border-radius:0.5rem; color:var(--accent3); font-family:'Orbitron',monospace;
+      font-size:0.6875rem; letter-spacing:1px; cursor:pointer; transition:background 0.2s;
     }
     .onboarding-next-btn:hover { background:rgba(57,255,20,0.18); }
-      padding:9px 18px; background:rgba(0,229,255,0.1); border:1px solid var(--accent);
-      border-radius:8px; color:var(--accent); font-family:'Orbitron',monospace;
-      font-size:9px; letter-spacing:2px; cursor:pointer; align-self:flex-end;
+
+    /* ── "Add to Home Screen" guide (iPad, not yet a web app) ── */
+    .install-steps { list-style:none; display:flex; flex-direction:column; gap:0.625rem; counter-reset:step; }
+    .install-steps li {
+      counter-increment:step; display:flex; align-items:flex-start; gap:0.625rem;
+      font-size:0.8125rem; color:var(--text); line-height:1.5;
+    }
+    .install-steps li::before {
+      content:counter(step); flex-shrink:0; width:1.375rem; height:1.375rem; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-family:'Orbitron',monospace; font-size:0.6875rem; color:var(--bg); background:var(--accent);
+    }
+    .install-share-icon { width:1.125rem; height:1.125rem; vertical-align:-0.2rem; color:var(--accent); }
+    .install-note { font-size:0.75rem; color:var(--muted); line-height:1.5; }
+    .install-actions { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-top:0.25rem; }
+    .install-never-btn {
+      background:none; border:none; padding:0.25rem 0; cursor:pointer;
+      font-family:'Nunito',sans-serif; font-size:0.75rem; color:var(--muted); text-decoration:underline;
+    }
+    .install-never-btn:hover { color:var(--text); }
+      padding:0.5625rem 1.125rem; background:rgba(0,229,255,0.1); border:1px solid var(--accent);
+      border-radius:0.5rem; color:var(--accent); font-family:'Orbitron',monospace;
+      font-size:0.6875rem; letter-spacing:2px; cursor:pointer; align-self:flex-end;
       transition:background 0.2s;
     }
     .feedback-submit:hover { background:rgba(0,229,255,0.2); }
 
-    footer { position:relative; z-index:1; text-align:center; padding:14px; font-size:11px; color:var(--muted); border-top:1px solid var(--border); letter-spacing:1px; margin-top:auto; }
-
     /* ══ Unlock toast ══ */
     .unlock-toast {
-      position:fixed; top:24px; left:50%; transform:translateX(-50%) translateY(-20px);
+      position:fixed; top:1.5rem; left:50%; transform:translateX(-50%) translateY(-1.25rem);
       z-index:5000;
-      background:var(--panel); border:1px solid var(--accent3); border-radius:10px;
-      padding:12px 18px; display:flex; align-items:center; gap:10px;
-      box-shadow:0 0 30px rgba(57,255,20,0.25);
+      background:var(--panel); border:1px solid var(--accent3); border-radius:0.625rem;
+      padding:0.75rem 1.125rem; display:flex; align-items:center; gap:0.625rem;
+      box-shadow:0 0 1.875rem rgba(57,255,20,0.25);
       opacity:0; pointer-events:none;
       transition:opacity 0.3s ease, transform 0.3s ease;
     }
     .unlock-toast.visible { opacity:1; transform:translateX(-50%) translateY(0); }
-    .unlock-toast-icon { font-size:18px; }
-    .unlock-toast-text { font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px; color:var(--accent3); }
-    .unlock-toast-text span { display:block; font-family:'Nunito',sans-serif; font-size:10px; letter-spacing:0; color:var(--muted); margin-top:2px; font-weight:400; text-transform:none; }
+    .unlock-toast-icon { font-size:1.125rem; }
+    .unlock-toast-text { font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1px; color:var(--accent3); }
+    .unlock-toast-text span { display:block; font-family:'Nunito',sans-serif; font-size:0.75rem; letter-spacing:0; color:var(--muted); margin-top:2px; font-weight:400; text-transform:none; }
     .main { flex:1; }
-    footer a { color:var(--accent); text-decoration:none; }
 
     /* ══ Game modal ══ */
     .game-modal-overlay {
       position:fixed; inset:0; z-index:3000;
       background:#000;
+      padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
       display:flex; align-items:stretch; justify-content:stretch;
     }
     .game-modal-inner {
@@ -455,65 +480,61 @@
       box-shadow:none;
     }
 
-    /* ── Self-report panel — shown over the still-visible game on Exit,
-       since the compiled build doesn't postMessage its result back. Sits
-       near the top of the screen for visibility, rather than the bottom
-       where it could go unnoticed under the game's own UI. ── */
+    /* ── Self-report panel — over the game on Exit (the Unity build can't
+       send its result back), near the top so it isn't missed. ── */
     .score-report {
-      position:absolute; left:50%; top:28px; transform:translateX(-50%);
+      position:absolute; left:50%; top:1.75rem; transform:translateX(-50%);
       z-index:20;
       background:rgba(13,21,37,0.96); border:1px solid var(--accent);
-      border-radius:12px; padding:16px 20px;
-      box-shadow:0 0 30px rgba(0,229,255,0.25), 0 8px 24px rgba(0,0,0,0.5);
-      backdrop-filter:blur(8px);
-      width:300px; max-width:90vw;
-      display:none; flex-direction:column; gap:12px; align-items:center;
+      border-radius:0.75rem; padding:1rem 1.25rem;
+      box-shadow:0 0 1.875rem rgba(0,229,255,0.25), 0 0.5rem 1.5rem rgba(0,0,0,0.5);
+      backdrop-filter:blur(0.5rem);
+      width:18.75rem; max-width:90vw;
+      display:none; flex-direction:column; gap:0.75rem; align-items:center;
     }
-    .score-report-title { font-family:'Orbitron',monospace; font-size:11px; letter-spacing:1px; color:var(--text); text-align:center; }
-    .score-report-sub    { font-size:11px; color:var(--muted); text-align:center; }
-    .score-report-stage  { display:flex; flex-direction:column; gap:10px; align-items:center; width:100%; }
-    .score-report-actions{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+    .score-report-title { font-family:'Orbitron',monospace; font-size:0.8125rem; letter-spacing:1px; color:var(--text); text-align:center; }
+    .score-report-sub    { font-size:0.8125rem; color:var(--muted); text-align:center; }
+    .score-report-stage  { display:flex; flex-direction:column; gap:0.625rem; align-items:center; width:100%; }
+    .score-report-actions{ display:flex; gap:0.625rem; flex-wrap:wrap; justify-content:center; }
     .score-report-btn {
-      background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:8px;
-      color:var(--text); cursor:pointer; padding:9px 16px;
-      font-family:'Orbitron',monospace; font-size:10px; letter-spacing:1px;
+      background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:0.5rem;
+      color:var(--text); cursor:pointer; padding:0.5625rem 1rem;
+      font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1px;
       transition:border-color 0.2s, background 0.2s;
     }
     .score-report-btn:hover { border-color:var(--accent); background:rgba(0,229,255,0.08); }
     .score-report-btn.primary { border-color:var(--accent3); color:var(--accent3); }
     .score-report-btn.primary:hover { background:rgba(57,255,20,0.1); }
     .score-report-input {
-      background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:8px;
-      color:var(--text); padding:8px 12px; font-family:'Share Tech Mono',monospace; font-size:14px;
-      width:120px; text-align:center; outline:none;
+      background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:0.5rem;
+      color:var(--text); padding:0.5rem 0.75rem; font-family:'Share Tech Mono',monospace; font-size:0.875rem;
+      width:7.5rem; text-align:center; outline:none;
     }
     .score-report-input:focus { border-color:var(--accent); }
-    /* In real browser fullscreen (requestFullscreen on this element),
-       :fullscreen still needs explicit 100% sizing — some browsers don't
-       otherwise stretch a flex child to the fullscreen viewport. */
+    /* Real fullscreen needs explicit sizing in some browsers. */
     .game-modal-inner:fullscreen { width:100vw; height:100vh; }
     .game-modal-bar {
       flex:0 0 auto;
       display:flex; justify-content:space-between; align-items:center;
-      padding:10px 16px; background:rgba(0,180,255,0.06);
+      padding:0.625rem 1rem; background:rgba(0,180,255,0.06);
       border-bottom:1px solid var(--border);
     }
     .game-modal-title {
-      display:flex; align-items:center; gap:9px;
+      display:flex; align-items:center; gap:0.5625rem;
     }
     .game-modal-logo {
-      font-family:'Orbitron',monospace; font-size:13px; font-weight:900; color:var(--accent);
-      letter-spacing:1.5px; text-shadow:0 0 14px rgba(0,229,255,0.4);
+      font-family:'Orbitron',monospace; font-size:0.8125rem; font-weight:900; color:var(--accent);
+      letter-spacing:1.5px; text-shadow:0 0 0.875rem rgba(0,229,255,0.4);
     }
     .game-modal-logo span { color:var(--accent2); }
     .game-modal-gamename {
-      font-family:'Orbitron',monospace; font-size:11px; letter-spacing:2px; color:var(--muted);
-      padding-left:9px; border-left:1px solid var(--border);
+      font-family:'Orbitron',monospace; font-size:0.8125rem; letter-spacing:2px; color:var(--muted);
+      padding-left:0.5625rem; border-left:1px solid var(--border);
     }
     .game-modal-fs, .game-modal-close {
-      background:none; border:1px solid var(--border); border-radius:8px;
-      color:var(--muted); cursor:pointer; padding:6px 12px;
-      font-family:'Orbitron',monospace; font-size:9px; letter-spacing:1px;
+      background:none; border:1px solid var(--border); border-radius:0.5rem;
+      color:var(--muted); cursor:pointer; padding:0.375rem 0.75rem;
+      font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:1px;
       transition:border-color 0.2s, color 0.2s;
     }
     .game-modal-fs:hover { border-color:var(--accent); color:var(--accent); }
@@ -525,68 +546,74 @@
     }
     .game-modal-frame-wrap iframe { width:100%; height:100%; border:none; display:block; flex:1; }
 
-    /* Landscape/minimum-size gate for the game modal — same reasoning as
-       Stealth Mission's own internal .orientation-lock (games/stealth/
-       index.html): below a certain window size (or in portrait) a game's
-       board/UI either gets scaled down past legibility or just doesn't fit,
-       so this shows a "rotate / make your window bigger" message instead
-       of letting that happen. Scoped to the MODAL only (games/games-frame-
-       wrap), not the landing page below — the landing page's own grid
-       already reflows down to phone-portrait width just fine (see the
-       @media rules above) and forcing landscape there would break normal
-       phone browsing for no reason; it's specifically the fixed-layout
-       GAME content that needs the floor. Driven by checkGameViewportGate()
-       below rather than a pure `@media(orientation:portrait)` query, for
-       the same reason Stealth's own version is JS-driven: that only catches
-       aspect ratio, not an absolute-size problem like a small-but-landscape
-       desktop window. The modal bar (Fullscreen/Exit) stays visible and
-       usable throughout, so a visitor whose device genuinely can't reach
-       the minimum size is never stuck unable to leave — only the game
-       frame itself is swapped out for the message. Games with their own
-       internal gate (Stealth) end up double-covered while embedded, which
-       is harmless; this exists mainly for every OTHER game that has no
-       such gate of its own. */
+    /* Rotate / enlarge-window message for the game modal only
+       (checkGameViewportGate()): below the minimum size the game frame is
+       replaced by the message, while the modal bar (Fullscreen / Exit)
+       stays usable. Mainly for games without their own check (Stealth has
+       its own). */
     .game-orientation-lock{
       display:none; position:absolute; inset:0; z-index:5;
-      flex-direction:column; align-items:center; justify-content:center; gap:16px;
-      background:var(--panel); text-align:center; padding:24px; box-sizing:border-box;
+      flex-direction:column; align-items:center; justify-content:center; gap:1rem;
+      background:var(--panel); text-align:center; padding:1.5rem; box-sizing:border-box;
     }
-    .game-orientation-lock-icon{ font-size:48px; color:var(--accent); }
+    .game-orientation-lock-icon{ font-size:3rem; color:var(--accent); }
     .game-orientation-lock-text{
-      font-family:'Nunito',sans-serif; font-size:15px; color:var(--muted);
-      max-width:320px; line-height:1.5;
+      font-family:'Nunito',sans-serif; font-size:0.9375rem; color:var(--muted);
+      max-width:20rem; line-height:1.5;
     }
     .game-modal-frame-wrap.viewport-blocked .game-orientation-lock{ display:flex; }
 
     /* Responsive */
     @media (max-width:860px) {
-      header { padding:14px 20px; }
-      .logo { font-size:16px; }
-      .header-tagline { font-size:9px; letter-spacing:2px; }
-      .main { grid-template-columns:1fr; padding:14px; gap:16px; }
-      .health-status-wrap { min-width:160px; }
-      .patient-row { gap:8px; }
-      .thermo-outer { width:18px; height:110px; } /* tablet: narrower tube */
-      .patient-img-wrap { width:100%; max-width:320px; }
+      header { padding:0.875rem 1.25rem; }
+      .logo { font-size:1rem; }
+      .main { grid-template-columns:1fr; padding:0.875rem; gap:1rem; }
+      .health-status-wrap { min-width:10rem; }
+      .patient-row { gap:0.5rem; }
+      .patient-img-wrap { width:100%; max-width:20rem; }
     }
 
-    /* Phone layout — reorder to Patient -> Games -> Chart (instead of DOM order
-       Games -> Patient -> Chart), since the patient visual is the most orienting
-       thing to see first on a small screen. */
+    /* Short windows (small laptops with browser toolbars): tighten the
+       vertical spacing so the games list still fits on one screen. */
+    @media (min-width:861px) and (max-height:700px) {
+      .main { padding-top:1rem; padding-bottom:0.75rem; }
+      .left-col, .right-col { padding-top:1.25rem; }
+      #game-cards { gap:0.3rem !important; }
+      .game-card { padding:0.4rem 0.6875rem; }
+      .patient-img-wrap { padding-top:1rem; }
+    }
+
+    /* Phone layout: patient first, then games, then the chart. */
     @media (max-width:600px) {
-      .main { display:flex; flex-direction:column; padding:12px; gap:18px; }
+      .main { display:flex; flex-direction:column; padding:0.75rem; gap:1.125rem; }
       .left-col {
-        display:flex; flex-direction:column; padding-top:0; gap:18px;
+        display:flex; flex-direction:column; padding-top:0; gap:1.125rem;
         order:1; /* left-col (patient+games) before right-col (chart) */
       }
       .left-col .patient-wrap-outer { order:1; } /* patient first within left-col */
       .left-col .games-block        { order:2; } /* games second within left-col */
       .right-col { order:2; padding-top:0; } /* chart last, overrides earlier order:-1 */
       .patient-img-wrap { width:100%; max-width:none; }
-      .game-card { padding:10px 12px; }
+      .game-card { padding:0.625rem 0.75rem; }
     }
   </style>
   <link rel="stylesheet" href="./games/shared/ui.css">
+  <style>
+    /* Landing-page header, in rem so it scales with the rest of this page
+       (overrides games/shared/ui.css, which stays px for the games). */
+    header { padding:0.875rem 1.25rem; max-width:87.5rem; }
+    .logo  { font-size:1.3125rem; }
+    .header-right { gap:0.625rem; }
+    .header-outer .help-btn,
+    .header-outer .menu-btn {
+      height:2.5rem; min-width:2.5rem; padding:0 0.875rem; border-radius:0.5rem;
+      display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;
+    }
+    .header-outer .help-btn { font-size:0.875rem; }
+    .header-outer .menu-btn { font-size:0.6875rem; }
+    .header-outer .menu-btn.icon-only { padding:0; }
+    .header-outer .menu-btn .hdr-icon { font-size:1rem; line-height:1; }
+  </style>
 </head>
 <body>
 
@@ -607,7 +634,7 @@
 
     <div style="width:100%" class="games-block">
       <div class="panel-label">Games</div>
-      <div style="display:flex;flex-direction:column;gap:7px;" id="game-cards">
+      <div style="display:flex;flex-direction:column;gap:0.4375rem;" id="game-cards">
 
         <div class="game-card virus" id="card-virus"
              onclick="launchGame('virus')"
@@ -688,11 +715,11 @@
           <img src="assets/images/patient/patient.png"
                alt="Patient body"
                id="patient-img"
-               style="width:100%;height:100%;object-fit:contain;display:block;mix-blend-mode:screen;"
+               style="width:100%;height:auto;display:block;mix-blend-mode:screen;"
                onerror="this.style.display='none';document.getElementById('patient-fallback').style.display='flex'">
 
           <!-- Fallback if image not found -->
-          <div id="patient-fallback" style="display:none;width:100%;aspect-ratio:9/19;background:linear-gradient(180deg,#111e36,#0a1220);border:1px dashed #1e3050;border-radius:12px;align-items:center;justify-content:center;flex-direction:column;gap:10px;">
+          <div id="patient-fallback" style="display:none;width:100%;aspect-ratio:9/19;background:linear-gradient(180deg,#111e36,#0a1220);border:1px dashed #1e3050;border-radius:0.75rem;align-items:center;justify-content:center;flex-direction:column;gap:0.625rem;">
             <svg viewBox="0 0 100 200" style="width:50%;opacity:0.2;" fill="#4a6580">
               <ellipse cx="50" cy="18" rx="16" ry="17"/>
               <rect x="39" y="33" width="22" height="10" rx="3"/>
@@ -702,7 +729,7 @@
               <path d="M38 136 Q34 150 33 175 Q32 190 36 197 L50 197 L50 137 Z"/>
               <path d="M62 136 Q66 150 67 175 Q68 190 64 197 L50 197 L50 137 Z"/>
             </svg>
-            <div style="font-size:9px;color:var(--muted);text-align:center;padding:0 12px;">assets/images/patient/patient.png</div>
+            <div style="font-size:0.6875rem;color:var(--muted);text-align:center;padding:0 0.75rem;">assets/images/patient/patient.png</div>
           </div>
 
           <!-- Hotspot blobs — positioned via JS -->
@@ -750,7 +777,7 @@
   <div class="right-col">
 
     <!-- Health status — moved from left col -->
-    <div class="health-status-wrap" style="margin-bottom:16px;">
+    <div class="health-status-wrap" style="margin-bottom:1rem;">
       <div class="health-bar-label">Health status</div>
       <div class="health-pct" id="power-pct">25%</div>
       <div class="power-track">
@@ -770,25 +797,25 @@
       <div class="chart-header">
         <div>
           <div class="chart-header-title">Patient chart</div>
-          <div class="chart-id" style="margin-top:3px;">ID #IQ-001</div>
+          <div class="chart-id" style="margin-top:0.1875rem;">ID #IQ-001</div>
         </div>
       </div>
       <div class="chart-body">
 
         
-        <div class="chart-row" style="align-items:flex-start;flex-direction:column;gap:4px;">
+        <div class="chart-row" style="align-items:flex-start;flex-direction:column;gap:0.25rem;">
           <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
             <div class="chart-key">Temperature</div>
             <div class="chart-val danger" id="c-temp">39.2 °C</div>
           </div>
           <!-- Mini thermometer bar: yellow=low/healthy (left), red=high/fever (right) -->
-          <div style="width:100%;height:6px;background:rgba(255,255,255,0.05);border-radius:3px;overflow:hidden;position:relative;">
-            <div id="c-temp-bar" style="position:absolute;top:0;left:0;bottom:0;width:72%;background:linear-gradient(to right,#ffdb58,#ff9f1c,#ff4d6d);border-radius:3px;transition:width 1.2s ease;"></div>
+          <div style="width:100%;height:0.375rem;background:rgba(255,255,255,0.05);border-radius:0.1875rem;overflow:hidden;position:relative;">
+            <div id="c-temp-bar" style="position:absolute;top:0;left:0;bottom:0;width:72%;background:linear-gradient(to right,#ffdb58,#ff9f1c,#ff4d6d);border-radius:0.1875rem;transition:width 1.2s ease;"></div>
           </div>
-          <div style="display:flex;justify-content:space-between;width:100%;padding-bottom:15px;">
-            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">37°C</span>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">39°C</span>
-            <span style="font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);">41°C</span>
+          <div style="display:flex;justify-content:space-between;width:100%;padding-bottom:0.9375rem;">
+            <span style="font-family:'Share Tech Mono',monospace;font-size:0.6875rem;color:var(--muted);">37°C</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:0.6875rem;color:var(--muted);">39°C</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:0.6875rem;color:var(--muted);">41°C</span>
           </div>
         </div>
         <div class="chart-row">
@@ -808,8 +835,8 @@
           <div class="chart-val accent" id="c-played">0</div>
         </div>
 
-        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
-          <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);text-align:right;min-height:12px;" id="c-timestamp">—</div>
+        <div style="margin-top:0.625rem;padding-top:0.5rem;border-top:1px solid var(--border);">
+          <div style="font-family:'Share Tech Mono',monospace;font-size:0.625rem;color:var(--muted);text-align:right;min-height:0.75rem;" id="c-timestamp">—</div>
         </div>
 
       </div>
@@ -827,7 +854,7 @@
         <span class="game-modal-logo">IMMUNE<span>QUEST</span></span>
         <span class="game-modal-gamename" id="game-modal-gamename">VIRUS</span>
       </div>
-      <div style="display:flex; gap:10px; align-items:center;">
+      <div style="display:flex; gap:0.625rem; align-items:center;">
         <button class="game-modal-fs" onclick="goFullscreen()" title="Fullscreen" id="btn-fullscreen">⛶ Fullscreen</button>
         <button class="game-modal-fs" onclick="exitFullscreenOnly()" title="Minimise" id="btn-minimise" style="display:none;">⤢ Minimise</button>
         <button class="game-modal-close" onclick="requestCloseGame()" aria-label="Close">✕ Exit</button>
@@ -861,11 +888,9 @@
   </div>
 </div>
 
-<footer></footer>
-
 <!-- Menu Modal — Main Platform (Tabbed menu with About, Settings, Share, Feedback) -->
 <div class="modal-overlay" id="menu-modal" onclick="closeMenuOutside(event)">
-  <div class="modal" style="max-width:560px;">
+  <div class="modal" style="max-width:35rem;">
     <div class="modal-header">
       <div class="modal-title">Menu</div>
       <button class="modal-close" onclick="closeMenu()">✕</button>
@@ -885,7 +910,7 @@
           <div class="about-text">
             <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
 
-            <span style="color:var(--muted)">Version 1.0 · Developed 2026 by Arwen Altenburg with Claude (Sonnet 4.6, 5) & Gemini Flash 3.</span><br><br>
+            <span style="color:var(--muted)">Version 1.0<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span><br><br>
 
             <b>The Infection Game (legacy)</b><br>
             Original game developed by Dr AJ te Velthuis (Princeton University) and Dr Arwen Altenburg (University of Cambridge) with SKYLE games. Artwork by Ramon Calvante. A massive thank you to Dr Ingrida Olendraite for her assistance and to the University of Cambridge School of Biological Sciences and the British Society for Immunology for their financial support.<br><br>
@@ -907,7 +932,7 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
-          <div style="font-size:11px; color:var(--muted); line-height:1.5; margin-top:8px;">
+          <div style="font-size:0.8125rem; color:var(--muted); line-height:1.5; margin-top:0.5rem;">
             We use <a href="https://www.goatcounter.com" target="_blank" rel="noopener" style="color:var(--accent3);">GoatCounter</a>, a privacy-first analytics tool, to count which games are opened and how often. It uses no cookies and never stores IP addresses or any other personal data — every visit is completely anonymous. These numbers help us show evidence of public engagement when reporting to the University and our funders, which helps keep Immune Quest free.
           </div>
         </div>
@@ -918,6 +943,13 @@
               <input type="checkbox" id="toggle-sound" onchange="setSound(this.checked)">
               <span class="toggle-slider"></span>
             </label>
+          </div>
+        </div>
+        <!-- Only shown on an iPad that isn't running the Home Screen web app -->
+        <div class="modal-section" id="settings-install-section" style="display:none;">
+          <div class="modal-section-title">Play full-screen</div>
+          <div class="modal-btn" style="cursor:pointer; align-self:flex-start;" onclick="closeMenu(); openInstallGuide();">
+            <span class="modal-btn-icon">＋</span> Add to Home Screen
           </div>
         </div>
         <div class="modal-section">
@@ -953,7 +985,7 @@
       <div class="modal-tab-content" id="tab-feedback">
         <div class="modal-section">
           <div class="modal-section-title">Send feedback</div>
-          <div class="feedback-rating-row" style="margin-top:6px;">
+          <div class="feedback-rating-row" style="margin-top:0.375rem;">
             <span class="feedback-rating-label">Rate Immune Quest (optional)</span>
             <div class="star-rating" id="feedback-rating" data-value="0">
               <span class="star" data-value="1">★</span>
@@ -963,9 +995,9 @@
               <span class="star" data-value="5">★</span>
             </div>
           </div>
-          <textarea class="feedback-area" id="feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..." style="margin-top:10px;"></textarea>
+          <textarea class="feedback-area" id="feedback-text" placeholder="Tell us what you think, report a bug, or suggest a new feature..." style="margin-top:0.625rem;"></textarea>
           <button class="feedback-submit" onclick="submitFeedback()">Send →</button>
-          <div id="feedback-confirm" style="font-size:10px;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
+          <div id="feedback-confirm" style="font-size:0.75rem;color:var(--accent3);display:none;">✓ Thanks for your feedback!</div>
         </div>
       </div>
 
@@ -979,9 +1011,36 @@
   <div class="unlock-toast-text">Stealth mission unlocked<span>Play as the virus against the immune system</span></div>
 </div>
 
-<!-- Onboarding walkthrough — auto-shown once on first visit, replayable via the "?" button -->
+<!-- "Add to Home Screen" guide — offered on an iPad when the platform isn't
+     running as a Home Screen web app (see INSTALL GUIDE in the script). -->
+<div class="modal-overlay" id="install-modal" onclick="if(event.target===this) closeInstallGuide()">
+  <div class="modal" style="max-width:26rem;">
+    <div class="modal-header">
+      <div class="modal-title">Play full-screen</div>
+      <button class="modal-close" onclick="closeInstallGuide()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <div class="about-text">Add Immune Quest to your Home Screen to play it like an app: full-screen, without the browser bars, and one tap away.</div>
+        <ol class="install-steps">
+          <li><span>Tap the <b>Share</b> button <svg class="install-share-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> — at the top of Safari, or inside its <b>•••</b> menu.</span></li>
+          <li><span>Scroll down and tap <b>Add to Home Screen</b>.</span></li>
+          <li><span>If you see <b>Open as Web App</b>, keep it switched on. Then tap <b>Add</b>.</span></li>
+          <li><span>Open Immune Quest from the new icon on your Home Screen.</span></li>
+        </ol>
+        <div class="install-note">Progress saved here in the browser doesn't carry over to the Home Screen app — it starts fresh there.</div>
+        <div class="install-actions">
+          <button class="install-never-btn" onclick="neverShowInstallGuide()">Don't show again</button>
+          <button class="onboarding-next-btn" onclick="closeInstallGuide()">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Onboarding walkthrough — opened with the "?" button -->
 <div class="modal-overlay" id="onboarding-modal" onclick="if(event.target===this) closeOnboarding()">
-  <div class="modal" style="max-width:380px;">
+  <div class="modal" style="max-width:23.75rem;">
     <div class="modal-header">
       <div class="modal-title" id="onboarding-title">Welcome to Immune Quest</div>
       <button class="modal-close" onclick="closeOnboarding()">✕</button>
@@ -992,8 +1051,8 @@
           You're looking after a patient fighting off disease. Treat the different conditions by playing games where you act as the immune system.
         </div>
         <div class="onboarding-dots" id="onboarding-dots"></div>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
-          <button class="modal-btn" style="cursor:pointer; padding:7px 14px; font-size:9px;" onclick="skipOnboarding()">Skip</button>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.375rem;">
+          <button class="modal-btn" style="cursor:pointer; padding:0.4375rem 0.875rem; font-size:0.6875rem;" onclick="skipOnboarding()">Skip</button>
           <button class="onboarding-next-btn" id="onboarding-next-btn" onclick="onboardingNext()">Next →</button>
         </div>
       </div>
@@ -1003,12 +1062,22 @@
 
 <script>
 // ════════════════════════════════════════════════
-//  HOTSPOT CONFIG
-//  orgX/orgY = % position on the patient image where the connector line should point
-//  blobSide  = which side of the image the blob dot sits ('left' or 'right')
-//  blobY     = % down the image where blob dot appears
-//  labelSide = which side of dot the label appears
-//  Calibrated to patient.png (1300×930 original, displayed at 240px wide)
+//  IMMUNE QUEST — platform page script
+//  Contents: hotspot config · patient dots & connectors · background icons
+//  · tooltip · analytics · launching games · viewport checks · messages
+//  from games · recording results · self-report panel · unlock toast ·
+//  onboarding · relapses · progress & patient chart. Menu, settings,
+//  share and feedback are in the next <script>; the shared header/menu
+//  code is games/shared/ui.js.
+// ════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════
+//  HOTSPOT CONFIG — positions on the patient image, in % of its size
+//  orgX/orgY = the organ the connector line points at
+//  blobX     = where the clickable dot sits across: 0–100 on the image,
+//              >100 / <0 = beyond the right / left edge
+//  blobY     = how far down the dot sits
+//  labelSide = which side of the dot the label goes
 // ════════════════════════════════════════════════
 const HOTSPOT_CONFIG = {
   virus:    { orgX:60, orgY:24, blobX:107, blobY:20, labelSide:'right' },  // lungs
@@ -1040,6 +1109,9 @@ function positionBlobs() {
   svg.appendChild(defs);
 
   const colours = { virus:'#00e5ff', stealth:'#39ff14', bacteria:'#ff9f1c', parasite:'#a855f7', cancer:'#ff4d6d' };
+  // Dot/label sizes below are in design px at a 16px root; k scales them
+  // with the page's fluid root font-size (see the html rule in the CSS).
+  const k = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16;
 
   Object.entries(HOTSPOT_CONFIG).forEach(([type, cfg]) => {
     const blob  = document.getElementById('blob-' + type);
@@ -1079,7 +1151,7 @@ function positionBlobs() {
     const hitArea = document.createElementNS('http://www.w3.org/2000/svg','circle');
     hitArea.setAttribute('cx', bx);
     hitArea.setAttribute('cy', by);
-    hitArea.setAttribute('r', '16');
+    hitArea.setAttribute('r', 16 * k);
     hitArea.setAttribute('fill', 'transparent');
     hitArea.style.cursor = 'pointer';
     hitArea.onclick = () => launchGame(type);
@@ -1091,7 +1163,7 @@ function positionBlobs() {
     const labelDot = document.createElementNS('http://www.w3.org/2000/svg','circle');
     labelDot.setAttribute('cx', bx);
     labelDot.setAttribute('cy', by);
-    labelDot.setAttribute('r', '4');
+    labelDot.setAttribute('r', 4 * k);
     labelDot.setAttribute('fill', 'black');
     labelDot.setAttribute('stroke', col);
     labelDot.setAttribute('stroke-width', '1.5');
@@ -1106,7 +1178,7 @@ function positionBlobs() {
     // Static dot at organ location (pulse origin) — with glow
     const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
     dot.setAttribute('cx', ox); dot.setAttribute('cy', oy);
-    dot.setAttribute('r','3');
+    dot.setAttribute('r', 3 * k);
     dot.setAttribute('fill', col);
     dot.setAttribute('opacity','0.65');
     dot.style.cursor = 'pointer';
@@ -1117,13 +1189,13 @@ function positionBlobs() {
 
     // SVG text label at blob dot (bx,by) — aligned exactly with line endpoint
     // dot sits between line and label; label reads outward from dot
-    const dotR = 10; // half of 10px CSS dot + small gap
+    const dotR = 10 * k; // half of 10px CSS dot + small gap
     const svgText = document.createElementNS('http://www.w3.org/2000/svg','text');
     svgText.setAttribute('y', by);
     svgText.setAttribute('dominant-baseline', 'central');
     svgText.setAttribute('fill', col);
     svgText.setAttribute('font-family', 'Orbitron, monospace');
-    svgText.setAttribute('font-size', '9');
+    svgText.setAttribute('font-size', 11 * k);
     svgText.setAttribute('letter-spacing', '1');
     svgText.setAttribute('opacity', '0.95');
     svgText.style.cursor = 'pointer';
@@ -1147,13 +1219,13 @@ function positionBlobs() {
     [0, pulseDur / 2.77, pulseDur / 1.38].forEach(delay => {
       const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
       ring.setAttribute('cx', ox); ring.setAttribute('cy', oy);
-      ring.setAttribute('r','4');
+      ring.setAttribute('r', 4 * k);
       ring.setAttribute('fill','none');
       ring.setAttribute('stroke', col);
       ring.setAttribute('stroke-width','1.8');
       ring.setAttribute('opacity','0');
       ring.innerHTML = `
-        <animate attributeName="r"       from="4"   to="36"  dur="${pulseDur}s" begin="${delay.toFixed(2)}s" repeatCount="indefinite"/>
+        <animate attributeName="r"       from="${4 * k}" to="${36 * k}"  dur="${pulseDur}s" begin="${delay.toFixed(2)}s" repeatCount="indefinite"/>
         <animate attributeName="opacity" from="0.75" to="0"  dur="${pulseDur}s" begin="${delay.toFixed(2)}s" repeatCount="indefinite"/>
       `;
       svg.appendChild(ring);
@@ -1161,18 +1233,31 @@ function positionBlobs() {
   });
 }
 
-function syncPatientHeight() {
-  const leftCol = document.querySelector('.left-col');
+// Sizes the patient figure to the space available: as tall as the window
+// allows below its top edge (so the page fits one screen), never wider
+// than the centre column. Only the box width is set; the image keeps its
+// aspect ratio, so #patient-inner matches the drawn body (positionBlobs()
+// relies on that).
+const PATIENT_ASPECT = 606 / 1451; // patient.png width / height
+function layoutPatient() {
+  const inner = document.getElementById('patient-inner');
+  const wrap = inner?.parentElement;
+  if (!inner || !wrap) return;
   const img = document.getElementById('patient-img');
-  if (!leftCol || !img) return;
-  const leftH = leftCol.offsetHeight;
-  if (leftH > 200) {
-    img.style.maxHeight = leftH + 'px';
-  }
+  const aspect = img?.naturalWidth ? img.naturalWidth / img.naturalHeight : PATIENT_ASPECT;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const mainPadBottom = parseFloat(getComputedStyle(document.querySelector('.main')).paddingBottom) || 0;
+  const top = inner.getBoundingClientRect().top + window.scrollY;
+  const availH = Math.max(15 * rem, window.innerHeight - top - mainPadBottom);
+  inner.style.maxWidth = 'none';
+  inner.style.width = Math.floor(Math.min(wrap.clientWidth, availH * aspect)) + 'px';
 }
 
-window.addEventListener('load', () => { positionBlobs(); syncPatientHeight(); });
-window.addEventListener('resize', () => { positionBlobs(); syncPatientHeight(); });
+function relayoutPatient() { layoutPatient(); positionBlobs(); }
+window.addEventListener('load', relayoutPatient);
+window.addEventListener('resize', relayoutPatient);
+// Header/card heights shift once the web fonts arrive.
+document.fonts?.ready.then(relayoutPatient);
 
 // ════════════════════════════════════════════════
 //  BACKGROUND ICONS
@@ -1293,16 +1378,10 @@ function unhighlightBlob(type) {
 }
 
 // ════════════════════════════════════════════════
-//  ANALYTICS — GoatCounter (privacy-first: no cookies, no IP storage, no
-//  persistent visitor ID — see the Settings tab copy for what it does
-//  record). This is a single-page hub whose URL never actually changes as
-//  players move between games, so we don't use GoatCounter's automatic
-//  on-load pageview — instead trackPlay(game) fires one manual count()
-//  per virtual "page": once for the hub itself (below) and once per game
-//  launch (see launchGame()). Each is tagged with its own `path`, so
-//  GoatCounter's own dashboard already breaks totals down per game
-//  (Pages report) alongside the site-wide total — no need for a separate
-//  site/account per game.
+//  ANALYTICS — GoatCounter (no cookies, no IP storage, no persistent
+//  visitor ID). The URL never changes, so pageviews are counted manually
+//  per virtual page: the hub once, and each game launch (trackPlay()),
+//  each with its own path for the per-game dashboard.
 // ════════════════════════════════════════════════
 const GOATCOUNTER_ENDPOINT = 'https://immune-quest.goatcounter.com/count';
 const TRACK_PATHS = {
@@ -1349,13 +1428,8 @@ function trackPlay(game) {
 }
 trackPlay('pageview');
 
-// Funnel events (mission started / won / lost) — GoatCounter has no custom
-// dimensions, so the outcome is encoded straight into the path (e.g.
-// /games/stealth/win) and shows up as its own row in GoatCounter's
-// "Events" report, separate from the plain pageview counts above. Unique
-// visitors need no extra call here — GoatCounter derives that automatically
-// from the pageview hits already being sent (see the Settings tab copy:
-// it's a same-day session estimate, not a persistent identity, by design).
+// Funnel events (mission started / won / lost), encoded in the path
+// (e.g. /games/stealth/win) since GoatCounter has no custom fields.
 function trackEvent(path, title) {
   _sendGoatcounter({ path, title, event: true });
 }
@@ -1368,16 +1442,12 @@ const GAME_URLS = {
   stealth: 'games/stealth/index.html',
 };
 
-// Games whose result the platform can only learn via self-report on Exit
-// (compiled builds with no iq_game_result bridge wired up). Games not
-// listed here manage and save their own result directly — asking again
-// on Exit would be redundant and could double-record a score.
+// Games whose result is self-reported on Exit (the Unity build can't send
+// it). Other games save their own result.
 const SELF_REPORT_GAMES = new Set(['virus']);
 
-// Games that render their own in-iframe header (menu/help/fullscreen) —
-// for these the hub's own IMMUNE QUEST modal bar is redundant and hidden.
-// Legacy/compiled games with no header of their own (e.g. the Unity
-// "virus" build) keep the hub's bar for Fullscreen/Exit access.
+// Games with their own in-iframe header (menu/help/fullscreen) — the
+// platform's game bar is hidden for them.
 const OWN_HEADER_GAMES = new Set(['stealth']);
 
 let currentGameType = null;
@@ -1401,13 +1471,9 @@ function launchGame(type) {
   const iframeEl = document.getElementById('game-iframe');
   iframeEl.style.display = 'block';
   iframeEl.onload = () => {
-    // Proactive analytics answer, in case a future build of the Unity game
-    // listens for this without waiting to be asked (see iq_analytics_request/
-    // response bridge above). The current compiled build (checked directly —
-    // no 'iq_analytics' string anywhere in its JS) predates this bridge and
-    // doesn't call out to it, so its Yes/No screen is unaffected by this for
-    // now; it's drawn on the WebGL canvas itself, not as real DOM, so it
-    // can't be dismissed from outside without a Unity-side code change.
+    // Answer the analytics question up front, for a future Unity build that
+    // listens for it (the current build doesn't; its consent screen is
+    // drawn inside the game and can't be answered from here).
     const allowed = localStorage.getItem('iq_no_track') !== '1';
     iframeEl.contentWindow?.postMessage({ type: 'iq_analytics_response', allowed }, '*');
   };
@@ -1417,25 +1483,18 @@ function launchGame(type) {
   // the button (hub bar for legacy games, in-game header for others),
   // not forced automatically on launch.
   document.getElementById('game-modal').style.display = 'flex';
+  document.documentElement.classList.add('game-open');
   checkGameViewportGate();
   checkHubViewportGate(); // modal now open — releases the hub's own gate, see its own comment
 }
 
-// Minimum size the embedded game area needs to stay legible/usable — same
-// threshold Stealth Mission's own internal gate uses (games/stealth/
-// game-ui.js MIN_GAME_WIDTH/MIN_GAME_HEIGHT), kept in sync deliberately:
-// this exists to catch every OTHER embedded game that has no such gate of
-// its own (e.g. the Unity "virus" build), not to second-guess Stealth's.
+// Minimum game area size — same values as Stealth's own check
+// (MIN_GAME_WIDTH/HEIGHT, game-ui.js), for games without one.
 const MIN_GAME_MODAL_WIDTH = 820;
 const MIN_GAME_MODAL_HEIGHT = 480;
 
-// Drives .game-orientation-lock (see its own CSS comment, above) — checked
-// on load and on every resize/orientation change while the game modal is
-// open. A no-op whenever it's closed (checkHubViewportGate() below covers
-// the landing page instead). JS-driven rather than a pure
-// `@media(orientation:portrait)` query for the same reason Stealth's own
-// version is: that only catches aspect ratio, not an absolute-size problem
-// like a small-but-landscape desktop window.
+// Shows the rotate/enlarge message in the game modal (.game-orientation-
+// lock) while it's open and the window is too small or portrait.
 function checkGameViewportGate() {
   const modal = document.getElementById('game-modal');
   if (modal.style.display !== 'flex') return;
@@ -1447,12 +1506,8 @@ function checkGameViewportGate() {
 
   document.getElementById('game-frame-wrap').classList.toggle('viewport-blocked', blocked);
 
-  // The iframe's own display is toggled via inline style elsewhere
-  // (launchGame() above), which beats any CSS class rule for the same
-  // property — so hiding it while blocked has to happen here in JS too,
-  // rather than in the .viewport-blocked CSS itself. Only touched once a
-  // game has actually been loaded (a src is set); otherwise this would
-  // fight with the 'display:none' launchGame() hasn't gotten to yet.
+  // The iframe's display is an inline style (launchGame()), so hiding it
+  // has to be done here too — only once a game is loaded.
   const iframeEl = document.getElementById('game-iframe');
   if (iframeEl.src) iframeEl.style.display = blocked ? 'none' : 'block';
 
@@ -1462,20 +1517,13 @@ function checkGameViewportGate() {
     : 'Please make your browser window larger<br>to play this game.';
 }
 
-// Minimum size the hub's OWN landing page (header/games grid/patient
-// visual/chart) needs — a much lower bar than the game modal's, since this
-// content already reflows down to phone width via the @media rules above.
-// Kept mainly to catch a genuinely cramped desktop window; the orientation
-// check below is what does the real work of matching Stealth's own
-// "landscape only" rule for the hub itself.
+// Minimum size for the landing page (lower than the game's; the portrait
+// check does most of the work).
 const MIN_HUB_WIDTH = 600;
 const MIN_HUB_HEIGHT = 380;
 
-// Drives .orientation-lock (see its own CSS comment, above) — checked on
-// load and on every resize/orientation change. Deliberately skipped while
-// the game modal is open: that has its own separate gate scoped to just
-// the game area (checkGameViewportGate() above), so the two never both try
-// to cover the same screen at once.
+// Shows the landing page's rotate/enlarge message (.orientation-lock).
+// Skipped while a game is open (the modal has its own check).
 function checkHubViewportGate() {
   if (document.getElementById('game-modal').style.display === 'flex') {
     document.documentElement.classList.remove('hub-viewport-blocked');
@@ -1499,21 +1547,14 @@ checkHubViewportGate();
 
 // ════════════════════════════════════════════════
 //  UNITY POSTMESSAGE INTEGRATION
-//
-//  Receives two event types from the Unity game:
-//
-//  1. SCORE / WIN RESULT — fires when the game ends:
-//     { type: 'iq_game_result', win: true|false, score: <number> }
-//
-//  2. ANALYTICS CONSENT — fires when Unity asks the player
-//     about analytics. We auto-answer using the platform
-//     preference already stored in localStorage:
-//     Unity sends:  { type: 'iq_analytics_request' }
-//     We reply:     { type: 'iq_analytics_response', allowed: true|false }
-//
-//  NOTE: These postMessage events require a one-line addition
-//  in the Unity C# project (see README). The platform handles
-//  everything on its side — Unity only needs to send the message.
+//  Messages from games (postMessage):
+//    iq_game_result       { win, score }  — a game finished
+//    iq_analytics_request                 — the Unity game asks whether
+//                                           analytics are allowed; we reply
+//                                           { type:'iq_analytics_response', allowed }
+//    iq_mission_started, iq_toggle_fullscreen, iq_close_game, and the
+//    Settings/Share/Feedback actions from a game's own menu (below).
+//  The Unity build needs a matching line in its C# code (see README).
 // ════════════════════════════════════════════════
 window.addEventListener('message', (e) => {
   // Only accept messages from our own hosted game
@@ -1540,13 +1581,8 @@ window.addEventListener('message', (e) => {
     return;
   }
 
-  // ── Mission actually begun — distinct from just opening the game (see
-  //    trackPlay(), fired by launchGame() the moment the modal opens).
-  //    Not every game sends this (only ones with a real pre-mission setup
-  //    screen to click past, e.g. Stealth's virus picker) — games that
-  //    don't are simply absent from the "started" event in the dashboard,
-  //    same as they're absent from win/loss if they never call
-  //    iq_game_result either. ──
+  // ── A mission actually started (only games with a setup screen, like
+  //    Stealth's virus picker, send this). ──
   if (data.type === 'iq_mission_started' && currentGameType) {
     trackEvent(`/games/${currentGameType}/started`, `${currentGameType} — Mission started`);
     return;
@@ -1564,11 +1600,9 @@ window.addEventListener('message', (e) => {
     return;
   }
 
-  // ── Settings/Share/Feedback actions from a game's own menu (see
-  //    setupSimpleMenu in shared/ui.js) — these run here so they act on
-  //    the hub's own URL/DOM (e.g. sharing the hub link, not the game's
-  //    iframe URL), then confirm back to the game for any UI it owns
-  //    (e.g. the "Copied!" label). ──
+  // ── Settings/Share/Feedback from a game's menu (setupSimpleMenu(),
+  //    shared/ui.js): run here so they use the platform's URL and page,
+  //    then confirm back to the game. ──
   if (data.type === 'iq_set_tracking') {
     setTracking(data.on);
     return;
@@ -1597,15 +1631,11 @@ window.addEventListener('message', (e) => {
 });
 
 // ════════════════════════════════════════════════
-//  RECORD GAME RESULT — shared by the postMessage bridge above (for a
-//  future Unity build that actually calls it) and the self-report panel
-//  below (used now, since the current compiled build doesn't call it).
+//  RECORD GAME RESULT — from a game's message, or the self-report panel.
 // ════════════════════════════════════════════════
 function recordGameResult(type, won, score) {
-  // Analytics fires regardless of outcome — everything below this point is
-  // progress-persistence (unlocks, high scores, relapse state), which only
-  // ever matters for a win, but a loss is just as worth counting for
-  // engagement reporting.
+  // Count every result; the rest (unlocks, best scores, relapses) only
+  // applies to a win.
   trackEvent(`/games/${type}/${won ? 'win' : 'loss'}`, `${type} — ${won ? 'Won' : 'Lost'}`);
   if (!won) return;
 
@@ -1619,12 +1649,8 @@ function recordGameResult(type, won, score) {
     if (score > prev) localStorage.setItem(prevKey, score);
   }
 
-  // Resolve any active relapse for this game
-  const activeRelapse = sessionStorage.getItem('iq_relapse');
-  if (activeRelapse === type) {
-    sessionStorage.removeItem('iq_relapse');
-    sessionStorage.setItem('iq_relapse_resolved', '1');
-  }
+  // Winning the relapsed game treats the relapse.
+  if (sessionStorage.getItem('iq_relapse') === type) sessionStorage.removeItem('iq_relapse');
 
   loadProgress();
 
@@ -1637,16 +1663,16 @@ function goFullscreen() {
   const el = document.getElementById('game-modal-inner');
   if (!el) return;
   const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
-  if (req) req.call(el).catch(() => {});
+  if (req) req.call(el)?.catch?.(() => {});
 }
 
 function exitFullscreenOnly() {
   const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
-  if (exit) exit.call(document).catch(() => {});
+  if (exit) exit.call(document)?.catch?.(() => {});
 }
 
 function syncFullscreenButtons() {
-  const isFs = !!document.fullscreenElement;
+  const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
   document.getElementById('btn-fullscreen').style.display = isFs ? 'none' : 'inline-flex';
   document.getElementById('btn-minimise').style.display   = isFs ? 'inline-flex' : 'none';
   // Let a game with its own in-iframe header (see OWN_HEADER_GAMES) know
@@ -1659,9 +1685,8 @@ function syncFullscreenButtons() {
   .forEach(evt => document.addEventListener(evt, syncFullscreenButtons));
 
 // ════════════════════════════════════════════════
-//  SELF-REPORT PANEL — shown on Exit, on top of the still-visible game,
-//  so the player can read their own result off the screen. Needed because
-//  the current compiled Unity build never calls the iq_game_result bridge.
+//  SELF-REPORT PANEL — on Exit, over the still-visible game, so the
+//  player can read their result off the screen (Unity build only).
 // ════════════════════════════════════════════════
 function requestCloseGame() {
   if (!currentGameType || !SELF_REPORT_GAMES.has(currentGameType)) { closeGame(); return; }
@@ -1691,8 +1716,17 @@ function scoreReportSubmit() {
 }
 
 function closeGame() {
-  if (document.fullscreenElement) document.exitFullscreen?.();
+  // Only leave fullscreen if it was the game's own (Maximise) — if the whole
+  // platform was already fullscreen via the header button, stay that way.
+  const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+  if (fsEl && fsEl === document.getElementById('game-modal-inner')) exitFullscreenOnly();
   document.getElementById('game-modal').style.display = 'none';
+  document.documentElement.classList.remove('game-open');
+  // The page may have been scrolled underneath the modal (iPad touch
+  // scrolling, fullscreen exit) — snap back so the header is in view, and
+  // re-fit the patient once the fullscreen exit has resized the window.
+  window.scrollTo(0, 0);
+  requestAnimationFrame(relayoutPatient);
   document.getElementById('game-iframe').src = '';
   const played = parseInt(localStorage.getItem('iq_played') || '0') + 1;
   localStorage.setItem('iq_played', played);
@@ -1717,9 +1751,7 @@ function showUnlockToast() {
 }
 
 // ════════════════════════════════════════════════
-//  ONBOARDING WALKTHROUGH
-//  Auto-shows once per browser (via localStorage flag), and is always
-//  replayable via the "?" button in the header.
+//  ONBOARDING WALKTHROUGH — opened with the "?" button.
 // ════════════════════════════════════════════════
 const ONBOARDING_STEPS = [
   {
@@ -1778,29 +1810,97 @@ function closeOnboarding() {
   document.getElementById('onboarding-modal').classList.remove('open');
 }
 
+// ════════════════════════════════════════════════
+//  INSTALL GUIDE — on an iPad, if the platform isn't running as a Home
+//  Screen web app, offer step-by-step help to add it (iPadOS doesn't let a
+//  page install itself). "OK"/✕ hides it until the next visit; "Don't show
+//  again" hides it for good. It stays available in Settings either way.
+// ════════════════════════════════════════════════
+const INSTALL_GUIDE_NEVER_KEY = 'iq_install_guide_never';
+const INSTALL_GUIDE_SEEN_KEY  = 'iq_install_guide_seen'; // this visit (sessionStorage)
+const INSTALL_GUIDE_DELAY_MS  = 1500;
+
+// iPadOS Safari identifies as a Mac, so an iPad is "iPad" in the user
+// agent, or a Mac with a touch screen.
+function isIPad() {
+  return /iPad/.test(navigator.userAgent)
+    || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+}
+
+// Opened from the Home Screen as a web app (not in a browser tab)?
+function isWebApp() {
+  return window.navigator.standalone === true
+    || window.matchMedia('(display-mode: standalone)').matches
+    || window.matchMedia('(display-mode: fullscreen)').matches;
+}
+
+function shouldOfferInstall() { return isIPad() && !isWebApp(); }
+
+function openInstallGuide() {
+  document.getElementById('install-modal').classList.add('open');
+}
+
+function closeInstallGuide() {
+  document.getElementById('install-modal').classList.remove('open');
+}
+
+function neverShowInstallGuide() {
+  try { localStorage.setItem(INSTALL_GUIDE_NEVER_KEY, '1'); } catch (e) {}
+  closeInstallGuide();
+}
+
+// On load: show the Settings entry where relevant, and offer the guide
+// once per visit unless the player opted out — after a short delay, and
+// not over a game, the menu or the tutorial.
+function maybeOfferInstall() {
+  if (!shouldOfferInstall()) return;
+  document.getElementById('settings-install-section').style.display = '';
+  let optedOut = false, seen = false;
+  try {
+    optedOut = localStorage.getItem(INSTALL_GUIDE_NEVER_KEY) === '1';
+    seen = sessionStorage.getItem(INSTALL_GUIDE_SEEN_KEY) === '1';
+  } catch (e) {}
+  if (optedOut || seen) return;
+  setTimeout(() => {
+    const busy = document.getElementById('game-modal').style.display === 'flex'
+      || document.querySelector('.modal-overlay.open');
+    if (busy) return;
+    try { sessionStorage.setItem(INSTALL_GUIDE_SEEN_KEY, '1'); } catch (e) {}
+    openInstallGuide();
+  }, INSTALL_GUIDE_DELAY_MS);
+}
+maybeOfferInstall();
+
 
 // ════════════════════════════════════════════════
-//  RELAPSE SYSTEM
-//  Once all available games cleared, 30% chance
-//  on page load that 1 condition has relapsed.
+//  RELAPSE SYSTEM — occasionally, a condition the player already treated
+//  comes back and needs treating again. Rolled once per visit (not on every
+//  return from a game): RELAPSE_CHANCE that one random cleared game
+//  relapses, and never within RELAPSE_MIN_GAP_HOURS of the last relapse.
+//  The relapse lasts for this visit, or until that game is won again.
 // ════════════════════════════════════════════════
-const AVAILABLE_GAMES = ['virus']; // extend as games are built
+const AVAILABLE_GAMES = ['virus', 'stealth']; // playable games (patient chart + relapses) — extend as games are built
+const RELAPSE_CHANCE = 0.2;
+const RELAPSE_MIN_GAP_HOURS = 24;
 
-function checkRelapse(cleared) {
-  const allCleared = AVAILABLE_GAMES.every(g => localStorage.getItem('iq_cleared_'+g) === '1');
-  if (!allCleared) return null;
-  // Check if a relapse was already set this session
+// Returns the game id with an active relapse this visit, or null.
+function checkRelapse() {
   const existing = sessionStorage.getItem('iq_relapse');
   if (existing) return existing;
-  // Don't immediately re-roll a brand-new relapse in the same session right after one was resolved —
-  // otherwise treating a relapse can look like it never went away, just coincidentally re-rolled.
-  if (sessionStorage.getItem('iq_relapse_resolved') === '1') return null;
-  if (Math.random() < 0.30) {
-    const pick = AVAILABLE_GAMES[Math.floor(Math.random()*AVAILABLE_GAMES.length)];
-    sessionStorage.setItem('iq_relapse', pick);
-    return pick;
-  }
-  return null;
+  // One roll per visit.
+  if (sessionStorage.getItem('iq_relapse_rolled') === '1') return null;
+  sessionStorage.setItem('iq_relapse_rolled', '1');
+
+  const cleared = AVAILABLE_GAMES.filter(g => localStorage.getItem('iq_cleared_' + g) === '1');
+  if (!cleared.length) return null;
+  const last = parseInt(localStorage.getItem('iq_last_relapse_at') || '0', 10);
+  if (Date.now() - last < RELAPSE_MIN_GAP_HOURS * 3600 * 1000) return null;
+  if (Math.random() >= RELAPSE_CHANCE) return null;
+
+  const pick = cleared[Math.floor(Math.random() * cleared.length)];
+  sessionStorage.setItem('iq_relapse', pick);
+  localStorage.setItem('iq_last_relapse_at', String(Date.now()));
+  return pick;
 }
 
 // ════════════════════════════════════════════════
@@ -1835,12 +1935,9 @@ function loadProgress() {
   const UNWELL_STAGES = 3; // number of distinct "Unwell" stages between Critical and Healthy
   const MAX_SEVERITY = UNWELL_STAGES + 1; // +1 for the Critical tier itself
 
-  // Relapse must be known before computing severity, since a relapse should never be
-  // allowed to read as "Healthy" even if all games are otherwise cleared.
-  // Computed once here and reused below (in the Relapse system block) rather than
-  // calling checkRelapse() twice — it's idempotent within a single loadProgress() run,
-  // but there's no reason to call it more than once.
-  const activeRelapseGame = checkRelapse(totalCleared);
+  // Check for a relapse first: with one active, the patient is never
+  // "Healthy". (Computed once and reused below.)
+  const activeRelapseGame = checkRelapse();
   const relapseActive = !!activeRelapseGame;
 
   // Base severity from treatment progress: maps "games remaining" proportionally onto
@@ -1924,12 +2021,6 @@ function loadProgress() {
     if (stealthBlob && stealthBlob.classList.contains('locked')) {
       stealthBlob.classList.remove('locked');
       stealthBlob.setAttribute('onclick', "launchGame('stealth')");
-      // positionBlobs() itself now runs unconditionally at the end of this
-      // function (see below), so it doesn't need to be re-triggered here
-      // too — this used to call it directly, but that ran BEFORE the
-      // relapse banner below had a chance to show, so if both happened in
-      // the same loadProgress() call the dots got positioned against the
-      // pre-banner layout.
     }
   }
 
@@ -1965,17 +2056,9 @@ function loadProgress() {
     'Updated: ' + now.toLocaleDateString('en-GB') + ' ' +
     now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
 
-  // Re-sync the patient image's size and every dot/connector's position
-  // unconditionally, every time this function runs — not just on initial
-  // page load (see the 'load'/'resize' listeners below). Everything above
-  // (the relapse banner appearing, a card's status text changing length,
-  // stealth unlocking) can shift #patient-inner's actual on-screen size or
-  // position; skipping this left the dots positioned against whatever
-  // layout existed the last time positionBlobs() happened to run, which
-  // is exactly what made them drift out of place specifically when a
-  // relapse banner showed up on a loadProgress() call after the initial
-  // one (e.g. right after returning from a game — see markCleared()).
-  syncPatientHeight();
+  // Re-fit the patient and re-place every dot after any change above (a
+  // relapse banner or longer card text can move the figure).
+  layoutPatient();
   positionBlobs();
 }
 
@@ -1983,13 +2066,7 @@ loadProgress();
 </script>
 
 <script>
-function openMenu() {
-  const modal = document.getElementById('menu-modal');
-  modal.classList.add('open');
-  switchTab('about');
-  lockModalTabHeight(modal); // keeps the modal one fixed size across all 4 tabs — see games/shared/ui.js
-}
-function closeMenu() { document.getElementById('menu-modal').classList.remove('open'); }
+// openMenu()/closeMenu() come from games/shared/ui.js.
 function closeMenuOutside(e) { if (e.target === document.getElementById('menu-modal')) closeMenu(); }
 
 function switchTab(name) {
@@ -2005,10 +2082,7 @@ function setTracking(on) {
   localStorage.setItem('iq_no_track', on ? '0' : '1');
 }
 
-// Same 'iq_sound_muted' key/semantics Stealth Mission's own Settings
-// toggle uses (games/shared/ui.js gameSetSound()) — localStorage is shared
-// across the hub and its same-origin game iframes, so muting here takes
-// effect the moment a game reads it, no cross-window messaging needed.
+// Same 'iq_sound_muted' setting the games read (shared localStorage).
 function setSound(on) {
   localStorage.setItem('iq_sound_muted', on ? '0' : '1');
 }
@@ -2016,7 +2090,7 @@ function setSound(on) {
 function resetProgress() {
   Object.keys(localStorage).filter(k => k.startsWith('iq_')).forEach(k => localStorage.removeItem(k));
   sessionStorage.removeItem('iq_relapse');
-  sessionStorage.removeItem('iq_relapse_resolved');
+  sessionStorage.removeItem('iq_relapse_rolled');
   location.reload();
 }
 
@@ -2035,48 +2109,21 @@ function copyLink() {
     setTimeout(() => document.getElementById('copy-label').textContent = 'Copy link', 2000);
   });
 }
-// Feedback is sent anonymously — no email, no account, no identifying data
-// of any kind — to a Google Apps Script Web App (see feedback-apps-script/
-// at the repo root) bound to a private Google Sheet, which appends
-// {timestamp, rating, text} as one row. FEEDBACK_ENDPOINT must point at
-// your own deployed Web App's URL — see feedback-apps-script/README.md
-// for one-time setup.
+// Anonymous feedback (no email, account or identifying data) goes to a
+// Google Apps Script Web App that appends {timestamp, rating, text} to a
+// private Google Sheet — setup in feedback-apps-script/README.md.
 const FEEDBACK_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwBJVOQ3tAi_5TDrMexUD_KIYuj2MDPN5jLyXPlwukk_SEzGnINQVTPCX-a8geL6Cr9/exec';
 
-// Plain click/hover-painted spans (not radio inputs) — submitFeedback()
-// below just reads the chosen value straight off the container's own
-// data-value, no form-submit semantics needed. Shared by both the hub's
-// own feedback tab (id passed in below) and each game's in-menu one (see
-// games/shared/ui.js's own copy of this same pair of functions).
-function paintStarRating(containerId, value) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  container.querySelectorAll('.star').forEach(s => s.classList.toggle('filled', +s.dataset.value <= value));
-}
-function setupStarRating(containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  container.querySelectorAll('.star').forEach(s => {
-    s.onclick = () => { container.dataset.value = s.dataset.value; paintStarRating(containerId, +s.dataset.value); };
-    s.onmouseenter = () => paintStarRating(containerId, +s.dataset.value);
-  });
-  container.onmouseleave = () => paintStarRating(containerId, +container.dataset.value);
-}
-setupStarRating('feedback-rating');
-
+// Star rating: setupStarRating()/paintStarRating() in games/shared/ui.js
+// (the chosen value is read from the container's data-value).
 function submitFeedback() {
   const text = document.getElementById('feedback-text').value.trim();
   const ratingEl = document.getElementById('feedback-rating');
   const rating = parseInt(ratingEl.dataset.value || '0', 10);
   if (!text && !rating) return; // nothing to send — at least one of the two is required
-  // Fire-and-forget — this is low-stakes anonymous feedback, not worth
-  // blocking the confirmation (or the player's next click) on network
-  // latency or a hiccup on Google's end. mode:'no-cors' (and no explicit
-  // Content-Type — a plain string body defaults to text/plain, one of the
-  // CORS-safelisted types) keeps this a "simple request": Apps Script Web
-  // Apps don't handle a JSON-triggered CORS preflight cleanly, so this
-  // sidesteps needing one at all. The response is opaque either way,
-  // which is fine — nothing here reads it.
+  // Fire-and-forget. no-cors + a plain-text body keeps it a "simple"
+  // request (Apps Script doesn't handle CORS preflights); the response
+  // isn't read.
   fetch(FEEDBACK_ENDPOINT, {
     method: 'POST',
     mode: 'no-cors',
@@ -2112,6 +2159,9 @@ const HUB_CONFIG = {
   showBackLink: false,
   showHelpButton: true,
   showMenuButton: true,
+  showFullscreenButton: true,
+  fullscreenIconOnly: true,
+  showFooter: false,
   menuType: 'full' // Uses existing full menu modal in page HTML
 };
 </script>
@@ -2121,6 +2171,7 @@ const HUB_CONFIG = {
 <script>
 // Initialize shared UI for main hub
 initUI(HUB_CONFIG);
+setupStarRating('feedback-rating'); // star rating helpers come from ui.js
 </script>
 
 </body>
