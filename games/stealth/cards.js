@@ -65,10 +65,33 @@ function _mhc1DownregDef(tissue) {
     tooltip: `Primes a hidden defence in ${tissue} for ${_pluralTurns(STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS)}. The next T cell card the immune system plays here in that time is fully cancelled.`,
     targetType: 'none', requiresTissue: tissue,
     apply(boards, target, state) {
-      if (!state.activeTissues.includes(tissue)) return { text: `The virus is not active in the ${tissue}.`, count: 0, ok: false };
+      if (!state.activeTissues.includes(tissue)) return { text: `The virus is not active in the ${tissue}. Select another card or select ‘End Turn’.`, count: 0, ok: false };
       state.mhcActive = state.mhcActive || {};
       state.mhcActive[tissue] = STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS;
       return { text: `T-Cell Evasion (${_capitalize(tissue)}) for ${_pluralTurns(STEALTH_CONFIG.IMMUNE.MHC_EVASION_TURNS)}`, count: 0, ok: true };
+    },
+  };
+}
+
+// Antibody Escape (one per tissue): every Antibody shield in the tissue is
+// removed, and its infected cells can't be cleared this turn. Only
+// playable where the virus is active AND there's an Antibody shield to
+// escape — otherwise it fails and the card stays in hand.
+function _antibodyEscapeDef(tissue) {
+  const Tissue = _capitalize(tissue);
+  return {
+    id: `antibody-escape-${tissue}`, name: `Antibody Escape: ${Tissue}`, icon: '🛡️', count: 3,
+    tooltip: `Remove all antibodies in ${Tissue}.`,
+    targetType: 'none', requiresTissue: tissue,
+    apply(boards, target, state) {
+      if (!state.activeTissues.includes(tissue)) return { text: `The virus is not active in the ${tissue}. Select another card or select ‘End Turn’.`, count: 0, ok: false };
+      const board = boards[tissue];
+      const hasAntibodies = board.cells.some(row => row.some(c => c.state === 'immune' && !c.cytokineColor));
+      if (!hasAntibodies) return { text: `No antibodies to escape in the ${tissue}. Select another card to play or select ‘End Turn’.`, count: 0, ok: false };
+      const n = board.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
+      const cleared = board.clearAntibodyProtection();
+      const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
+      return { text: `Antibody Escape: ${n} infected ${tissue} cell(s) protected for ${_pluralTurns(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS)}.${clearedText}`, count: 0, ok: true, cells: cleared };
     },
   };
 }
@@ -207,47 +230,9 @@ const STEALTH_CARD_DEFS = {
     },
   },
 
-  // Antibody Escape: infected cells in the tissue can't be cleared this
-  // turn, and every Antibody shield there is removed. Only playable where
-  // the virus is already active.
-  'antibody-escape-lung': {
-    id: 'antibody-escape-lung', name: 'Antibody Escape: Lung', icon: '🛡️', count: 3,
-    tooltip: 'Remove all antibodies in Lung.',
-    targetType: 'none', requiresTissue: 'lung',
-    apply(boards, target, state) {
-      if (!state.activeTissues.includes('lung')) return { text: 'The virus is not active in the lung.', count: 0, ok: false };
-      const n = boards.lung.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
-      const cleared = boards.lung.clearAntibodyProtection();
-      const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
-      return { text: `Antibody Escape: ${n} infected lung cell(s) protected for ${STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS} turns.${clearedText}`, count: 0, ok: true, cells: cleared };
-    },
-  },
-
-  'antibody-escape-liver': {
-    id: 'antibody-escape-liver', name: 'Antibody Escape: Liver', icon: '🛡️', count: 3,
-    tooltip: 'Remove all antibodies in Liver.',
-    targetType: 'none', requiresTissue: 'liver',
-    apply(boards, target, state) {
-      if (!state.activeTissues.includes('liver')) return { text: 'The virus is not active in the liver.', count: 0, ok: false };
-      const n = boards.liver.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
-      const cleared = boards.liver.clearAntibodyProtection();
-      const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
-      return { text: `Antibody Escape: ${n} infected liver cell(s) protected for ${STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS} turns.${clearedText}`, count: 0, ok: true, cells: cleared };
-    },
-  },
-
-  'antibody-escape-intestine': {
-    id: 'antibody-escape-intestine', name: 'Antibody Escape: Intestine', icon: '🛡️', count: 3,
-    tooltip: 'Remove all antibodies in Intestine.',
-    targetType: 'none', requiresTissue: 'intestine',
-    apply(boards, target, state) {
-      if (!state.activeTissues.includes('intestine')) return { text: 'The virus is not active in the intestine.', count: 0, ok: false };
-      const n = boards.intestine.grantEscapeImmunity(STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS);
-      const cleared = boards.intestine.clearAntibodyProtection();
-      const clearedText = cleared.length ? ` ${cleared.length} antibody cell(s) broken through.` : '';
-      return { text: `Antibody Escape: ${n} infected intestine cell(s) protected for ${STEALTH_CONFIG.IMMUNE.ESCAPE_IMMUNITY_TURNS} turns.${clearedText}`, count: 0, ok: true, cells: cleared };
-    },
-  },
+  'antibody-escape-lung':      _antibodyEscapeDef('lung'),
+  'antibody-escape-liver':     _antibodyEscapeDef('liver'),
+  'antibody-escape-intestine': _antibodyEscapeDef('intestine'),
 
   'mhc1-downreg-lung':      _mhc1DownregDef('lung'),
   'mhc1-downreg-liver':     _mhc1DownregDef('liver'),

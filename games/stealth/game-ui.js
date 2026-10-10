@@ -29,13 +29,17 @@ let lastPlayError = null;
 
 // Every hint shown in the hint banner beside Cards In Hand (see
 // setPlayHint()) — edit wording here. Invalid-target errors come from the
-// cards themselves (each card's apply() in cards.js returns its own text).
+// cards themselves (each card's apply() in cards.js returns its own text),
+// apart from inactiveTissue below.
 const HINT_TEXT = {
-  waiting:      'Waiting for your turn…',                          // immune system's turn (plain, no glow)
-  selectCard:   'Select a card to play it.',                       // your turn, cards in hand
-  noCards:      'No cards in hand — ending turn…',                 // your turn, empty hand
-  targetTissue: 'Click anywhere in the tissue you want to target.', // after picking Horizontal/Vertical Spread
-  targetCell:   'Click a cell on the board to target it.',         // after picking any other targeted card
+  waiting:      'Waiting for your turn…',                                     // immune system's turn (plain, no glow)
+  pickCards:    'Select ‘Pick Cards’ to choose the cards to take in hand', // draft pop-up closed with an offer pending
+  selectCard:   'Select a card to play it or select ‘End Turn’',               // your turn, 1–2 cards in hand
+  selectOrTrade:'Select a card to play it, select ‘Trade 3▸1’ or select ‘End Turn’', // your turn, 3+ cards (Trade 3▸1 available)
+  noCards:      'No cards in hand — ending turn…',                            // your turn, empty hand
+  targetTissue: 'Click anywhere in the tissue you want to target.',           // after picking Horizontal/Vertical Spread
+  targetCell:   'Click a cell on the board to target it.',                    // after picking any other targeted card
+  inactiveTissue: tissue => `The virus is not active in the ${tissue}. Select another card or select ‘End Turn’.`, // tapped a greyed-out tissue
 };
 
 // Sound effects (CC0, assets/sfx/). Muted via the shared Settings toggle
@@ -53,33 +57,72 @@ const SFX = {
   'win':           'assets/sfx/win.wav',
   'lose':          'assets/sfx/lose.wav',
 };
-// Each play clones a cached <audio>, so overlapping plays of the same
-// sound don't cut each other off.
+// Playback uses the Web Audio API: every sound is fetched and decoded once
+// up front and played from memory, so it starts instantly (an <audio>
+// element per play lagged noticeably, especially on iPad). Falls back to
+// <audio> if Web Audio is unavailable or a sound isn't decoded yet.
+const SFX_VOLUME = 0.5;
+const _AudioCtx = window.AudioContext || window.webkitAudioContext;
+const _audioCtx = _AudioCtx ? new _AudioCtx() : null;
+const _sfxBuffers = {};
 const _sfxPool = {};
+if (_audioCtx) {
+  Object.entries(SFX).forEach(([id, src]) => {
+    fetch(src)
+      .then(r => r.arrayBuffer())
+      .then(data => new Promise((ok, fail) => _audioCtx.decodeAudioData(data, ok, fail)))
+      .then(buffer => { _sfxBuffers[id] = buffer; })
+      .catch(() => {}); // stays on the <audio> fallback
+  });
+}
+
 function playSound(id) {
   if (localStorage.getItem('iq_sound_muted') === '1') return;
   const src = SFX[id];
   if (!src) return;
+  const buffer = _sfxBuffers[id];
+  if (_audioCtx && buffer) {
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const source = _audioCtx.createBufferSource();
+    const gain = _audioCtx.createGain();
+    gain.gain.value = SFX_VOLUME;
+    source.buffer = buffer;
+    source.connect(gain).connect(_audioCtx.destination);
+    source.start();
+    return;
+  }
+  // Fallback: clone a cached <audio> so overlapping plays don't cut off.
   const base = _sfxPool[id] || (_sfxPool[id] = new Audio(src));
   const instance = base.cloneNode();
-  instance.volume = 0.5;
+  instance.volume = SFX_VOLUME;
   // Browsers may block audio before the first user interaction — ignore.
   instance.play().catch(() => {});
 }
+
+// Browsers (iPad especially) only allow audio to start after a user
+// gesture — unlock the audio context on the first touch/click.
+['pointerdown', 'keydown'].forEach(evt => document.addEventListener(evt, () => {
+  if (_audioCtx && _audioCtx.state === 'suspended') _audioCtx.resume();
+}, { passive: true }));
+
 // "click" sound for every button: any element (or ancestor) with an
-// onclick handler. Card faces and board cells are skipped — playing a card
-// already has its own sound when it resolves (FLASH_SOUND).
-document.addEventListener('click', (e) => {
+// onclick handler. Played on pointerdown — the moment the finger/button
+// goes down — rather than on click, which only fires on release.
+// Card faces and board cells are skipped — playing a card already has its
+// own sound when it resolves (FLASH_SOUND).
+document.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return; // primary button / touch only
   let el = e.target;
   while (el instanceof Element) {
     if (el.classList.contains('card-face') || el.classList.contains('tissue-cell')) return;
+    if (el.disabled) return;
     if (el.onclick || el.hasAttribute('onclick')) {
       playSound('click');
       return;
     }
     el = el.parentElement;
   }
-});
+}, { passive: true });
 
 // Fixed left-to-right board order, regardless of which tissues are active.
 const TISSUE_ORDER = ['liver', 'lung', 'intestine'];
@@ -234,6 +277,34 @@ function closeCardInfo() {
 
 
 
+// Tablet (iPad, Android tablet): no page header in game — its logo and
+// buttons move into the board's top-left corner to give the board the
+// height (see .compact-game-header, index.html).
+function isTabletDevice() {
+  const ua = navigator.userAgent;
+  return /iPad/.test(ua)
+    || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)   // iPadOS reports as a Mac
+    || (/Android/.test(ua) && !/Mobile/.test(ua));
+}
+
+// Moves the header's logo group and buttons into #game-corner (on) or
+// back into the header (off). Moving the real elements keeps their click
+// handlers and ids (the Fullscreen icon updates by id).
+function setCompactGameHeader(on) {
+  const corner = document.getElementById('game-corner');
+  const header = document.querySelector('.header-outer header');
+  if (!corner || !header) return;
+  document.documentElement.classList.toggle('compact-game-header', on);
+  const from = on ? header : corner, to = on ? corner : header;
+  const logoWrap = from.querySelector('.logo-wrap');
+  const buttons = from.querySelector('.header-right');
+  if (logoWrap) to.appendChild(logoWrap);
+  if (buttons) to.appendChild(buttons);
+  // One grid column per square button (Fullscreen may not be offered), so
+  // the back button below spans exactly that row's width.
+  if (on && buttons) corner.style.setProperty('--corner-cols', buttons.children.length);
+}
+
 // ═══ 3. Mission start & main render ════════════════════════════════
 // Called from "Start Mission" on the select screen.
 function startMission() {
@@ -249,6 +320,7 @@ function startMission() {
   document.getElementById('select-screen').style.display = 'none';
   document.getElementById('game-screen').classList.add('visible');
   document.body.classList.add('in-game');
+  setCompactGameHeader(isTabletDevice());
 
   activeGame = new StealthGame(payload);
   narratedPhaseRef = null;
@@ -426,24 +498,46 @@ function alignBannerWidths() {
 }
 
 // Mission log height:
-//   collapsed — a tab as tall as the Immune System banner, top-aligned;
+//   collapsed — a tab as tall as the Immune System banner, top-aligned
+//     (on the end screen, where that banner is hidden: its natural height);
 //   open beside the board (overhang) — the board column's full height;
 //   open inline — capped at that height (the feed scrolls inside).
+// On the end screen "full height" is the board's cell grid, since the log
+// starts level with its top row (alignNarrationToBoard()).
 function alignNarrationHeight() {
   const leftCol = document.querySelector('.game-left-col');
   const narrationCol = document.getElementById('narration-col');
   if (!leftCol || !narrationCol) return;
   const immuneBanner = document.getElementById('immune-banner');
-  if (narrationCol.classList.contains('collapsed') && immuneBanner) {
-    narrationCol.style.height = immuneBanner.getBoundingClientRect().height + 'px';
+  const grid = document.querySelector('.tissue-grid');
+  const gameOver = document.getElementById('game-screen').classList.contains('game-over');
+  const fullHeight = (gameOver && grid ? grid : leftCol).getBoundingClientRect().height;
+  if (narrationCol.classList.contains('collapsed')) {
+    const bannerHeight = immuneBanner ? immuneBanner.getBoundingClientRect().height : 0;
+    narrationCol.style.height = bannerHeight ? bannerHeight + 'px' : '';
     narrationCol.style.maxHeight = '';
   } else if (narrationCol.classList.contains('overhang')) {
-    narrationCol.style.height = leftCol.getBoundingClientRect().height + 'px';
+    narrationCol.style.height = fullHeight + 'px';
     narrationCol.style.maxHeight = '';
   } else {
     narrationCol.style.height = '';
-    narrationCol.style.maxHeight = leftCol.getBoundingClientRect().height + 'px';
+    narrationCol.style.maxHeight = fullHeight + 'px';
   }
+}
+
+// End screen only: moves the mission log down so its top lines up with
+// the board's top row of cells (the board itself is pushed below the
+// end-screen panel). Measured on screen, converted to stage pixels.
+// Run after every fit/end-screen alignment; clears itself during play.
+function alignNarrationToBoard() {
+  const narrationCol = document.getElementById('narration-col');
+  if (!narrationCol) return;
+  const cell = document.querySelector('.tissue-cell');
+  const gameOver = document.getElementById('game-screen').classList.contains('game-over');
+  if (!gameOver || !cell) { narrationCol.style.marginTop = ''; return; }
+  const current = parseFloat(narrationCol.style.marginTop) || 0;
+  const diff = (cell.getBoundingClientRect().top - narrationCol.getBoundingClientRect().top) / gameStageScale;
+  narrationCol.style.marginTop = Math.max(0, current + diff) + 'px';
 }
 
 // Current scale of #game-stage. Code that positions things INSIDE the
@@ -483,8 +577,10 @@ function fitGameStage(allowLogOverhang = true) {
   if (!rect.width || !rect.height) return;
 
   const availW = viewport.clientWidth || rect.width;
-  // Height from the stage's top to the window bottom, minus a small margin.
-  const availH = Math.max(120, window.innerHeight - rect.top - 8);
+  // Height from the stage's top to the window bottom, minus a small margin
+  // and the iPad home-indicator area (--safe-bottom, from the platform page).
+  const safeBottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom')) || 0;
+  const availH = Math.max(120, window.innerHeight - rect.top - 8 - safeBottom);
 
   gameStageScale = Math.min(availW / rect.width, availH / rect.height, GAME_STAGE_MAX_SCALE);
   if (!isFinite(gameStageScale) || gameStageScale <= 0) gameStageScale = 1;
@@ -499,7 +595,10 @@ function fitGameStage(allowLogOverhang = true) {
   // No room for the log beside the board — lay it out inline instead.
   if (overhang && narrationCol.getBoundingClientRect().right > viewport.getBoundingClientRect().right) {
     fitGameStage(false);
+    return;
   }
+
+  alignNarrationToBoard();
 }
 
 // Below this window size (or in portrait) the game shows a "rotate /
@@ -1429,7 +1528,7 @@ function renderBoards() {
       cellEl.dataset.col = cell.col;
       cellEl.dataset.row = cell.row;
       // Nothing to target on a tissue the virus can't currently spread in.
-      if (isActive) cellEl.onclick = () => onCellClick(tissue, cell.col, cell.row);
+      cellEl.onclick = () => onCellClick(tissue, cell.col, cell.row);
       grid.appendChild(cellEl);
     }));
 
@@ -1449,6 +1548,7 @@ function showDraftPopup() {
   document.getElementById('draft-popup-overlay').classList.add('open');
   updatePickCardsButton(false);
   updatePickCardsEntry(false);
+  updateDraftHint();
 }
 
 function hideDraftPopup() {
@@ -1457,6 +1557,16 @@ function hideDraftPopup() {
   const stillPending = g && g.phase === 'play_cards' && !!g.currentOffer;
   updatePickCardsButton(stillPending);
   updatePickCardsEntry(stillPending);
+  updateDraftHint();
+}
+
+// While a draft offer is pending: no hint while its pop-up is open; once
+// it's closed (to look at the board), point the player to Pick Cards.
+function updateDraftHint() {
+  const g = activeGame;
+  if (!g || g.phase !== 'play_cards' || !g.currentOffer) return;
+  const open = document.getElementById('draft-popup-overlay').classList.contains('open');
+  setPlayHint(open ? '' : HINT_TEXT.pickCards);
 }
 
 // Pick Cards button in the hand panel — shown while the draft is closed
@@ -1714,17 +1824,19 @@ function renderHand() {
   tradeBtn.disabled = !interactive || g.hand.length < 3;
 
   const picking = g.phase === 'play_cards' && !!g.currentOffer;
-  // Hint banner: hidden during the draft (the Pick Cards button is the
-  // prompt), a plain "waiting" box on the immune system's turn.
+  // Hint banner: a plain "waiting" box on the immune system's turn; during
+  // the draft, hidden while its pop-up is open (updateDraftHint()).
   if (lastPlayError) {
     setPlayHint(lastPlayError, 'error');
     lastPlayError = null;
   } else if (picking) {
-    setPlayHint('');
+    updateDraftHint();
   } else if (!interactive) {
     setPlayHint(HINT_TEXT.waiting, 'waiting');
   } else {
-    setPlayHint(g.hand.length ? HINT_TEXT.selectCard : HINT_TEXT.noCards);
+    setPlayHint(!g.hand.length ? HINT_TEXT.noCards
+      : g.hand.length >= 3 ? HINT_TEXT.selectOrTrade
+      : HINT_TEXT.selectCard);
   }
 
   // Empty hand on your turn: end the turn automatically.
@@ -1782,7 +1894,11 @@ function selectHandCard(i) {
 
 function onCellClick(tissue, col, row) {
   if (selectedHandIndex === null) return;
-  if (!activeGame.boards[tissue]) return; // inactive/greyed-out tissue — not targetable
+  // Greyed-out tissue: explain instead of doing nothing (card stays selected).
+  if (!activeGame.activeTissues.includes(tissue)) {
+    setPlayHint(HINT_TEXT.inactiveTissue(tissue), 'error');
+    return;
+  }
   const card = activeGame.hand[selectedHandIndex];
   if (card.targetType === 'tissue') {
     playSelectedCard({ tissue });
@@ -1938,10 +2054,21 @@ function alignEndScreenBoard() {
   // is inside it, so convert the margin to stage pixels.
   const diff = panel.getBoundingClientRect().bottom + gap - leftCol.getBoundingClientRect().top;
   leftCol.style.marginTop = (Math.max(0, diff) / gameStageScale) + 'px';
+
+  alignNarrationToBoard(); // the board just moved — keep the log level with it
+}
+
+// Header ↺ button: back to the virus select screen. Asks first while a
+// mission is still in progress (a one-tap header button is easy to hit).
+function restartMission() {
+  if (!activeGame) return;
+  if (activeGame.state === 'playing' && !confirm('Restart? This mission will be lost.')) return;
+  exitMission();
 }
 
 // Leaves the mission and returns to the virus select screen.
 function exitMission() {
+  setCompactGameHeader(false);
   clearTimeout(autoPhaseTimer);
   narratedPhaseRef = null;
   boardRevealMask = {};

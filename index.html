@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <!-- iPad home-screen web app: no Safari chrome, status bar overlays the page -->
+  <!-- iPad home-screen web app: no Safari chrome. The status bar is
+       transparent and sits over a solid navy strip (.header-outer::before /
+       the game window's top padding), so it matches the page; content
+       starts below it. -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -100,6 +103,9 @@
        logo/buttons below it (insets are 0 on laptops). */
     .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(0.625rem);
       padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+    /* Solid navy behind the status bar (0 high on laptops) — the header's
+       own see-through, blurred background looked fuzzy there. */
+    .header-outer::before { content:''; position:absolute; top:0; left:0; right:0; height:env(safe-area-inset-top); background:var(--bg); }
     header {
       display:flex; align-items:center; justify-content:space-between;
       padding:1rem 1.25rem;
@@ -450,7 +456,7 @@
 
     /* ══ Unlock toast ══ */
     .unlock-toast {
-      position:fixed; top:1.5rem; left:50%; transform:translateX(-50%) translateY(-1.25rem);
+      position:fixed; top:calc(env(safe-area-inset-top) + 1.5rem); left:50%; transform:translateX(-50%) translateY(-1.25rem);
       z-index:5000;
       background:var(--panel); border:1px solid var(--accent3); border-radius:0.625rem;
       padding:0.75rem 1.125rem; display:flex; align-items:center; gap:0.625rem;
@@ -467,8 +473,10 @@
     /* ══ Game modal ══ */
     .game-modal-overlay {
       position:fixed; inset:0; z-index:3000;
-      background:#000;
-      padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      background:var(--bg);
+      /* No bottom padding: the game fills to the bottom edge and keeps its
+         own content clear of the home indicator (sendSafeAreaToGame()). */
+      padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
       display:flex; align-items:stretch; justify-content:stretch;
     }
     .game-modal-inner {
@@ -597,7 +605,7 @@
       .game-card { padding:0.625rem 0.75rem; }
     }
   </style>
-  <link rel="stylesheet" href="./games/shared/ui.css">
+  <link rel="stylesheet" href="./games/shared/ui.css?cachebust=222">
   <style>
     /* Landing-page header, in rem so it scales with the rest of this page
        (overrides games/shared/ui.css, which stays px for the games). */
@@ -1476,6 +1484,7 @@ function launchGame(type) {
     // drawn inside the game and can't be answered from here).
     const allowed = localStorage.getItem('iq_no_track') !== '1';
     iframeEl.contentWindow?.postMessage({ type: 'iq_analytics_response', allowed }, '*');
+    sendSafeAreaToGame();
   };
   iframeEl.src = url;
 
@@ -1484,6 +1493,7 @@ function launchGame(type) {
   // not forced automatically on launch.
   document.getElementById('game-modal').style.display = 'flex';
   document.documentElement.classList.add('game-open');
+  syncFullscreenButtons(); // hides Fullscreen in a Home Screen web app
   checkGameViewportGate();
   checkHubViewportGate(); // modal now open — releases the hub's own gate, see its own comment
 }
@@ -1540,7 +1550,23 @@ function checkHubViewportGate() {
     ? 'Rotate your device to landscape<br>to use Immune Quest.'
     : 'Please make your browser window larger<br>to use Immune Quest.';
 }
-window.addEventListener('resize', () => { checkGameViewportGate(); checkHubViewportGate(); });
+window.addEventListener('resize', () => { checkGameViewportGate(); checkHubViewportGate(); sendSafeAreaToGame(); });
+
+// The game window has no bottom padding (no black strip), so tell the game
+// how tall the iPad home-indicator area is — env() reads 0 inside an
+// iframe. Games receive it as --safe-bottom (games/shared/ui.js).
+function safeAreaBottom() {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);visibility:hidden;pointer-events:none;';
+  document.body.appendChild(probe);
+  const h = probe.offsetHeight;
+  probe.remove();
+  return h;
+}
+function sendSafeAreaToGame() {
+  const frame = document.getElementById('game-iframe');
+  frame?.contentWindow?.postMessage({ type: 'iq_safe_area', bottom: safeAreaBottom() }, '*');
+}
 window.addEventListener('orientationchange', () => { checkGameViewportGate(); checkHubViewportGate(); });
 window.addEventListener('load', checkHubViewportGate);
 checkHubViewportGate();
@@ -1673,8 +1699,10 @@ function exitFullscreenOnly() {
 
 function syncFullscreenButtons() {
   const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-  document.getElementById('btn-fullscreen').style.display = isFs ? 'none' : 'inline-flex';
-  document.getElementById('btn-minimise').style.display   = isFs ? 'inline-flex' : 'none';
+  // No Fullscreen in a Home Screen web app (it's full-screen already).
+  const offer = !isRunningAsWebApp();
+  document.getElementById('btn-fullscreen').style.display = offer && !isFs ? 'inline-flex' : 'none';
+  document.getElementById('btn-minimise').style.display   = offer && isFs ? 'inline-flex' : 'none';
   // Let a game with its own in-iframe header (see OWN_HEADER_GAMES) know
   // the real fullscreen state, since the fullscreen target is this parent
   // document, not the iframe's own (meaningless) document.fullscreenElement.
@@ -1827,14 +1855,8 @@ function isIPad() {
     || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 }
 
-// Opened from the Home Screen as a web app (not in a browser tab)?
-function isWebApp() {
-  return window.navigator.standalone === true
-    || window.matchMedia('(display-mode: standalone)').matches
-    || window.matchMedia('(display-mode: fullscreen)').matches;
-}
-
-function shouldOfferInstall() { return isIPad() && !isWebApp(); }
+// isRunningAsWebApp() (opened from the Home Screen?) is in games/shared/ui.js.
+function shouldOfferInstall() { return isIPad() && !isRunningAsWebApp(); }
 
 function openInstallGuide() {
   document.getElementById('install-modal').classList.add('open');
@@ -1869,7 +1891,6 @@ function maybeOfferInstall() {
     openInstallGuide();
   }, INSTALL_GUIDE_DELAY_MS);
 }
-maybeOfferInstall();
 
 
 // ════════════════════════════════════════════════
@@ -2166,12 +2187,13 @@ const HUB_CONFIG = {
 };
 </script>
 
-<script src="./games/shared/ui.js"></script>
+<script src="./games/shared/ui.js?cachebust=222"></script>
 
 <script>
 // Initialize shared UI for main hub
 initUI(HUB_CONFIG);
 setupStarRating('feedback-rating'); // star rating helpers come from ui.js
+maybeOfferInstall();                // needs isRunningAsWebApp() from ui.js
 </script>
 
 </body>

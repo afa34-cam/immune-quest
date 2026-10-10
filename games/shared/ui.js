@@ -4,7 +4,7 @@
 //
 //  Contents
 //    1. Config defaults & initUI()
-//    2. Header (logo, back link, MENU / ? / Fullscreen) & fullscreen
+//    2. Header (logo, back link, MENU / ? / Restart / Fullscreen) & fullscreen
 //    3. Footer
 //    4. Menu — full (platform page; markup lives in index.html)
 //    5. Menu — simple (games; built here), star rating, and the
@@ -37,13 +37,10 @@ const DEFAULT_CONFIG = {
   showMenuButton: true,
   // Fullscreen button shows only its icon (no "FULLSCREEN" label).
   fullscreenIconOnly: false,
+  // ↺ button calling the page's restartMission() (Stealth).
+  showRestartButton: false,
   showFooter: true,
   menuType: 'full', // 'full' for main hub, 'simple' for games
-  
-  // Menu items (only for simple menu in games)
-  menuItems: [
-    { label: '← BACK TO HUB', href: '../../index.html' }
-  ]
 };
 
 // Merge user config with defaults
@@ -95,7 +92,7 @@ function renderHeader(config) {
     .replace(/<span>/g, `<span style="color: ${config.gameLogoSpanColor};">`)
     .replace(/<\/span>/g, '</span>');
 
-  let helpHtml = '', menuHtml = '', fullscreenHtml = '';
+  let helpHtml = '', menuHtml = '', restartHtml = '', fullscreenHtml = '';
   if(config.showHelpButton) {
     helpHtml = `<button class="help-btn" id="help-trigger" onclick="openHelp && openHelp()" title="Tutorial">?</button>`;
   }
@@ -104,15 +101,23 @@ function renderHeader(config) {
   }
   // Standalone: no button where the browser has no Fullscreen API (e.g.
   // iPhone Safari). Embedded: the platform handles fullscreen.
-  const fullscreenSupported = embedded || !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  // Never in a Home Screen web app — it's full-screen already, and iPadOS
+  // element fullscreen there adds a black band.
+  const fullscreenSupported = !isRunningAsWebApp()
+    && (embedded || !!(document.fullscreenEnabled || document.webkitFullscreenEnabled));
   if(config.showFullscreenButton && fullscreenSupported) {
     _fullscreenIconOnly = !!config.fullscreenIconOnly;
     fullscreenHtml = _fullscreenIconOnly
       ? `<button class="menu-btn icon-only" id="fullscreen-trigger" onclick="toggleGameFullscreen()" title="Fullscreen"><span class="hdr-icon">⛶</span></button>`
       : `<button class="menu-btn" id="fullscreen-trigger" onclick="toggleGameFullscreen()" title="Fullscreen"><span class="hdr-icon">⛶</span> FULLSCREEN</button>`;
   }
-  // Same order on every page of the platform: MENU, ?, Fullscreen.
-  const headerRightContent = menuHtml + helpHtml + fullscreenHtml;
+  // Restart (games with a restartMission() — Stealth). The page decides
+  // when it's visible (Stealth: in a mission only).
+  if(config.showRestartButton) {
+    restartHtml = `<button class="menu-btn icon-only" id="restart-trigger" onclick="restartMission()" title="Restart mission" aria-label="Restart mission"><span class="hdr-icon">↺</span></button>`;
+  }
+  // Same order on every page of the platform: MENU, ?, (Restart,) Fullscreen.
+  const headerRightContent = menuHtml + helpHtml + restartHtml + fullscreenHtml;
 
   const headerHtml = `
     <div class="logo-wrap">
@@ -150,6 +155,34 @@ function exitEmbeddedGame() {
   }
 }
 
+// "Back to Patient" from anywhere in a game: embedded, close the game
+// window (navigating would load the platform INSIDE the game frame, with
+// no header); standalone, go to the platform page.
+function backToPlatform(href) {
+  if (window.self !== window.top) exitEmbeddedGame();
+  else window.location.href = href;
+}
+
+// True when the platform is open as a Home Screen web app. Inside the
+// platform's game iframe, the top (same-origin) page is checked instead.
+function isRunningAsWebApp() {
+  const check = w => w.navigator.standalone === true
+    || w.matchMedia('(display-mode: standalone)').matches
+    || w.matchMedia('(display-mode: fullscreen)').matches;
+  try { return check(window.top); } catch (e) { return check(window); }
+}
+
+// Safe-area inset (home indicator) reported by the platform page while
+// embedded — env() is always 0 inside an iframe. Stored as --safe-bottom so
+// a game can keep its own content clear of it; layouts re-fit on change.
+if (window.self !== window.top) {
+  window.addEventListener('message', (e) => {
+    if (!e.data || e.data.type !== 'iq_safe_area') return;
+    document.documentElement.style.setProperty('--safe-bottom', (e.data.bottom || 0) + 'px');
+    window.dispatchEvent(new Event('resize'));
+  });
+}
+
 // Embedded: ask the platform to toggle fullscreen (its modal is the
 // fullscreen target). Standalone: toggle this page.
 function toggleGameFullscreen() {
@@ -172,6 +205,7 @@ function setFullscreenButtonLabel(isFullscreen) {
   const btn = document.getElementById('fullscreen-trigger');
   if (!btn) return;
   const icon = isFullscreen ? '⤢' : '⛶';
+  btn.classList.toggle('is-fullscreen', isFullscreen);
   btn.innerHTML = _fullscreenIconOnly
     ? `<span class="hdr-icon">${icon}</span>`
     : `<span class="hdr-icon">${icon}</span> ${isFullscreen ? 'EXIT FULLSCREEN' : 'FULLSCREEN'}`;
@@ -229,9 +263,14 @@ function lockModalTabHeight(modal) {
   if(prevActive) prevActive.classList.add('active');
 }
 
+// Opens the menu on its Settings tab (games: gtab-settings; platform page:
+// tab-settings via its own switchTab() — on game pages switchTab is
+// something else, e.g. Stealth's virus builder, hence the id checks).
 function openMenu() {
   const modal = document.getElementById('menu-modal');
   if(modal) {
+    if(document.getElementById('gtab-settings')) switchGameTab('settings');
+    else if(document.getElementById('tab-settings') && typeof switchTab === 'function') switchTab('settings');
     modal.classList.add('open');
     lockModalTabHeight(modal);
   }
@@ -245,8 +284,8 @@ function closeMenu() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-//  5. MENU — SIMPLE (game pages): a game-specific first tab (quick actions),
-//  then the same About / Settings / Share / Feedback tabs as the platform.
+//  5. MENU — SIMPLE (game pages): the same About / Settings / Share /
+//  Feedback tabs as the platform (game actions live in the header).
 //  When embedded, the actions are passed to the platform page (they need
 //  its URL — e.g. sharing the platform link, not the iframe's).
 // ════════════════════════════════════════════════════════════════════════════════
@@ -259,27 +298,6 @@ function setupSimpleMenu(config) {
     document.body.appendChild(modal);
   }
 
-  const embedded = window.self !== window.top;
-  // Each button's icon has its own span, so it can be larger than the label.
-  let landingHtml = '';
-  if(config.showHelpButton) {
-    landingHtml += `<button class="menu-item" onclick="openHelp && openHelp(); closeMenu();"><span class="menu-item-icon">?</span> Tutorial</button>`;
-  }
-  if(config.showFullscreenButton) {
-    landingHtml += `<button class="menu-item" onclick="toggleGameFullscreen()"><span class="menu-item-icon">⛶</span> Fullscreen</button>`;
-  }
-  // Not every game defines a restart/exit-to-select flow — only offer it
-  // for ones that do (currently exitMission(), from stealth's game-ui.js).
-  if(typeof exitMission === 'function') {
-    landingHtml += `<button class="menu-item" onclick="exitMission(); closeMenu();"><span class="menu-item-icon">↺</span> Restart</button>`;
-  }
-  if(config.showBackLink) {
-    const backAction = embedded ? 'exitEmbeddedGame()' : `window.location.href='${config.backLinkHref}'`;
-    landingHtml += `<button class="menu-item" onclick="${backAction}"><span class="menu-item-icon">←</span> Back to Patient</button>`;
-  }
-
-  const landingLabel = (config.gameTitle || 'Game').split(' ')[0];
-
   modal.innerHTML = `
     <div class="modal" style="max-width:40rem;">
       <div class="modal-header">
@@ -287,19 +305,14 @@ function setupSimpleMenu(config) {
         <button class="modal-close" onclick="closeMenu()">✕</button>
       </div>
       <div class="modal-tabs">
-        <div class="modal-tab active" onclick="switchGameTab('landing')">${landingLabel}</div>
+        <div class="modal-tab active" onclick="switchGameTab('about')">About</div>
         <div class="modal-tab" onclick="switchGameTab('settings')">Settings</div>
-        <div class="modal-tab" onclick="switchGameTab('about')">About</div>
         <div class="modal-tab" onclick="switchGameTab('share')">Share</div>
         <div class="modal-tab" onclick="switchGameTab('feedback')">Feedback</div>
       </div>
       <div class="modal-body">
 
-        <div class="modal-tab-content active" id="gtab-landing">
-          <div class="menu-modal-body" style="padding:0;">${landingHtml}</div>
-        </div>
-
-        <div class="modal-tab-content" id="gtab-about">
+        <div class="modal-tab-content active" id="gtab-about">
           <div class="modal-section">
             <div class="modal-section-title">About</div>
             <div class="about-text">
@@ -405,7 +418,7 @@ function setupStarRating(containerId) {
 }
 
 function switchGameTab(name) {
-  const names = ['landing', 'settings', 'about', 'share', 'feedback'];
+  const names = ['about', 'settings', 'share', 'feedback'];
   document.querySelectorAll('#menu-modal .modal-tab').forEach((t, i) => {
     t.classList.toggle('active', names[i] === name);
   });
