@@ -30,8 +30,7 @@ Devices: **iPad web app** = opened from the Home Screen icon ·
       the bottom; the hand banner isn't under the home indicator.
 - [ ] End screen → "To Patient": returns to the platform page WITH its
       header (and the game window is closed).
-- [ ] Menu has only About / Settings / Share / Feedback (no Stealth tab),
-      opening on About.
+- [ ] Menu has only About / Settings / Share / Feedback (no Stealth tab).
 - [ ] Header ↺ Restart: only shown during a mission; asks "Restart? This
       mission will be lost." mid-game (Cancel keeps playing); on the
       win/lose screen it restarts straight away.
@@ -64,8 +63,7 @@ Devices: **iPad web app** = opened from the Home Screen icon ·
       tissue the virus isn't in.
 - [ ] Antibody Escape on a tissue with no antibodies: "No antibodies to
       escape in the {tissue}. Select another card to play or select ‘End
-      Turn’." and the card
-      stays in hand.
+      Turn’." and the card stays in hand.
 
 ### Latest (not yet reviewed)
 
