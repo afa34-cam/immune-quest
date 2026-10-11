@@ -317,7 +317,7 @@ function setupSimpleMenu(config) {
             <div class="modal-section-title">About</div>
             <div class="about-text">
               <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
-              <span style="color:var(--muted)">Version 1.0<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span>
+              <span style="color:var(--muted)">Version 0.22<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span>
             </div>
           </div>
         </div>

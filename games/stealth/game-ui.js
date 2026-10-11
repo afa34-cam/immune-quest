@@ -36,7 +36,7 @@ const HINT_TEXT = {
   pickCards:    'Select ‘Pick Cards’ to choose the cards to take in hand', // draft pop-up closed with an offer pending
   selectCard:   'Select a card to play it or select ‘End Turn’',               // your turn, 1–2 cards in hand
   selectOrTrade:'Select a card to play it, select ‘Trade 3▸1’ or select ‘End Turn’', // your turn, 3+ cards (Trade 3▸1 available)
-  noCards:      'No cards in hand — ending turn…',                            // your turn, empty hand
+  noCards:      'No cards in hand, ending turn…',                            // your turn, empty hand
   targetTissue: 'Click anywhere in the tissue you want to target.',           // after picking Horizontal/Vertical Spread
   targetCell:   'Click a cell on the board to target it.',                    // after picking any other targeted card
   inactiveTissue: tissue => `The virus is not active in the ${tissue}. Select another card or select ‘End Turn’.`, // tapped a greyed-out tissue
@@ -481,6 +481,7 @@ function alignBannerWidths() {
   if (!boards.length || !immuneBanner || !virusBanner || !handPanel || !gameLeftCol) return;
   // Reset before measuring, so an old cap doesn't affect this pass.
   gameLeftCol.style.maxWidth = '';
+  gameLeftCol.style.minWidth = '';
   const first = boards[0].getBoundingClientRect();
   const last = boards[boards.length - 1].getBoundingClientRect();
   const width = last.right - first.left;
@@ -493,51 +494,70 @@ function alignBannerWidths() {
   if (sideCol) {
     const sideColWidth = sideCol.getBoundingClientRect().width;
     const columnGap = parseFloat(getComputedStyle(gameLeftCol).columnGap) || 0;
-    gameLeftCol.style.maxWidth = (sideColWidth + columnGap + width) + 'px';
+    // Pinned both ways: Safari can squeeze the flex column narrower than
+    // the boards, which pushed the mission log on top of the last board.
+    const colWidth = (sideColWidth + columnGap + width) + 'px';
+    gameLeftCol.style.maxWidth = colWidth;
+    gameLeftCol.style.minWidth = colWidth;
   }
 }
 
-// Mission log height:
-//   collapsed — a tab as tall as the Immune System banner, top-aligned
-//     (on the end screen, where that banner is hidden: its natural height);
-//   open beside the board (overhang) — the board column's full height;
-//   open inline — capped at that height (the feed scrolls inside).
+// Mission log height (width is fixed in CSS):
+//   collapsed — just its header (natural height), top-aligned;
+//   open — the board column's full height (the feed scrolls inside).
 // On the end screen "full height" is the board's cell grid, since the log
 // starts level with its top row (alignNarrationToBoard()).
 function alignNarrationHeight() {
   const leftCol = document.querySelector('.game-left-col');
   const narrationCol = document.getElementById('narration-col');
   if (!leftCol || !narrationCol) return;
-  const immuneBanner = document.getElementById('immune-banner');
+  if (narrationCol.classList.contains('collapsed')) {
+    narrationCol.style.height = '';
+    return;
+  }
   const grid = document.querySelector('.tissue-grid');
   const gameOver = document.getElementById('game-screen').classList.contains('game-over');
+  // Squash the log first so its old height can't stretch the row (and so
+  // the board column) before it's measured.
+  narrationCol.style.height = '0px';
   const fullHeight = (gameOver && grid ? grid : leftCol).getBoundingClientRect().height;
-  if (narrationCol.classList.contains('collapsed')) {
-    const bannerHeight = immuneBanner ? immuneBanner.getBoundingClientRect().height : 0;
-    narrationCol.style.height = bannerHeight ? bannerHeight + 'px' : '';
-    narrationCol.style.maxHeight = '';
-  } else if (narrationCol.classList.contains('overhang')) {
-    narrationCol.style.height = fullHeight + 'px';
-    narrationCol.style.maxHeight = '';
-  } else {
-    narrationCol.style.height = '';
-    narrationCol.style.maxHeight = fullHeight + 'px';
-  }
+  narrationCol.style.height = fullHeight + 'px';
 }
 
-// End screen only: moves the mission log down so its top lines up with
-// the board's top row of cells (the board itself is pushed below the
-// end-screen panel). Measured on screen, converted to stage pixels.
-// Run after every fit/end-screen alignment; clears itself during play.
+// End screen only (both steps clear themselves during play). Measured on
+// screen, converted to stage pixels. Run after every fit/end-screen
+// alignment.
+//   1. Moves the mission log down so its top lines up with the board's top
+//      row of cells (the board itself is pushed below the end-screen panel).
+//   2. Shifts the row sideways so the boards themselves (not boards + log
+//      tab) are centred under the panel — but never pushes an open log off
+//      the right edge.
 function alignNarrationToBoard() {
   const narrationCol = document.getElementById('narration-col');
-  if (!narrationCol) return;
+  const mainRow = document.querySelector('.game-main-row');
+  const viewport = document.getElementById('game-stage-viewport');
+  const boards = document.querySelectorAll('.tissue-board');
   const cell = document.querySelector('.tissue-cell');
+  if (!narrationCol || !mainRow || !viewport) return;
   const gameOver = document.getElementById('game-screen').classList.contains('game-over');
-  if (!gameOver || !cell) { narrationCol.style.marginTop = ''; return; }
-  const current = parseFloat(narrationCol.style.marginTop) || 0;
+  if (!gameOver || !cell || !boards.length) {
+    narrationCol.style.marginTop = '';
+    mainRow.style.left = '';
+    return;
+  }
+
+  // 1. Level with the top row.
+  const currentTop = parseFloat(narrationCol.style.marginTop) || 0;
   const diff = (cell.getBoundingClientRect().top - narrationCol.getBoundingClientRect().top) / gameStageScale;
-  narrationCol.style.marginTop = Math.max(0, current + diff) + 'px';
+  narrationCol.style.marginTop = Math.max(0, currentTop + diff) + 'px';
+
+  // 2. Boards centred (8px margin kept on the right).
+  const vp = viewport.getBoundingClientRect();
+  const boardsCentre = (boards[0].getBoundingClientRect().left + boards[boards.length - 1].getBoundingClientRect().right) / 2;
+  let shift = (vp.left + vp.right) / 2 - boardsCentre;
+  const overflow = narrationCol.getBoundingClientRect().right + shift - (vp.right - 8);
+  if (overflow > 0) shift -= overflow;
+  mainRow.style.left = ((parseFloat(mainRow.style.left) || 0) + shift / gameStageScale) + 'px';
 }
 
 // Current scale of #game-stage. Code that positions things INSIDE the
@@ -550,20 +570,10 @@ const GAME_STAGE_MAX_SCALE = 1.25;
 // Scales #game-stage to fit the space below the header.
 //   1. Reset to natural size and run the align*() helpers.
 //   2. Scale = smallest of width ratio, height ratio and the max.
-// An open mission log first tries "overhang" mode: the stage keeps the
-// collapsed log's footprint (board doesn't move or shrink) and the log
-// opens over the free space to its right. If that would run off screen,
-// it falls back to an inline log and the whole stage is re-fitted.
-function fitGameStage(allowLogOverhang = true) {
+function fitGameStage() {
   const viewport = document.getElementById('game-stage-viewport');
   const stage = document.getElementById('game-stage');
   if (!viewport || !stage || !document.querySelector('.tissue-grid')) return;
-
-  const narrationCol = document.getElementById('narration-col');
-  const mainRow = document.querySelector('.game-main-row');
-  const overhang = allowLogOverhang && !!narrationCol && !narrationCol.classList.contains('collapsed');
-  narrationCol?.classList.toggle('overhang', overhang);
-  mainRow?.classList.toggle('log-overhang', overhang);
 
   // Start from natural size so a previous scale doesn't affect this pass.
   stage.style.transform = '';
@@ -591,12 +601,6 @@ function fitGameStage(allowLogOverhang = true) {
   // The mutation toast is positioned against the scale — redo it if open.
   const toast = document.getElementById('mutation-toast');
   if (toast && toast.classList.contains('open')) alignMutationToast();
-
-  // No room for the log beside the board — lay it out inline instead.
-  if (overhang && narrationCol.getBoundingClientRect().right > viewport.getBoundingClientRect().right) {
-    fitGameStage(false);
-    return;
-  }
 
   alignNarrationToBoard();
 }
@@ -987,7 +991,7 @@ function appendNarrationLine(html, cls = '', opts = {}) {
 }
 
 // Opens/closes the mission log (closed by default), then re-fits the
-// stage since the log's width is part of it.
+// stage (its height changes; on the end screen its width too).
 function toggleNarration() {
   const col = document.getElementById('narration-col');
   const btn = document.getElementById('narration-toggle');
@@ -1999,6 +2003,9 @@ function renderEndScreen() {
   document.getElementById('immune-banner').style.display = '';
   document.getElementById('hand-panel').style.display = '';
   hideDraftPopup();
+  // Normal header on tablets too (startMission() switches the compact
+  // corner back on for the next game).
+  setCompactGameHeader(false);
 
   const won = activeGame.state === 'won';
   const titleText = document.getElementById('end-title-text');

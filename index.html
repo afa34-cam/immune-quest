@@ -4,15 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <!-- iPad home-screen web app: no Safari chrome. The status bar is
-       transparent and sits over a solid navy strip (.header-outer::before /
-       the game window's top padding), so it matches the page; content
-       starts below it. -->
+       transparent and sits over the header's solid navy top padding (and
+       the game window's), so it matches the page; content starts below. -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Immune Quest">
   <meta name="theme-color" content="#070c18">
   <title>Immune Quest</title>
+  <!-- Home Screen web app? (sets the extra top spacing below the status bar) -->
+  <script>
+    if (navigator.standalone === true || matchMedia('(display-mode: standalone)').matches)
+      document.documentElement.classList.add('web-app');
+  </script>
   <!-- App icon: browser tab, iPad Home Screen, and the web-app manifest -->
   <link rel="icon" type="image/png" href="assets/icons/app-icon.png">
   <link rel="apple-touch-icon" href="assets/icons/app-icon.png">
@@ -99,13 +103,16 @@
     :root.hub-viewport-blocked .header-outer, :root.hub-viewport-blocked .main{ display:none; }
 
     /* Header */
-    /* Background runs up behind the iPad status bar; padding keeps the
-       logo/buttons below it (insets are 0 on laptops). */
-    .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:rgba(7,12,24,0.88); backdrop-filter:blur(0.625rem);
-      padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
-    /* Solid navy behind the status bar (0 high on laptops) — the header's
-       own see-through, blurred background looked fuzzy there. */
-    .header-outer::before { content:''; position:absolute; top:0; left:0; right:0; height:env(safe-area-inset-top); background:var(--bg); }
+    /* Space kept clear at the top for the iPad status bar (insets are 0 on
+       laptops). In the web app iPadOS also blurs a band just below the
+       status bar, so add a little extra there (.web-app is set in <head>).
+       Used by the header, the game window and the unlock toast. */
+    :root { --status-bar-extra: 0px; }
+    :root.web-app { --status-bar-extra: 0.75rem; }
+    /* Solid navy, running up behind the status bar (a see-through, blurred
+       background looked fuzzy there and smeared the particles). */
+    .header-outer { position:relative; z-index:10; border-bottom:1px solid var(--border); background:var(--bg);
+      padding:calc(env(safe-area-inset-top) + var(--status-bar-extra)) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
     header {
       display:flex; align-items:center; justify-content:space-between;
       padding:1rem 1.25rem;
@@ -156,7 +163,10 @@
     .power-segs { position:absolute; inset:0; display:flex; }
     .seg { flex:1; border-right:1px solid rgba(0,0,0,0.22); }
     .seg:last-child { border-right:none; }
-    .status-text { font-size:0.75rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; animation:blink 1.6s step-end infinite; }
+    /* Blinking status line; its icon (.status-icon) is drawn bigger. */
+    .status-text { font-size:0.75rem; font-weight:700; letter-spacing:1px; text-transform:uppercase; animation:blink 1.6s step-end infinite;
+                   display:flex; align-items:center; gap:0.4375rem; }
+    .status-icon { font-size:1.5rem; line-height:1; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
     /* Game cards */
@@ -442,11 +452,15 @@
     .install-share-icon { width:1.125rem; height:1.125rem; vertical-align:-0.2rem; color:var(--accent); }
     .install-note { font-size:0.75rem; color:var(--muted); line-height:1.5; }
     .install-actions { display:flex; justify-content:space-between; align-items:center; gap:0.5rem; margin-top:0.25rem; }
-    .install-never-btn {
-      background:none; border:none; padding:0.25rem 0; cursor:pointer;
-      font-family:'Nunito',sans-serif; font-size:0.75rem; color:var(--muted); text-decoration:underline;
+    .install-never {
+      display:inline-flex; align-items:center; gap:0.5rem; cursor:pointer;
+      font-size:0.75rem; color:var(--muted);
     }
-    .install-never-btn:hover { color:var(--text); }
+    .install-never input { width:1rem; height:1rem; margin:0; accent-color:var(--accent); cursor:pointer; }
+    .install-never:hover { color:var(--text); }
+
+    /* Feedback tab's "Send →" button */
+    .feedback-submit {
       padding:0.5625rem 1.125rem; background:rgba(0,229,255,0.1); border:1px solid var(--accent);
       border-radius:0.5rem; color:var(--accent); font-family:'Orbitron',monospace;
       font-size:0.6875rem; letter-spacing:2px; cursor:pointer; align-self:flex-end;
@@ -456,7 +470,7 @@
 
     /* ══ Unlock toast ══ */
     .unlock-toast {
-      position:fixed; top:calc(env(safe-area-inset-top) + 1.5rem); left:50%; transform:translateX(-50%) translateY(-1.25rem);
+      position:fixed; top:calc(env(safe-area-inset-top) + var(--status-bar-extra) + 1.5rem); left:50%; transform:translateX(-50%) translateY(-1.25rem);
       z-index:5000;
       background:var(--panel); border:1px solid var(--accent3); border-radius:0.625rem;
       padding:0.75rem 1.125rem; display:flex; align-items:center; gap:0.625rem;
@@ -476,7 +490,7 @@
       background:var(--bg);
       /* No bottom padding: the game fills to the bottom edge and keeps its
          own content clear of the home indicator (sendSafeAreaToGame()). */
-      padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+      padding:calc(env(safe-area-inset-top) + var(--status-bar-extra)) env(safe-area-inset-right) 0 env(safe-area-inset-left);
       display:flex; align-items:stretch; justify-content:stretch;
     }
     .game-modal-inner {
@@ -605,7 +619,7 @@
       .game-card { padding:0.625rem 0.75rem; }
     }
   </style>
-  <link rel="stylesheet" href="./games/shared/ui.css?cachebust=222">
+  <link rel="stylesheet" href="./games/shared/ui.css?cachebust=223">
   <style>
     /* Landing-page header, in rem so it scales with the rest of this page
        (overrides games/shared/ui.css, which stays px for the games). */
@@ -798,7 +812,7 @@
           </div>
         </div>
       </div>
-      <div class="status-text" id="status-text" style="color:var(--accent2)">⚠ Critical condition</div>
+      <div class="status-text" id="status-text" style="color:var(--accent2)"><span class="status-icon">☣</span> Critical condition</div>
     </div>
 
     <div class="chart-card">
@@ -918,7 +932,7 @@
           <div class="about-text">
             <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
 
-            <span style="color:var(--muted)">Version 1.0<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span><br><br>
+            <span style="color:var(--muted)">Version 0.22<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span><br><br>
 
             <b>The Infection Game (legacy)</b><br>
             Original game developed by Dr AJ te Velthuis (Princeton University) and Dr Arwen Altenburg (University of Cambridge) with SKYLE games. Artwork by Ramon Calvante. A massive thank you to Dr Ingrida Olendraite for her assistance and to the University of Cambridge School of Biological Sciences and the British Society for Immunology for their financial support.<br><br>
@@ -1031,14 +1045,15 @@
       <div class="modal-section">
         <div class="about-text">Add Immune Quest to your Home Screen to play it like an app: full-screen, without the browser bars, and one tap away.</div>
         <ol class="install-steps">
-          <li><span>Tap the <b>Share</b> button <svg class="install-share-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> — at the top of Safari, or inside its <b>•••</b> menu.</span></li>
-          <li><span>Scroll down and tap <b>Add to Home Screen</b>.</span></li>
+          <li><span>Open this page in <b>Safari</b>. These steps may differ slightly when using another browser (Chrome, Edge, Firefox).</span></li>
+          <li><span>Tap the <b>Share</b> button <svg class="install-share-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12M7.5 7.5 12 3l4.5 4.5M6 11H5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg> next to the address bar.</span></li>
+          <li><span>Tap <b>View More</b>, then <b>Add to Home Screen</b>.</span></li>
           <li><span>If you see <b>Open as Web App</b>, keep it switched on. Then tap <b>Add</b>.</span></li>
           <li><span>Open Immune Quest from the new icon on your Home Screen.</span></li>
         </ol>
-        <div class="install-note">Progress saved here in the browser doesn't carry over to the Home Screen app — it starts fresh there.</div>
+        <div class="install-note">Progress saved here in the browser doesn't carry over to the Home Screen app. It starts fresh there.</div>
         <div class="install-actions">
-          <button class="install-never-btn" onclick="neverShowInstallGuide()">Don't show again</button>
+          <label class="install-never"><input type="checkbox" id="install-never-check"> Don't show again</label>
           <button class="onboarding-next-btn" onclick="closeInstallGuide()">OK</button>
         </div>
       </div>
@@ -1251,6 +1266,9 @@ function layoutPatient() {
   const inner = document.getElementById('patient-inner');
   const wrap = inner?.parentElement;
   if (!inner || !wrap) return;
+  // Hidden (e.g. behind the rotate-your-device message): nothing to measure
+  // — keep the last size instead of shrinking the figure to 0.
+  if (!wrap.clientWidth) return;
   const img = document.getElementById('patient-img');
   const aspect = img?.naturalWidth ? img.naturalWidth / img.naturalHeight : PATIENT_ASPECT;
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
@@ -1348,7 +1366,7 @@ document.fonts?.ready.then(relayoutPatient);
 const tooltipEl = document.getElementById('tooltip');
 const zoneInfo = {
   virus:    { title:'Virus',   desc:'Can you stop a rapidly spreading virus with the power of the immune system?', action:'Play →', color:'var(--virus)',    available:true  },
-  stealth:  { title:'Stealth mission', desc:'Play as the virus against the immune system. Unlocked early — game in development.', action:'Coming soon', color:'var(--stealth)', available:false },
+  stealth:  { title:'Stealth mission', desc:'Play as the virus against the immune system. Unlocked early. Game in development.', action:'Coming soon', color:'var(--stealth)', available:false },
   bacteria: { title:'Bacteria', desc:'Bacteria are spreading. Treatment in development.',           action:'Coming soon',   color:'var(--bacteria)', available:false },
   parasite: { title:'Parasite',desc:'Parasites are present. Treatment in development.',                 action:'Coming soon',   color:'var(--parasite)', available:false },
   cancer:   { title:'Cancer',          desc:'Abnormal cells are dividing uncontrolled. Treatment in development.',      action:'Coming soon',   color:'var(--cancer)',   available:false },
@@ -1543,7 +1561,11 @@ function checkHubViewportGate() {
   const w = window.innerWidth, h = window.innerHeight;
   const portrait = h > w;
   const tooSmall = w < MIN_HUB_WIDTH || h < MIN_HUB_HEIGHT;
+  const wasBlocked = document.documentElement.classList.contains('hub-viewport-blocked');
   document.documentElement.classList.toggle('hub-viewport-blocked', portrait || tooSmall);
+  // Page just came back (e.g. rotated to landscape): re-fit the patient now
+  // that it's visible again.
+  if (wasBlocked && !(portrait || tooSmall)) relayoutPatient();
 
   const textEl = document.getElementById('hub-orientation-lock-text');
   textEl.innerHTML = portrait
@@ -1796,7 +1818,7 @@ const ONBOARDING_STEPS = [
   },
   {
     title: 'The patient chart',
-    text: "On the right, the chart tracks the patient's health, temperature, and which conditions have been treated. Watch out for relapses — they'll need treating again!",
+    text: "On the right, the chart tracks the patient's health, temperature, and which conditions have been treated. Watch out for relapses. They'll need treating again!",
   },
 ];
 let onboardingStep = 0;
@@ -1841,8 +1863,8 @@ function closeOnboarding() {
 // ════════════════════════════════════════════════
 //  INSTALL GUIDE — on an iPad, if the platform isn't running as a Home
 //  Screen web app, offer step-by-step help to add it (iPadOS doesn't let a
-//  page install itself). "OK"/✕ hides it until the next visit; "Don't show
-//  again" hides it for good. It stays available in Settings either way.
+//  page install itself). Closing it hides it until the next visit; with
+//  "Don't show again" ticked, for good. It stays available in Settings.
 // ════════════════════════════════════════════════
 const INSTALL_GUIDE_NEVER_KEY = 'iq_install_guide_never';
 const INSTALL_GUIDE_SEEN_KEY  = 'iq_install_guide_seen'; // this visit (sessionStorage)
@@ -1858,17 +1880,23 @@ function isIPad() {
 // isRunningAsWebApp() (opened from the Home Screen?) is in games/shared/ui.js.
 function shouldOfferInstall() { return isIPad() && !isRunningAsWebApp(); }
 
+// The "Don't show again" tickbox shows the saved choice when the guide
+// opens, and whatever it's set to is saved when the guide closes (OK, ✕
+// or a tap outside) — so it can also be unticked again from Settings.
 function openInstallGuide() {
+  let optedOut = false;
+  try { optedOut = localStorage.getItem(INSTALL_GUIDE_NEVER_KEY) === '1'; } catch (e) {}
+  document.getElementById('install-never-check').checked = optedOut;
   document.getElementById('install-modal').classList.add('open');
 }
 
 function closeInstallGuide() {
+  const never = document.getElementById('install-never-check').checked;
+  try {
+    if (never) localStorage.setItem(INSTALL_GUIDE_NEVER_KEY, '1');
+    else localStorage.removeItem(INSTALL_GUIDE_NEVER_KEY);
+  } catch (e) {}
   document.getElementById('install-modal').classList.remove('open');
-}
-
-function neverShowInstallGuide() {
-  try { localStorage.setItem(INSTALL_GUIDE_NEVER_KEY, '1'); } catch (e) {}
-  closeInstallGuide();
 }
 
 // On load: show the Settings entry where relevant, and offer the guide
@@ -1993,15 +2021,18 @@ function loadProgress() {
   // ── Status text ──
   // si maps directly from severity: 0=Healthy, 1..UNWELL_STAGES=Unwell (mild→severe), MAX=Critical
   const statuses = [
-    { text:'✓ Full health!',           col:'var(--accent)',   cs:'Healthy',          cc:'ok'      },
-    { text:'⚡ Unwell',                  col:'var(--bacteria)', cs:'Unwell',     cc:'warning' },
-    { text:'‼ Severe',                  col:'var(--bacteria)', cs:'Severe', cc:'warning' },
-    { text:'⚠ Dangerous',                  col:'var(--bacteria)', cs:'Dangerous',   cc:'warning' },
-    { text:'☣ Critical condition',      col:'var(--accent2)',  cs:'Critical',          cc:'danger'  },
+    // text: "<icon> <words>" (the icon is split off below and drawn bigger)
+    { text:'✓ Full health!',        col:'var(--accent)',   cs:'Healthy',   cc:'ok'      },
+    { text:'⚡ Unwell',              col:'var(--bacteria)', cs:'Unwell',    cc:'warning' },
+    { text:'‼ Severe',              col:'var(--bacteria)', cs:'Severe',    cc:'warning' },
+    { text:'⚠ Dangerous',           col:'var(--bacteria)', cs:'Dangerous', cc:'warning' },
+    { text:'☣ Critical condition',  col:'var(--accent2)',  cs:'Critical',  cc:'danger'  },
   ];
   const s = statuses[severity];
   const stEl = document.getElementById('status-text');
-  stEl.textContent = s.text; stEl.style.color = s.col;
+  const [statusIcon, ...statusWords] = s.text.split(' ');
+  stEl.innerHTML = `<span class="status-icon">${statusIcon}</span> ${statusWords.join(' ')}`;
+  stEl.style.color = s.col;
   const csEl = document.getElementById('c-status');
   csEl.textContent = s.cs; csEl.className = 'chart-val ' + s.cc;
 
@@ -2022,7 +2053,7 @@ function loadProgress() {
 
   // ── Virus card status ──
   if (clearedVirus) {
-    document.getElementById('vstatus').textContent = '✓ Completed — play again';
+    document.getElementById('vstatus').textContent = '✓ Completed: play again';
     document.getElementById('vstatus').className   = 'card-status complete';
   }
 
@@ -2034,7 +2065,7 @@ function loadProgress() {
     stealthCard.setAttribute('onmouseenter','highlightBlob("stealth")');
     stealthCard.setAttribute('onmouseleave','unhighlightBlob("stealth")');
     const clearedStealth = localStorage.getItem('iq_cleared_stealth') === '1';
-    document.getElementById('stealth-status').textContent = clearedStealth ? '✓ Completed — play again' : '▶ Play';
+    document.getElementById('stealth-status').textContent = clearedStealth ? '✓ Completed: play again' : '▶ Play';
     document.getElementById('stealth-status').className   = clearedStealth ? 'card-status complete' : 'card-status available';
 
     // Reveal the stealth pulse blob on the patient (other lung) now that it's unlocked
@@ -2053,7 +2084,7 @@ function loadProgress() {
     const card = document.getElementById('card-'+relapse);
     if (card) {
       const cs = card.querySelector('.card-status');
-      if (cs) { cs.textContent = '⚠ Relapse — treat now'; cs.className = 'card-status relapse'; }
+      if (cs) { cs.textContent = '⚠ Relapse: treat now'; cs.className = 'card-status relapse'; }
     }
   } else {
     // No active relapse — make sure the banner and any card markup from a previous
@@ -2064,7 +2095,7 @@ function loadProgress() {
       if (card) {
         const cs = card.querySelector('.card-status');
         if (cs && cs.classList.contains('relapse')) {
-          cs.textContent = '✓ Completed — play again';
+          cs.textContent = '✓ Completed: play again';
           cs.className = 'card-status complete';
         }
       }
@@ -2187,7 +2218,7 @@ const HUB_CONFIG = {
 };
 </script>
 
-<script src="./games/shared/ui.js?cachebust=222"></script>
+<script src="./games/shared/ui.js?cachebust=223"></script>
 
 <script>
 // Initialize shared UI for main hub

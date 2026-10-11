@@ -17,8 +17,12 @@ Devices: **iPad web app** = opened from the Home Screen icon ·
 - [ ] iPad web app: no Fullscreen buttons anywhere (header, game window bar,
       Stealth header and menu). Laptop: they're still there and work.
 - [ ] iPad Safari: the "Play full-screen / Add to Home Screen" guide appears
-      after ~1.5 s; "Don't show again" stops it for good; Settings →
-      "Add to Home Screen" still opens it. Laptop: never appears.
+      after ~1.5 s. Tick "Don't show again" and close it (OK, ✕ or tap
+      outside): it stops for good. Settings → "Add to Home Screen" still
+      opens it, with the box ticked; untick + close turns it back on.
+      Laptop: never appears.
+- [ ] Menu → About (platform page and Stealth) shows "Version 0.22".
+- [ ] Menu → Feedback: the "Send →" button has its cyan outline style.
 - [ ] New app icon in the browser tab and on the iPad Home Screen (delete
       and re-add the Home Screen icon to pick it up).
 - [ ] Relapses happen only occasionally (at most once a day), can hit
@@ -38,8 +42,6 @@ Devices: **iPad web app** = opened from the Home Screen icon ·
       top row of cells; it opens/closes and keeps the open/closed state
       you had during the game.
 - [ ] Tap/click sounds play straight away (no delay), incl. on iPad.
-- [ ] Mission log opening: on a wide screen it opens to the right without
-      moving the board; on iPad it opens inline.
 - [ ] Cytokine placement looks sensible (blocks the open edges beside and
       below the infection, biggest shape first).
 - [ ] Organ icons show above LIVER / LUNG / INTESTINE with no overlap.
@@ -77,3 +79,33 @@ Devices: **iPad web app** = opened from the Home Screen icon ·
 - [ ] iPad: the four icons in that grid (☰ ? ↺ ⛶, now drawn as line icons)
       all look the same size; in Safari fullscreen, ⛶ switches to an
       "exit" icon.
+
+### Round: rotation, top fuzz, end screen
+
+- [ ] iPad: on the patient screen, turn the iPad to portrait and back to
+      landscape: the patient image comes back.
+- [ ] iPad web app: the top of the page is no longer fuzzy; the header sits
+      a little lower, clear of the status bar's blur. Pop-ups and the
+      unlock message also start below it.
+- [ ] Stealth: the closed mission log is just its header bar
+      ("« Mission Log"), as wide as the open log; opened, the lines show
+      underneath and it runs the full height of the game screen.
+      Opening/closing it never moves or resizes the board (laptop + iPad).
+      Is the board still big enough on iPad now the log always takes its
+      full width?
+- [ ] Win/lose screen: the mission log is a narrow vertical tab again,
+      "Mission Log" on one line, reading top to bottom (with the pulsing green dot if there are unread lines), and
+      the board is centred under the You Win / Game Over panel. Opening the
+      log there keeps it on screen (the board shifts left only as much as
+      needed).
+- [ ] Platform page: the icon before the blinking status (e.g. ☣ Critical
+      condition) is bigger and lines up with the text, for every status.
+- [ ] Laptop: the ↺ Restart icon in the Stealth header is bigger; the
+      button is still the same height as the others.
+- [ ] Win/lose screen on iPad: the normal Stealth header comes back (not the
+      corner grid); "Play Again" switches back to the corner grid.
+- [ ] Win/lose screen: the ← and ↺ icons are centred in their buttons; the
+      buttons are solid (board doesn't show through); all header and end
+      screen buttons light up cyan on hover (the ? used to be green).
+- [ ] Win/lose screen on iPad Safari: the mission log sits beside the
+      intestine board, not on top of it.

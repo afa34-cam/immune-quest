@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="../../assets/icons/app-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/ui.css?cachebust=222">
+<link rel="stylesheet" href="../shared/ui.css?cachebust=223">
 <style>
   /* ═══════════════════════════════════════════════════════════════
      STEALTH MISSION — page styles
@@ -57,6 +57,12 @@
      part of each header button — see games/shared/ui.js). */
   .hdr-icon{ font-size:0.9375rem; }
   .help-btn{ font-size:0.9375rem; }
+  /* ↺ Restart: the glyph draws small, so it's sized up; the negative
+     margin keeps the button as tall as its neighbours. */
+  .header-outer #restart-trigger .hdr-icon{ font-size:1.375rem; line-height:1; margin:-0.0625rem 0; }
+  /* Cyan hover for every header and end-screen button (the shared ? is
+     green elsewhere). */
+  .help-btn:hover{ border-color:var(--accent); color:var(--accent); }
 
   /* ═══════════════════════════════════════════════════════════════
      SELECT SCREEN — intro copy + virus grid
@@ -280,10 +286,17 @@
     font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:2px; color:var(--muted);
     border:1px solid var(--border); border-radius:0.5rem; padding:0.5625rem 1rem; cursor:pointer;
     display:inline-flex; align-items:center; gap:0.5rem;
+    background:var(--panel); /* solid — the board mustn't show through */
     transition:border-color .2s,color .2s;
   }
   .back-btn:hover{ border-color:var(--accent); color:var(--accent); }
-  .back-btn-icon{ font-size:1.0625rem; line-height:1; }
+  /* Icons drawn as SVG masks (text glyphs sit off-centre vertically). */
+  .back-btn-icon{
+    flex:none; width:1rem; height:1rem; background:currentColor;
+    -webkit-mask:var(--icon) center/contain no-repeat; mask:var(--icon) center/contain no-repeat;
+  }
+  .back-btn-icon.icon-back{ --icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M19 12H5M11 6l-6 6 6 6'/></svg>"); }
+  .back-btn-icon.icon-restart{ --icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M4.5 12a7.5 7.5 0 1 0 2.2-5.3'/><path d='M4.5 4.5v4h4'/></svg>"); }
 
   /* ═══════════════════════════════════════════════════════════════
      HELP OVERLAY — first-visit tutorial, reopenable from the menu
@@ -373,14 +386,9 @@
   #game-stage{ flex-shrink:0; transform-origin:top center; }
   /* Extra gap before the mission log (width is to spare; height limits). */
   .game-main-row{ display:flex; justify-content:center; gap:1.75rem; position:relative; }
-  /* Log open with room to the right (see fitGameStage(), game-ui.js): a
-     spacer keeps the collapsed tab's slot so the board doesn't move, and
-     the log opens over the free space to its right. */
-  .game-main-row.log-overhang::after{ content:''; width:2.5rem; flex-shrink:0; }
-  .narration-col.overhang{ position:absolute; top:0; left:calc(100% - 2.5rem); }
   /* flex:1, not a content-sized basis: sizing this grid from its content
      collapsed the board column in every browser tested. The leftover space
-     is trimmed in JS (alignBannerWidths() sets max-width). */
+     is trimmed in JS (alignBannerWidths() pins its width). */
   .game-left-col{
     display:grid; flex:1; min-width:0; position:relative;
     /* Column 1 (phase panel, virus panel, hint) is a fixed 13rem — wide
@@ -582,11 +590,18 @@
   }
   .narration-toggle:hover, .narration-toggle:hover .narration-title{ color:var(--accent); }
   .narration-toggle-icon{ font-size:1.375rem; line-height:1; }
-  /* Collapsed (default): a narrow tab with a vertical label, as tall as
-     the Immune System banner (height set in alignNarrationHeight()). */
-  .narration-col.collapsed{ width:2.5rem; padding:0.5rem 0.25rem; align-self:flex-start; }
-  .narration-col.collapsed .narration-toggle{ flex-direction:column; flex:1; justify-content:flex-start; gap:0.625rem; }
-  .narration-col.collapsed .narration-title{ writing-mode:vertical-rl; letter-spacing:1px; }
+  /* Collapsed (default): just the log's header bar, as wide as the open
+     log, so opening it never moves the board. */
+  .narration-col.collapsed{ padding:0.5rem 0.875rem; align-self:flex-start; }
+  .narration-col.collapsed .narration-toggle{ flex:1; }
+  /* Win/lose screen: back to a narrow tab with a vertical label, so the
+     board stays centred. */
+  #game-screen.game-over .narration-col.collapsed{ width:2.5rem; padding:0.5rem 0.25rem; }
+  #game-screen.game-over .narration-col.collapsed .narration-toggle{ flex-direction:column; justify-content:flex-start; gap:0.625rem; }
+  #game-screen.game-over .narration-col.collapsed .narration-title{
+    writing-mode:vertical-rl; line-height:1.35; /* reads top to bottom */
+    font-size:0.5625rem; letter-spacing:1.5px;
+  }
   .narration-col.collapsed .narration-feed{ display:none; }
   /* New lines while collapsed — a small pulsing dot on the tab. */
   .narration-unread{
@@ -1484,8 +1499,8 @@
           <div class="end-score-badge" id="end-score-badge">★ New High Score!</div>
         </div>
         <div class="end-screen-buttons">
-          <div class="back-btn" onclick="backToPlatform(STEALTH_GAME_CONFIG.backLinkHref)"><span class="back-btn-icon">←</span> To Patient</div>
-          <div class="back-btn" onclick="exitMission()"><span class="back-btn-icon">↺</span> Play Again</div>
+          <div class="back-btn" onclick="backToPlatform(STEALTH_GAME_CONFIG.backLinkHref)"><span class="back-btn-icon icon-back"></span> To Patient</div>
+          <div class="back-btn" onclick="exitMission()"><span class="back-btn-icon icon-restart"></span> Play Again</div>
         </div>
       </div>
     </div>
@@ -1684,14 +1699,14 @@ const STEALTH_GAME_CONFIG = {
 };
 </script>
 
-<script src="../shared/ui.js?cachebust=222"></script>
+<script src="../shared/ui.js?cachebust=223"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=222"></script>
-<script src="board.js?cachebust=222"></script>
-<script src="cards.js?cachebust=222"></script>
-<script src="game.js?cachebust=222"></script>
-<script src="game-ui.js?cachebust=222"></script>
+<script src="config.js?cachebust=223"></script>
+<script src="board.js?cachebust=223"></script>
+<script src="cards.js?cachebust=223"></script>
+<script src="game.js?cachebust=223"></script>
+<script src="game-ui.js?cachebust=223"></script>
 
 <script>
 // Build the shared header and menu.
