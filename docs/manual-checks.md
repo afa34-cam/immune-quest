@@ -155,3 +155,14 @@ works (laptop and iPad web app):
 - [ ] Fullscreen button inside Stealth (laptop) and "← Immune Quest" / To
       Patient close the game window.
 - [ ] The Infection Game (Unity) still loads and records a win.
+- [ ] Tutorial: after a wrong tap (Spike shakes once), his panel doesn't
+      shake again on the following steps.
+- [ ] iPad: the corner buttons (☰ ? ↺ ⛶, ← Immune Quest) are filled with
+      the header's navy; the page's grid doesn't show through them.
+- [ ] Select screen: the tutorial banner is exactly as wide as the
+      Norovirus card and lines up with it; its "Play" button looks like the
+      game's other buttons (no ▶ emoji).
+- [ ] iPad: Trade 3▸1 and End Turn are bigger and easy to tap.
+- [ ] Tutorial banner: "New here? Play the tutorial" on one line; Play sits level with the description below it.
+- [ ] Select screen: after selecting a virus, the three virus cards shrink (small picture, no description, (i) beside the name opens the info); the details and Start Mission fit on screen (iPad too).
+- [ ] Select screen: tapping the selected virus again, or tapping anywhere outside the cards and details panel, deselects it and the cards return to full size.

@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="../../assets/icons/app-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/ui.css?cachebust=224">
+<link rel="stylesheet" href="../shared/ui.css?cachebust=225">
 <style>
   /* ═══════════════════════════════════════════════════════════════
      STEALTH MISSION — page styles
@@ -99,6 +99,25 @@
     border-color:var(--virus-color, var(--stealth));
     background:color-mix(in srgb, var(--virus-color, var(--stealth)) 8%, transparent);
   }
+  /* Compact cards once a virus is selected (.virus-picked on the select
+     screen): smaller picture, no description, and a small (i) beside the
+     name instead of "Learn more" — so the selected virus's details and
+     Start Mission fit on the same screen. */
+  .vcard-info-mini{
+    display:none; flex:none; align-items:center; justify-content:center;
+    width:1.375rem; height:1.375rem; border-radius:50%; padding:0; cursor:pointer;
+    background:none; border:1px solid currentColor; color:var(--virus-color, var(--stealth));
+    font-family:'Orbitron',monospace; font-size:0.6875rem; font-weight:700; line-height:1;
+    opacity:.8; transition:opacity .2s, background .2s;
+  }
+  .vcard-info-mini:hover{ opacity:1; background:color-mix(in srgb, var(--virus-color, var(--stealth)) 12%, transparent); }
+  #select-screen.virus-picked .vcard{ padding:0.75rem 1rem; }
+  #select-screen.virus-picked .vcard-head{ gap:0.625rem; }
+  #select-screen.virus-picked .vcard-icon-img{ width:3rem; height:3rem; }
+  #select-screen.virus-picked .vcard-icon{ font-size:2rem; }
+  #select-screen.virus-picked .vcard-sub,
+  #select-screen.virus-picked .vcard-info-btn{ display:none; }
+  #select-screen.virus-picked .vcard-info-mini{ display:inline-flex; }
   .vcard-info-icon{ display:inline-flex; align-items:center; font-size:1.5rem; }
   .vcard-info-icon img{ width:2.75rem; height:2.75rem; object-fit:contain; vertical-align:middle; }
   #virus-info-body p{ margin-bottom:0.75rem; line-height:1.7; }
@@ -429,6 +448,10 @@
   .game-corner .header-right > *{ order:1; }
   /* Square, finger-sized buttons. No gap or letter-spacing: the hidden
      "MENU" text still takes up that space and pushed ☰ off-centre. */
+  /* Filled with the header's colour (its see-through navy over this page,
+     made solid), so the page's grid pattern doesn't show through — here
+     the buttons sit on the page, not on the header. */
+  .game-corner .menu-btn, .game-corner .help-btn, .game-corner .back-link{ background:#080b18; }
   .game-corner .menu-btn, .game-corner .help-btn{
     width:2.75rem; height:2.75rem; min-width:0; padding:0; box-sizing:border-box;
     display:inline-flex; align-items:center; justify-content:center; gap:0; letter-spacing:0;
@@ -1100,6 +1123,8 @@
   }
   .panel-controls{ display:flex; flex-direction:column; align-items:stretch; gap:0.375rem; flex-shrink:0; }
   .panel-controls .btn{ padding:0.3125rem 0.875rem; }
+  /* iPad: Trade and End Turn a bit bigger, easier to tap. */
+  :root.compact-game-header .panel-controls .btn{ padding:0.5625rem 1.125rem; font-size:0.6875rem; min-width:7rem; }
   /* ── Hint banner ── (column 1, beside Cards In Hand). Keeps its grid
      slot while hidden; setPlayHint() (game-ui.js) shows it: pops in and
      glows green for a hint, pink for an error, plain for "waiting". */
@@ -1371,8 +1396,11 @@
   :root{ --tut:#b06bff; --tut-soft:rgba(176,107,255,.15); }
 
   /* Select screen: "New here? Play the tutorial". */
+  /* Width: set to a virus card's width by matchTutorialButtonWidth(). */
+  /* Grid: Spike on the left over both rows; the title across the top;
+     the description and Play side by side below it. */
   .tutorial-start{
-    display:flex; align-items:center; gap:0.875rem; width:min(32rem, 100%); margin:-0.75rem auto 1.5rem;
+    display:grid; grid-template-columns:auto 1fr auto; align-items:center; column-gap:0.75rem; row-gap:0.25rem; width:min(21.25rem, 100%); margin:-0.75rem auto 1.5rem;
     padding:0.625rem 1.125rem 0.625rem 0.75rem; box-sizing:border-box; cursor:pointer; text-align:left;
     background:var(--panel); border:1px solid var(--tut); border-radius:0.75rem; color:var(--text);
     font:inherit; box-shadow:0 0 1.25rem rgba(176,107,255,.15);
@@ -1380,11 +1408,24 @@
   }
   .tutorial-start:hover{ transform:translateY(-0.125rem); box-shadow:0 0.375rem 1.5rem rgba(176,107,255,.3); }
   /* Ninja Spike, bobbing like in the tutorial. */
-  .tutorial-start-face{ flex:none; width:3.25rem; height:3.25rem; animation:tut-bob 3s ease-in-out infinite; }
-  .tutorial-start-text{ flex:1; display:flex; flex-direction:column; gap:0.125rem; }
-  .tutorial-start-title{ font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1px; color:#e6c8ff; }
-  .tutorial-start-sub{ font-size:0.75rem; color:var(--muted); }
-  .tutorial-start-go{ color:var(--tut); font-size:1rem; }
+  .tutorial-start-face{ grid-row:1 / 3; width:3.25rem; height:3.25rem; animation:tut-bob 3s ease-in-out infinite; }
+  .tutorial-start-text{ display:contents; }
+  .tutorial-start-title{ grid-column:2 / 4; font-family:'Orbitron',monospace; font-size:0.6875rem; letter-spacing:0.5px; color:#e6c8ff; white-space:nowrap; }
+  .tutorial-start-sub{ grid-column:2; font-size:0.75rem; color:var(--muted); }
+  /* "Play", in the style of the game's other buttons (e.g. Start Mission). */
+  /* Level with the description, below the title. */
+  .tutorial-start-go{
+    grid-column:3; grid-row:2; display:inline-flex; align-items:center; gap:0.375rem;
+    font-family:'Orbitron',monospace; font-size:0.5625rem; letter-spacing:2px; text-transform:uppercase;
+    padding:0.5rem 0.75rem; border-radius:0.5rem; border:1px solid var(--tut);
+    background:var(--tut-soft); color:#e6c8ff; transition:background .2s;
+  }
+  .tutorial-start:hover .tutorial-start-go{ background:rgba(176,107,255,.3); }
+  .tutorial-start-go-icon{
+    width:0.5rem; height:0.5rem; background:currentColor;
+    -webkit-mask:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 1 L9 5 L2 9 Z'/></svg>") center/contain no-repeat;
+    mask:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 1 L9 5 L2 9 Z'/></svg>") center/contain no-repeat;
+  }
 
   /* Spike's panel: bottom-right, above the game and its pop-ups (not
      above the card info, help or menu). */
@@ -1508,7 +1549,7 @@
         <span class="tutorial-start-title">New here? Play the tutorial</span>
         <span class="tutorial-start-sub">Spike the virion shows you how to play Stealth Mission</span>
       </span>
-      <span class="tutorial-start-go">▶</span>
+      <span class="tutorial-start-go">Play <span class="tutorial-start-go-icon"></span></span>
     </button>
 
     <div class="virus-grid" id="virus-grid"></div>
@@ -1839,16 +1880,16 @@ const STEALTH_GAME_CONFIG = {
 };
 </script>
 
-<script src="../shared/ui.js?cachebust=224"></script>
+<script src="../shared/ui.js?cachebust=225"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=224"></script>
-<script src="board.js?cachebust=224"></script>
-<script src="cards.js?cachebust=224"></script>
-<script src="game.js?cachebust=224"></script>
-<script src="game-ui.js?cachebust=224"></script>
-<script src="tutorial-game.js?cachebust=224"></script>
-<script src="tutorial.js?cachebust=224"></script>
+<script src="config.js?cachebust=225"></script>
+<script src="board.js?cachebust=225"></script>
+<script src="cards.js?cachebust=225"></script>
+<script src="game.js?cachebust=225"></script>
+<script src="game-ui.js?cachebust=225"></script>
+<script src="tutorial-game.js?cachebust=225"></script>
+<script src="tutorial.js?cachebust=225"></script>
 
 <script>
 // Build the shared header and menu.
@@ -2217,7 +2258,18 @@ function renderViruses(){
   // Keep the detail panel in sync with the selection (hidden when nothing
   // is selected — Start Mission would do nothing then).
   document.getElementById('virus-detail').classList.toggle('visible', !!selectedVirus);
+  document.getElementById('select-screen').classList.toggle('virus-picked', !!selectedVirus);
+  matchTutorialButtonWidth();
 }
+
+// The tutorial button is exactly as wide as a virus card (their width
+// depends on the window), so it lines up with the middle card.
+function matchTutorialButtonWidth(){
+  const card = document.querySelector('#virus-grid .vcard');
+  const btn = document.querySelector('.tutorial-start');
+  if (card && btn && card.offsetWidth) btn.style.width = card.offsetWidth + 'px';
+}
+window.addEventListener('resize', matchTutorialButtonWidth);
 
 // Small tile for a custom virus: icon, name, delete.
 function createCompactVirusCard(virus){
@@ -2233,7 +2285,7 @@ function createCompactVirusCard(virus){
     <button class="vcard-compact-delete" onclick="deleteVirus('${virus.id}', event)">✕</button>
   `;
   card.insertBefore(document.createTextNode(virus.name), card.querySelector('.vcard-compact-delete'));
-  card.onclick = () => selectVirus(virus.id);
+  card.onclick = () => toggleVirus(virus.id);
   return card;
 }
 
@@ -2254,12 +2306,40 @@ function createVirusCard(virus){
     <button class="vcard-info-btn" onclick="openVirusInfo('${virus.id}', event)">ⓘ Learn more</button>
   ` : '';
 
+  // The small (i) replaces "Learn more" in the compact cards (see
+  // .virus-picked).
+  const miniInfoHtml = virus.info
+    ? `<button class="vcard-info-mini" onclick="openVirusInfo('${virus.id}', event)" title="Learn more" aria-label="Learn more about ${virus.name}">i</button>`
+    : '';
   card.innerHTML = `
-    <div class="vcard-head">${iconHtml}<div class="vcard-name">${virus.name}</div></div>
+    <div class="vcard-head">${iconHtml}<div class="vcard-name">${virus.name}</div>${miniInfoHtml}</div>
     ${infoHtml}`;
-  card.onclick = () => selectVirus(virus.id);
+  card.onclick = () => toggleVirus(virus.id);
   return card;
 }
+
+// Clicking a card selects it; clicking the selected card again deselects.
+function toggleVirus(id){
+  if(selectedVirus && selectedVirus.id === id) deselectVirus();
+  else selectVirus(id);
+}
+
+// Back to no selection: full-size cards, no details panel.
+function deselectVirus(){
+  if(!selectedVirus) return;
+  selectedVirus = null;
+  document.querySelectorAll('.vcard, .vcard-compact').forEach(c => c.classList.remove('selected'));
+  document.getElementById('virus-detail').classList.remove('visible');
+  document.getElementById('select-screen').classList.remove('virus-picked');
+}
+
+// A click anywhere outside the virus cards and the details panel (and not
+// in a pop-up, the header or the menu) deselects too.
+document.addEventListener('click', e => {
+  if(!selectedVirus || getComputedStyle(document.getElementById('select-screen')).display === 'none') return;
+  if(e.target.closest('.vcard, .vcard-compact, #virus-detail, .tutorial-start, .header-outer, .modal-overlay, .help-overlay, .card-info-overlay')) return;
+  deselectVirus();
+});
 
 function selectVirus(id){
   selectedVirus = findVirusById(id);
@@ -2267,6 +2347,7 @@ function selectVirus(id){
 
   document.querySelectorAll('.vcard, .vcard-compact').forEach(c => c.classList.remove('selected'));
   document.getElementById('card-' + id).classList.add('selected');
+  document.getElementById('select-screen').classList.add('virus-picked'); // compact cards
 
   // Preview shows the starting loadout only (tropism + abilities); the
   // rest of the deck is discovered during the mission.

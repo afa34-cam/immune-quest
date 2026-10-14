@@ -302,12 +302,21 @@ class TutorialGuide {
       </div>`;
     document.body.appendChild(el);
     this.el = el;
+    // One-off animations (the shake, the highlight flash) take their class
+    // off when done; left on, they would replay every time Spike's panel
+    // or a highlighted element is shown again.
+    this._onAnimationEnd = e => {
+      if (e.animationName === 'tut-shake') el.classList.remove('nudge');
+      if (e.animationName === 'tut-hl-flash') e.target.classList.remove('tut-hl-flash');
+    };
+    document.addEventListener('animationend', this._onAnimationEnd);
     this._mood = null;
     this._setMood('happy');
     el.classList.add('hidden');
   }
 
   destroy() {
+    document.removeEventListener('animationend', this._onAnimationEnd);
     this.el.remove();
     this._clearHighlights();
   }
@@ -348,7 +357,7 @@ class TutorialGuide {
     const nextBtn = document.getElementById('tut-next');
     nextBtn.parentElement.style.display = step.act ? 'none' : '';
     nextBtn.textContent = (step.next || 'Next') + ' →';
-    this.el.classList.remove('hidden', 'leaving');
+    this.el.classList.remove('hidden', 'leaving', 'nudge');
     // Replay the pop-in for each new step.
     this.el.classList.remove('pop'); void this.el.offsetWidth; this.el.classList.add('pop');
     this.refreshHighlights();
