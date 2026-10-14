@@ -172,13 +172,21 @@ function isRunningAsWebApp() {
   try { return check(window.top); } catch (e) { return check(window); }
 }
 
+// Embedded games only act on messages from the Immune Quest page around
+// them (same site; 'null' only when testing from local files), not from
+// another site that has put the game in a frame.
+function isFromPlatform(e) {
+  return e.source === window.parent
+    && (e.origin === location.origin || (location.protocol === 'file:' && e.origin === 'null'));
+}
+
 // Safe-area inset (home indicator) reported by the platform page while
 // embedded — env() is always 0 inside an iframe. Stored as --safe-bottom so
 // a game can keep its own content clear of it; layouts re-fit on change.
 if (window.self !== window.top) {
   window.addEventListener('message', (e) => {
-    if (!e.data || e.data.type !== 'iq_safe_area') return;
-    document.documentElement.style.setProperty('--safe-bottom', (e.data.bottom || 0) + 'px');
+    if (!isFromPlatform(e) || !e.data || e.data.type !== 'iq_safe_area') return;
+    document.documentElement.style.setProperty('--safe-bottom', (Number(e.data.bottom) || 0) + 'px');
     window.dispatchEvent(new Event('resize'));
   });
 }
@@ -213,7 +221,7 @@ function setFullscreenButtonLabel(isFullscreen) {
 
 if (window.self !== window.top) {
   window.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'iq_fullscreen_state') {
+    if (isFromPlatform(e) && e.data && e.data.type === 'iq_fullscreen_state') {
       setFullscreenButtonLabel(!!e.data.isFullscreen);
     }
   });
@@ -317,7 +325,7 @@ function setupSimpleMenu(config) {
             <div class="modal-section-title">About</div>
             <div class="about-text">
               <strong style="color:var(--text)">Immune Quest</strong> is a free educational game platform designed to empower young people with trustworthy knowledge about infections, the immune system, vaccines, and treatments.<br><br>
-              <span style="color:var(--muted)">Version 0.22<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span>
+              <span style="color:var(--muted)">Version 0.23<br>© 2026 · Developed by Arwen Altenburg with Claude (Sonnet 4.6, 5, Opus 5.5) & Google Gemini.</span>
             </div>
           </div>
         </div>
@@ -503,7 +511,7 @@ function gameSubmitFeedback() {
 
 if (window.self !== window.top) {
   window.addEventListener('message', (e) => {
-    if (e.data && e.data.type === 'iq_share_done') gameShareDone(e.data.kind);
+    if (isFromPlatform(e) && e.data && e.data.type === 'iq_share_done') gameShareDone(e.data.kind);
   });
 }
 

@@ -430,16 +430,13 @@ class StealthGame {
   // virus, 'loss' helps the immune system) so the UI can label it clearly.
   _runMutationPhase() {
     this.phase = 'mutation';
-    const mutationProb = STEALTH_CONFIG.MUTATION_PROB_BY_RATE[this.loadout.mutation]
-      ?? STEALTH_CONFIG.MUTATION_PROB_BY_RATE.low;
-
-    if (Math.random() > mutationProb) {
+    const event = this._rollMutation();
+    if (!event) {
       this.lastMutation = null;
       this._addLog('Mutation phase: no mutation this turn.');
       return;
     }
 
-    const event = this._weightedPick(this._effectiveMutationTable());
     let category = null, direction = null, text = '', tissue = null, color = null;
     // Actual change to the displayed speed (speed mutations only; null
     // otherwise). Can be 0 at the speed limits.
@@ -474,7 +471,7 @@ class StealthGame {
       case 'escape_gain': {
         // Adds an Antibody Escape card (random active tissue) to the hand.
         category = 'Antibody Escape'; direction = 'gain';
-        const t = this.activeTissues[Math.floor(Math.random() * this.activeTissues.length)];
+        const t = this._pickMutationTarget(this.activeTissues);
         const def = STEALTH_CARD_DEFS[`antibody-escape-${t}`];
         if (def) this.hand.push({ ...def });
         if (this.hand.length > STEALTH_CONFIG.CARDS.HAND_LIMIT) {
@@ -524,7 +521,7 @@ class StealthGame {
         // place (no spreading, not targeted) until a later tropism_gain
         // picks that tissue again; its shields keep counting down.
         category = 'Tropism'; direction = 'loss';
-        const t = this.activeTissues[Math.floor(Math.random() * this.activeTissues.length)];
+        const t = this._pickMutationTarget(this.activeTissues);
         this.activeTissues = this.activeTissues.filter(x => x !== t);
         tissue = t;
         text = `Mutation - lost Tropism (${_capitalize(t)})`;
@@ -535,7 +532,7 @@ class StealthGame {
         category = 'Latency'; direction = 'loss';
         const candidates = this.activeTissues.filter(t => this.boards[t].hasDormant());
         if (candidates.length) {
-          const t = candidates[Math.floor(Math.random() * candidates.length)];
+          const t = this._pickMutationTarget(candidates);
           this.boards[t].clearDormant();
           tissue = t;
           text = 'Mutation - lost Latency';
@@ -551,7 +548,7 @@ class StealthGame {
         // when an inactive tissue exists (_effectiveMutationTable()).
         category = 'Tropism'; direction = 'gain';
         const inactive = STEALTH_CONFIG.BOARD.ADJACENCY_ORDER.filter(t => !this.activeTissues.includes(t));
-        const t = inactive[Math.floor(Math.random() * inactive.length)];
+        const t = this._pickMutationTarget(inactive);
         this.boards[t].seedInfection();
         this.activeTissues.push(t);
         this.tissuesReached.add(t);
@@ -564,7 +561,7 @@ class StealthGame {
         // Adds a random-colour Cytokine Neutralisation card to the hand.
         category = 'Cytokine Neutralisation'; direction = 'gain';
         const colors = ['blue', 'orange', 'red'];
-        color = colors[Math.floor(Math.random() * colors.length)];
+        color = this._pickMutationTarget(colors);
         const def = STEALTH_CARD_DEFS[`cytokine-neutralise-${color}`];
         this.hand.push({ ...def });
         if (this.hand.length > STEALTH_CONFIG.CARDS.HAND_LIMIT) {
@@ -796,6 +793,21 @@ class StealthGame {
     // Already in every tissue — nothing left to gain.
     if (this.activeTissues.length >= STEALTH_CONFIG.BOARD.TISSUES.length) table.tropism_gain = 0;
     return table;
+  }
+
+  // Whether a mutation happens this turn (by mutation rate) and which one;
+  // null for none. Overridden by the tutorial (tutorial-game.js).
+  _rollMutation() {
+    const mutationProb = STEALTH_CONFIG.MUTATION_PROB_BY_RATE[this.loadout.mutation]
+      ?? STEALTH_CONFIG.MUTATION_PROB_BY_RATE.low;
+    if (Math.random() > mutationProb) return null;
+    return this._weightedPick(this._effectiveMutationTable());
+  }
+
+  // Which tissue/colour a mutation applies to: random from `options`.
+  // Overridden by the tutorial (tutorial-game.js).
+  _pickMutationTarget(options) {
+    return options[Math.floor(Math.random() * options.length)];
   }
 
   // Random key from a { key: weight } table.

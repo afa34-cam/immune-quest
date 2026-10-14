@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="../../assets/icons/app-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/ui.css?cachebust=223">
+<link rel="stylesheet" href="../shared/ui.css?cachebust=224">
 <style>
   /* ═══════════════════════════════════════════════════════════════
      STEALTH MISSION — page styles
@@ -418,7 +418,7 @@
   .game-corner{ display:none; }
   :root.compact-game-header body.in-game .header-outer{ display:none; }
   :root.compact-game-header .game-corner{
-    display:grid; grid-template-columns:repeat(var(--corner-cols, 4), 2.25rem);
+    display:grid; grid-template-columns:repeat(var(--corner-cols, 4), 2.75rem);
     gap:0.3125rem; align-items:center; justify-content:start;
   }
   .game-corner .logo-wrap, .game-corner .header-right{ display:contents; }
@@ -427,16 +427,18 @@
     order:0; grid-column:1 / -1; font-size:0.9375rem; white-space:nowrap; margin-bottom:0.125rem;
   }
   .game-corner .header-right > *{ order:1; }
+  /* Square, finger-sized buttons. No gap or letter-spacing: the hidden
+     "MENU" text still takes up that space and pushed ☰ off-centre. */
   .game-corner .menu-btn, .game-corner .help-btn{
-    width:2.25rem; height:2.25rem; min-width:0; padding:0; box-sizing:border-box;
-    display:inline-flex; align-items:center; justify-content:center;
+    width:2.75rem; height:2.75rem; min-width:0; padding:0; box-sizing:border-box;
+    display:inline-flex; align-items:center; justify-content:center; gap:0; letter-spacing:0;
   }
   /* Icons drawn as identical line icons (CSS masks in the button colour)
      instead of the text symbols ☰ ? ↺ ⛶, which come from different fonts
      and so look different sizes. The text is hidden with font-size 0. */
   .game-corner #menu-trigger, .game-corner .help-btn, .game-corner .menu-btn .hdr-icon{ font-size:0; }
   .game-corner .menu-btn .hdr-icon, .game-corner .help-btn::before{
-    content:''; display:block; width:1.125rem; height:1.125rem; background:currentColor;
+    content:''; display:block; width:1.25rem; height:1.25rem; background:currentColor;
     -webkit-mask:var(--icon) center / contain no-repeat; mask:var(--icon) center / contain no-repeat;
   }
   .game-corner #menu-trigger .hdr-icon{ --icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 6h16M4 12h16M4 18h16'/></svg>"); }
@@ -447,7 +449,7 @@
   .game-corner .back-link{
     order:2; grid-column:1 / -1;
     display:inline-flex; align-items:center; justify-content:center; gap:0.375rem;
-    height:2.25rem; box-sizing:border-box; white-space:nowrap;
+    height:2.75rem; box-sizing:border-box; white-space:nowrap;
     border:1px solid var(--border); border-radius:0.5rem;
     font-size:0.5625rem; letter-spacing:1px;
   }
@@ -573,7 +575,7 @@
     width:17.5rem; flex-shrink:0; box-sizing:border-box;
     display:flex; flex-direction:column; gap:0.375rem; overflow:hidden;
     border:1px solid var(--border); border-radius:0.5rem; background:var(--panel);
-    padding:0.875rem;
+    padding:0.5rem 0.875rem 0.875rem; /* top matches the folded bar, so the header doesn't jump */
   }
   /* Wider on wide screens (by window width) so lines wrap less. */
   @media (min-width:1400px){ .narration-col{ width:20rem; } }
@@ -589,27 +591,42 @@
     font:inherit; position:relative;
   }
   .narration-toggle:hover, .narration-toggle:hover .narration-title{ color:var(--accent); }
-  .narration-toggle-icon{ font-size:1.375rem; line-height:1; }
+  /* Chevron (SVG mask, fixed size): points at the label when folded,
+     turns to point down when unfolded. The Pick Cards pop-up's minimise
+     button uses the same arrow, pointing down. */
+  .narration-toggle-icon, .draft-minimise-icon{
+    flex:none; width:0.875rem; height:0.875rem; background:currentColor;
+    -webkit-mask:var(--icon) center/contain no-repeat; mask:var(--icon) center/contain no-repeat;
+    --icon:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M9 5l7 7-7 7'/></svg>");
+    transform:rotate(90deg); transition:transform .2s;
+  }
+  .narration-col.collapsed .narration-toggle-icon{ transform:none; }
+  .draft-minimise-icon{ transition:none; }
   /* Collapsed (default): just the log's header bar, as wide as the open
      log, so opening it never moves the board. */
-  .narration-col.collapsed{ padding:0.5rem 0.875rem; align-self:flex-start; }
+  .narration-col.collapsed{ padding-bottom:0.5rem; align-self:flex-start; }
   .narration-col.collapsed .narration-toggle{ flex:1; }
   /* Win/lose screen: back to a narrow tab with a vertical label, so the
      board stays centred. */
   #game-screen.game-over .narration-col.collapsed{ width:2.5rem; padding:0.5rem 0.25rem; }
+  #game-screen.game-over .narration-col.collapsed .narration-toggle-icon{ transform:rotate(90deg); } /* label is below */
   #game-screen.game-over .narration-col.collapsed .narration-toggle{ flex-direction:column; justify-content:flex-start; gap:0.625rem; }
   #game-screen.game-over .narration-col.collapsed .narration-title{
     writing-mode:vertical-rl; line-height:1.35; /* reads top to bottom */
     font-size:0.5625rem; letter-spacing:1.5px;
   }
   .narration-col.collapsed .narration-feed{ display:none; }
-  /* New lines while collapsed — a small pulsing dot on the tab. */
+  /* New lines while collapsed — a small pulsing dot on the tab. Placed
+     at the bar's right end, outside the flow, so the label doesn't shift
+     when it goes; in the end screen's vertical tab it sits below the label. */
   .narration-unread{
     display:none; width:0.5rem; height:0.5rem; border-radius:50%;
+    position:absolute; right:0; top:50%; margin-top:-0.25rem;
     background:var(--stealth); box-shadow:0 0 0.375rem var(--stealth);
     animation:scroll-arrow-pulse 1.2s ease-in-out infinite;
   }
   .narration-col.collapsed.has-unread .narration-unread{ display:block; }
+  #game-screen.game-over .narration-unread{ position:static; margin:0; }
   .narration-feed{
     flex:1; min-height:0; overflow-y:auto;
     display:flex; flex-direction:column; gap:0.3125rem;
@@ -1140,8 +1157,8 @@
     transition:transform .35s cubic-bezier(.34,1.56,.64,1);
   }
   .draft-popup-overlay.open .draft-popup{ transform:translateY(0) scale(1); }
-  /* Minimise: the same » icon and size as the mission log's hide icon. */
-  .draft-minimise{ font-size:1.375rem; line-height:1; }
+  /* Minimise: the same down-pointing arrow as the open mission log's. */
+  .draft-minimise{ display:inline-flex; align-items:center; padding:0.25rem; }
   /* Draft cards are shown large, so their ⓘ badge is larger too. */
   #draft-cards .card-info-btn{
     width:1.5rem; height:1.5rem; top:-0.375rem; right:-0.375rem; font-size:1.125rem;
@@ -1263,7 +1280,7 @@
   /* "You Win" / "Game Over" — colour per outcome. */
   .end-title-text{
     font-family:'Orbitron',monospace; font-size:2.125rem; font-weight:800;
-    letter-spacing:2px; text-transform:uppercase;
+    letter-spacing:2px; text-transform:uppercase; text-align:center;
   }
   .end-title-text.win{ color:var(--accent); text-shadow:0 0 1.25rem rgba(0,229,255,.6); }
   .end-title-text.lose{ color:var(--accent2); text-shadow:0 0 1.25rem rgba(224,34,122,.6); }
@@ -1346,7 +1363,120 @@
   /* pre-line: a blank line in the biology text becomes a paragraph break. */
   .card-info-desc{ font-size:0.8125rem; color:var(--text); line-height:1.7; white-space:pre-line; }
   .card-info-panel .modal-close{ position:absolute; top:0.875rem; right:1rem; font-size:1.25rem; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TUTORIAL — Spike the Virion's panel, highlights and the select-
+     screen button (tutorial.js)
+     ═══════════════════════════════════════════════════════════════ */
+  :root{ --tut:#b06bff; --tut-soft:rgba(176,107,255,.15); }
+
+  /* Select screen: "New here? Play the tutorial". */
+  .tutorial-start{
+    display:flex; align-items:center; gap:0.875rem; width:min(32rem, 100%); margin:-0.75rem auto 1.5rem;
+    padding:0.625rem 1.125rem 0.625rem 0.75rem; box-sizing:border-box; cursor:pointer; text-align:left;
+    background:var(--panel); border:1px solid var(--tut); border-radius:0.75rem; color:var(--text);
+    font:inherit; box-shadow:0 0 1.25rem rgba(176,107,255,.15);
+    transition:transform .15s, box-shadow .2s;
+  }
+  .tutorial-start:hover{ transform:translateY(-0.125rem); box-shadow:0 0.375rem 1.5rem rgba(176,107,255,.3); }
+  /* Ninja Spike, bobbing like in the tutorial. */
+  .tutorial-start-face{ flex:none; width:3.25rem; height:3.25rem; animation:tut-bob 3s ease-in-out infinite; }
+  .tutorial-start-text{ flex:1; display:flex; flex-direction:column; gap:0.125rem; }
+  .tutorial-start-title{ font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1px; color:#e6c8ff; }
+  .tutorial-start-sub{ font-size:0.75rem; color:var(--muted); }
+  .tutorial-start-go{ color:var(--tut); font-size:1rem; }
+
+  /* Spike's panel: bottom-right, above the game and its pop-ups (not
+     above the card info, help or menu). */
+  .tut-coach{
+    position:fixed; z-index:2900;
+    right:max(1rem, env(safe-area-inset-right)); bottom:calc(1rem + var(--safe-bottom, 0px));
+    width:min(19rem, 42vw); display:flex; flex-direction:column; align-items:flex-start;
+    pointer-events:none;
+  }
+  .tut-coach.hidden{ display:none; }
+  body:has(#menu-modal.open) .tut-coach{ visibility:hidden; }
+  .tut-avatar{
+    width:5rem; height:5rem; margin:0 0 -1.5rem 0.25rem; position:relative; z-index:1;
+    filter:drop-shadow(0 0.25rem 0.75rem rgba(176,107,255,.45));
+    animation:tut-bob 3s ease-in-out infinite;
+  }
+  .tut-avatar .spike-svg, .tutorial-start-face .spike-svg{ width:100%; height:100%; display:block; overflow:visible; }
+  .tut-avatar .spk-spikes{ transform-origin:60px 60px; animation:tut-spin 30s linear infinite; }
+  .tut-avatar .spk-eye{ transform-box:fill-box; transform-origin:center; animation:tut-blink 4.5s infinite; }
+  .tut-bubble{
+    pointer-events:auto; width:100%; box-sizing:border-box;
+    background:var(--panel); border:1px solid var(--tut); border-radius:0.75rem;
+    padding:0.5rem 0.875rem 0.75rem; box-shadow:0 0 1.5rem rgba(176,107,255,.25);
+    max-height:calc(100dvh - 8rem); overflow-y:auto;
+  }
+  .tut-head{ display:flex; align-items:center; gap:0.5rem; margin:0 0 0.5rem 5rem; min-height:1.25rem; }
+  .tut-name{ font-family:'Orbitron',monospace; font-size:0.75rem; letter-spacing:1px; color:#e6c8ff; }
+  .tut-exit{ margin-left:auto; background:none; border:none; color:var(--muted); cursor:pointer; font-size:0.875rem; padding:0 0.125rem; }
+  .tut-exit:hover{ color:var(--text); }
+  .tut-text{ font-size:0.8125rem; line-height:1.5; color:var(--text); }
+  .tut-text b{ color:#e6c8ff; }
+  .tut-bio{
+    margin-top:0.5rem; padding:0.4375rem 0.625rem; border-left:2px solid var(--accent); border-radius:0.25rem;
+    background:rgba(255,255,255,.04); font-size:0.75rem; line-height:1.5; color:var(--muted);
+  }
+  .tut-bio b{ color:var(--text); }
+  .tut-bio-label{ display:block; font-family:'Orbitron',monospace; font-size:0.5rem; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); margin-bottom:0.125rem; }
+  .tut-todo{ margin-top:0.5rem; font-size:0.75rem; font-weight:700; color:var(--stealth); }
+  .tut-actions{ display:flex; justify-content:flex-end; margin-top:0.5rem; }
+  .tut-next{
+    font-family:'Orbitron',monospace; font-size:0.625rem; letter-spacing:1.5px; text-transform:uppercase;
+    background:var(--tut-soft); color:#e6c8ff; border:1px solid var(--tut); border-radius:0.5rem;
+    padding:0.4375rem 0.875rem; cursor:pointer; transition:background .2s;
+  }
+  .tut-next:hover{ background:rgba(176,107,255,.3); }
+  /* Compact (while the Trade pop-up is open): small Spike beside one line. */
+  .tut-coach.compact{ flex-direction:row; align-items:center; }
+  .tut-coach.compact .tut-avatar{ width:3rem; height:3rem; margin:0 -0.75rem 0 0; }
+  .tut-coach.compact .tut-head, .tut-coach.compact .tut-text, .tut-coach.compact .tut-bio{ display:none; }
+  .tut-coach.compact .tut-bubble{ padding:0.5rem 0.75rem 0.5rem 1.125rem; }
+  .tut-coach.compact .tut-todo{ margin-top:0; }
+  /* "Leave the tutorial?" (Spike's ✕), shown in the bubble. */
+  .tut-leave{
+    display:none; align-items:center; gap:0.5rem; margin-top:0.625rem; padding-top:0.625rem;
+    border-top:1px solid var(--border); font-size:0.8125rem; color:var(--text);
+  }
+  .tut-leave span{ flex:1; }
+  .tut-coach.leaving .tut-leave{ display:flex; }
+  .tut-stay{ background:none; border-color:var(--border); color:var(--muted); }
+  .tut-coach.pop .tut-bubble{ animation:tut-pop .3s ease-out; }
+  .tut-coach.nudge .tut-bubble{ animation:tut-shake .4s ease-in-out; }
+
+  /* Highlighted target: a pulsing purple outline (follows the element's
+     own rounded corners). */
+  .tut-hl{ outline:2px solid var(--tut) !important; outline-offset:3px; animation:tut-hl-pulse 1.4s ease-in-out infinite !important; }
+  .tissue-cell.tut-hl{ outline-offset:1px; position:relative; z-index:2; }
+  .tut-hl.tut-hl-flash{ animation:tut-hl-flash .25s ease-in-out 4 !important; }
+  /* A cell to select: filled purple, white ring, glow, and it pulses
+     bigger, so it stands out on a busy board. */
+  .tissue-cell.tut-hl-target{
+    outline:3px solid #fff !important; outline-offset:2px; z-index:3;
+    background:rgba(176,107,255,.6) !important;
+    box-shadow:0 0 0 0.25rem var(--tut), 0 0 1.5rem 0.5rem rgba(176,107,255,.8) !important;
+    animation:tut-target-pulse 1s ease-in-out infinite !important;
+  }
+
+  @keyframes tut-bob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-0.3125rem); } }
+  @keyframes tut-spin{ to{ transform:rotate(360deg); } }
+  @keyframes tut-blink{ 0%,92%,100%{ transform:scaleY(1); } 95%{ transform:scaleY(0.1); } }
+  @keyframes tut-pop{ from{ transform:scale(.96); opacity:.4; } to{ transform:none; opacity:1; } }
+  @keyframes tut-shake{ 0%,100%{ transform:none; } 25%{ transform:translateX(-0.375rem); } 75%{ transform:translateX(0.375rem); } }
+  @keyframes tut-hl-pulse{
+    0%,100%{ outline-color:rgba(176,107,255,1); box-shadow:0 0 0.875rem rgba(176,107,255,.65); }
+    50%{ outline-color:rgba(176,107,255,.35); box-shadow:0 0 0 rgba(176,107,255,0); }
+  }
+  @keyframes tut-target-pulse{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.25); } }
+  @keyframes tut-hl-flash{ 50%{ outline-color:var(--accent2); box-shadow:0 0 1rem var(--accent2); } }
+  @media (prefers-reduced-motion: reduce){
+    .tut-avatar, .tut-avatar .spk-spikes, .tut-avatar .spk-eye, .tutorial-start-face{ animation:none; }
+  }
 </style>
+
 </head>
 <body>
 
@@ -1370,6 +1500,16 @@
       <h1>Choose your virus</h1>
       <p class="sub">Can you sneak past the immune system? Every virus survives differently and has different traits. <br>Pick a virus or design your own. </p>
     </div>
+
+    <!-- Practice mission with Spike (tutorial.js). -->
+    <button class="tutorial-start" onclick="startTutorial()">
+      <span class="tutorial-start-face" id="tutorial-start-face"></span>
+      <span class="tutorial-start-text">
+        <span class="tutorial-start-title">New here? Play the tutorial</span>
+        <span class="tutorial-start-sub">Spike the virion shows you how to play Stealth Mission</span>
+      </span>
+      <span class="tutorial-start-go">▶</span>
+    </button>
 
     <div class="virus-grid" id="virus-grid"></div>
 
@@ -1475,7 +1615,7 @@
            the header opens/closes it (toggleNarration()). -->
       <div class="narration-col collapsed" id="narration-col">
         <button class="narration-toggle" id="narration-toggle" onclick="toggleNarration()" aria-expanded="false" title="Show mission log">
-          <span class="narration-toggle-icon" aria-hidden="true">«</span>
+          <span class="narration-toggle-icon" aria-hidden="true"></span>
           <span class="narration-title">Mission Log</span>
           <span class="narration-unread" aria-hidden="true"></span>
         </button>
@@ -1500,7 +1640,7 @@
         </div>
         <div class="end-screen-buttons">
           <div class="back-btn" onclick="backToPlatform(STEALTH_GAME_CONFIG.backLinkHref)"><span class="back-btn-icon icon-back"></span> To Patient</div>
-          <div class="back-btn" onclick="exitMission()"><span class="back-btn-icon icon-restart"></span> Play Again</div>
+          <div class="back-btn" onclick="exitMission()"><span class="back-btn-icon icon-restart"></span> <span id="end-play-again-label">Play Again</span></div>
         </div>
       </div>
     </div>
@@ -1511,7 +1651,7 @@
       <div class="draft-popup">
         <div class="panel-header">
           <span class="banner-label">Select two cards to take in hand</span>
-          <button class="modal-close draft-minimise" onclick="hideDraftPopup()" title="Minimise" aria-label="Minimise">»</button>
+          <button class="modal-close draft-minimise" onclick="hideDraftPopup()" title="Minimise" aria-label="Minimise"><span class="draft-minimise-icon" aria-hidden="true"></span></button>
         </div>
         <div class="panel-row">
           <div class="scroll-arrow scroll-arrow-back" id="draft-cards-arrow-back">◂</div>
@@ -1699,14 +1839,16 @@ const STEALTH_GAME_CONFIG = {
 };
 </script>
 
-<script src="../shared/ui.js?cachebust=223"></script>
+<script src="../shared/ui.js?cachebust=224"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=223"></script>
-<script src="board.js?cachebust=223"></script>
-<script src="cards.js?cachebust=223"></script>
-<script src="game.js?cachebust=223"></script>
-<script src="game-ui.js?cachebust=223"></script>
+<script src="config.js?cachebust=224"></script>
+<script src="board.js?cachebust=224"></script>
+<script src="cards.js?cachebust=224"></script>
+<script src="game.js?cachebust=224"></script>
+<script src="game-ui.js?cachebust=224"></script>
+<script src="tutorial-game.js?cachebust=224"></script>
+<script src="tutorial.js?cachebust=224"></script>
 
 <script>
 // Build the shared header and menu.
@@ -2272,6 +2414,7 @@ function renderHelpStep(){
 // ════════════════════════════════════════════════
 initEmojiSelector();
 renderViruses();
+document.getElementById('tutorial-start-face').innerHTML = spikeSvg('ninja');
 // Show the rotate/enlarge message on the select screen too.
 checkViewportGate();
 </script>

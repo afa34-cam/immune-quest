@@ -46,8 +46,14 @@ Devices: **iPad web app** = opened from the Home Screen icon ·
       below the infection, biggest shape first).
 - [ ] Organ icons show above LIVER / LUNG / INTESTINE with no overlap.
 
-- [ ] Mission log « / » icons are bigger; the Pick Cards pop-up's minimise
-      button uses the same » icon at the same size.
+- [ ] Mission log arrow: folded it points sideways at "Mission Log";
+      unfolded it turns to point down. The label and arrow stay exactly in
+      place when folding/unfolding (also the very first time, while the
+      green dot is showing). On the win/lose tab the arrow points down at
+      the vertical label. The Pick Cards pop-up's minimise button shows the
+      same down arrow.
+- [ ] iPad: the corner buttons (☰ ? ↺ ⛶ and "← Immune Quest") are a bit
+      bigger and easy to tap; the ☰ icon is centred in its button.
 - [ ] Pick Cards pop-up: the ⓘ badge on the big cards is larger and fully
       visible.
 - [ ] Menu (platform page and Stealth) opens on the Settings tab.
@@ -109,3 +115,43 @@ Devices: **iPad web app** = opened from the Home Screen icon ·
       screen buttons light up cyan on hover (the ? used to be green).
 - [ ] Win/lose screen on iPad Safari: the mission log sits beside the
       intestine board, not on top of it.
+
+### Tutorial (Stealth)
+
+- [ ] Select screen: a purple "New here? Play the tutorial" button with
+      Spike (a purple virus with pink-tipped spikes) sits above the viruses.
+- [ ] The practice mission plays the same way every time and ends with
+      "Tutorial Complete" on turn 8. It doesn't change your high score,
+      "games played" or Stealth's cleared status.
+- [ ] Spike's panel (bottom-right) never covers what it asks you to
+      select, including the Pick Cards and Trade pop-ups (laptop and iPad).
+- [ ] Only the move Spike asks for works; anything else gives a little
+      shake. The ⓘ card info, mission log and menu still work as normal.
+- [ ] Every card type comes up and each "Real biology" note reads well
+      (check the science and the tone for your audience).
+- [ ] Spike's ✕ (and the header ↺ Restart) leaves the tutorial and goes
+      back to the select screen; starting it again begins from the start.
+- [ ] End screen: "Real Mission" goes to the select screen; no score shown.
+- [ ] In the tutorial, the virus panel (bottom-left) shows ninja Spike
+      (mask, red headband, sly grin) and the name just "Spike". Spike's
+      own panel header just says "Spike".
+- [ ] "Tutorial Complete" is centred in the end panel.
+- [ ] Spike's ✕ asks "Leave the tutorial?" in his bubble: Stay keeps
+      playing, Leave goes back to the virus selection.
+- [ ] Turn 4 Latency (and turn 6): the cell to select is bright purple
+      with a white ring and pulses, before and after selecting the card.
+- [ ] Spike's moods include ninja (mask, no tooth) and evil (sly grin).
+- [ ] Select screen: the tutorial button shows ninja Spike, gently bobbing.
+- [ ] Tutorial, turn 4: after tapping a wrong card or cell, tapping the highlighted cell still places the Latency (also works without selecting the card first).
+
+### Messages between the platform page and games (security fix)
+
+The platform page now only listens to its own game window, and games only
+to the platform page. Check everything that crosses between them still
+works (laptop and iPad web app):
+- [ ] Win a Stealth mission: the platform shows it as completed, with score.
+- [ ] Stealth menu → Settings: tracking toggle and "Reset progress" work.
+- [ ] Stealth menu → Share and Feedback (Send) work.
+- [ ] Fullscreen button inside Stealth (laptop) and "← Immune Quest" / To
+      Patient close the game window.
+- [ ] The Infection Game (Unity) still loads and records a win.

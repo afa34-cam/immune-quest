@@ -16,6 +16,10 @@
 //    8. Draft & trade pop-ups
 //    9. Hand & playing cards
 //   10. End screen
+//
+//  Tutorial: while activeTutorial (tutorial.js) is set, the move
+//  functions below ask it first (activeTutorial.allows()) and report back
+//  (actionDone()), and the automatic phases pause for Spike (runBeat()).
 // ═══════════════════════════════════════════════════════════════════
 
 
@@ -182,6 +186,7 @@ function getCardArtPath(card) {
 function renderCardFace(card, { tissue, extraClass = '', onClick, badge } = {}) {
   const el = document.createElement('div');
   el.className = `card-face ${extraClass}`.trim();
+  el.dataset.cardId = card.id;
 
   const artEl = document.createElement('div');
   artEl.className = 'card-face-art';
@@ -306,14 +311,19 @@ function setCompactGameHeader(on) {
 }
 
 // ═══ 3. Mission start & main render ════════════════════════════════
-// Called from "Start Mission" on the select screen.
-function startMission() {
-  let payload;
-  try { payload = JSON.parse(localStorage.getItem('iq_stealth_loadout')); } catch (e) { payload = null; }
+// Called from "Start Mission" on the select screen (loadout saved by
+// deploy()), or by startTutorial() (tutorial.js) with
+// { loadout, tutorial: true } for the scripted practice mission.
+function startMission({ loadout = null, tutorial = false } = {}) {
+  let payload = loadout;
+  if (!payload) {
+    try { payload = JSON.parse(localStorage.getItem('iq_stealth_loadout')); } catch (e) { payload = null; }
+  }
   if (!payload) return;
 
-  // Tell the platform page a mission actually started (analytics).
-  if (window.self !== window.top) {
+  // Tell the platform page a mission actually started (analytics). The
+  // tutorial doesn't count.
+  if (!tutorial && window.self !== window.top) {
     window.parent.postMessage({ type: 'iq_mission_started' }, '*');
   }
 
@@ -322,7 +332,7 @@ function startMission() {
   document.body.classList.add('in-game');
   setCompactGameHeader(isTabletDevice());
 
-  activeGame = new StealthGame(payload);
+  activeGame = tutorial ? new TutorialGame(payload) : new StealthGame(payload);
   narratedPhaseRef = null;
   document.getElementById('narration-feed').innerHTML = '';
   document.getElementById('narration-col')?.classList.remove('has-unread');
@@ -378,7 +388,9 @@ function renderGame() {
     if (isNewPhaseInstance) {
       narratedPhaseRef = phaseKey;
       if (g.phase === 'virus_growth') appendTurnMarker(g.turn);
-      runAutoPhase();
+      // Tutorial: Spike may talk before the phase plays out.
+      if (activeTutorial) activeTutorial.runBeat(`${g.turn}:${g.phase}:start`, runAutoPhase);
+      else runAutoPhase();
     }
   } else if (g.phase === 'play_cards' && g.currentOffer) {
     // Hand stays visible (not playable) behind the draft pop-up.
@@ -391,6 +403,7 @@ function renderGame() {
   // Fit the stage last, once the hand's height is final.
   fitGameStage();
   resetTurnReminder();
+  activeTutorial?.refreshHighlights();
 }
 
 // "Your turn" reminder: after 5–10 s of inactivity on the player's turn,
@@ -404,7 +417,7 @@ function resetTurnReminder() {
   document.querySelectorAll('.turn-reminder').forEach(el => el.classList.remove('turn-reminder'));
 
   const g = activeGame;
-  if (!g || g.state !== 'playing') return;
+  if (!g || g.state !== 'playing' || activeTutorial) return; // Spike does the reminding
   const picking = g.phase === 'play_cards' && !!g.currentOffer;
   const playing = g.phase === 'play_cards' && !g.currentOffer;
   if (!picking && !playing) return;
@@ -1001,7 +1014,6 @@ function toggleNarration() {
   if (btn) {
     btn.setAttribute('aria-expanded', String(!collapsed));
     btn.title = collapsed ? 'Show mission log' : 'Hide mission log';
-    btn.querySelector('.narration-toggle-icon').textContent = collapsed ? '«' : '»';
   }
   fitGameStage();
 }
@@ -1285,13 +1297,16 @@ function runAutoPhase() {
     : g.phase === 'immune_response' ? buildImmuneSteps(g)
     : buildMutationSteps(g);
 
+  // Tutorial: Spike may talk once the phase has played out, before it advances.
+  const beatKey = `${g.turn}:${g.phase}:end`;
   let i = 0;
   let mutationPopupShown = false;
   function next() {
     // The winning cell was revealed — stop narrating.
     if (stopRevealAfterWin) return;
     if (i >= steps.length) {
-      const advance = () => { activeGame.advance(); renderGame(); };
+      const advanceNow = () => { activeGame.advance(); renderGame(); };
+      const advance = () => activeTutorial ? activeTutorial.runBeat(beatKey, advanceNow) : advanceNow();
       if (mutationPopupShown) {
         // Wait for the mutation toast to close before advancing (so the
         // draft pop-up doesn't cover it) — unless it already has.
@@ -1553,6 +1568,7 @@ function showDraftPopup() {
   updatePickCardsButton(false);
   updatePickCardsEntry(false);
   updateDraftHint();
+  activeTutorial?.refreshHighlights();
 }
 
 function hideDraftPopup() {
@@ -1562,6 +1578,7 @@ function hideDraftPopup() {
   updatePickCardsButton(stillPending);
   updatePickCardsEntry(stillPending);
   updateDraftHint();
+  activeTutorial?.refreshHighlights();
 }
 
 // While a draft offer is pending: no hint while its pop-up is open; once
@@ -1614,12 +1631,15 @@ function renderDraft() {
     list.appendChild(el);
   });
   updateScrollArrows(list, document.getElementById('draft-cards-arrow-back'), document.getElementById('draft-cards-arrow'));
+  // Tutorial: Spike guides this turn's cards from here to End Turn.
+  activeTutorial?.runBeat(`${activeGame.turn}:cards`, () => {});
 }
 
 function toggleDraftPick(i, pickCount) {
   resetTurnReminder();
   const overlay = document.getElementById('draft-popup-overlay');
   let picked = JSON.parse(overlay.dataset.picked);
+  if (activeTutorial && !picked.includes(i) && !activeTutorial.allows('draftPick', activeGame.currentOffer[i])) return;
   const el = document.getElementById('draft-card-' + i);
 
   if (picked.includes(i)) {
@@ -1633,12 +1653,15 @@ function toggleDraftPick(i, pickCount) {
 
   const confirmBtn = document.getElementById('draft-confirm');
   confirmBtn.disabled = picked.length !== pickCount;
+  activeTutorial?.refreshHighlights();
 }
 
 function confirmDraft() {
   const overlay = document.getElementById('draft-popup-overlay');
   const picked = JSON.parse(overlay.dataset.picked);
+  if (activeTutorial && !activeTutorial.allows('draftConfirm', picked.map(i => activeGame.currentOffer[i].id))) return;
   activeGame.resolveDraft(picked);
+  activeTutorial?.actionDone();
   hideDraftPopup();
   // The virus's actions this turn go under one "Virus" header in the log.
   appendNarrationLine('Virus', 'line-player line-player-header', { startGroup: true, groupCls: 'line-player' });
@@ -1655,15 +1678,18 @@ let tradeActiveTab = 'give';  // 'give' | 'receive'
 function openTradeModal() {
   if (activeGame.phase !== 'play_cards' || activeGame.currentOffer) return;
   if (activeGame.hand.length < 3) return;
+  if (activeTutorial && !activeTutorial.allows('tradeOpen')) return;
   tradeGiveSelected = [];
   tradeReceiveSelected = null;
   tradeActiveTab = 'give';
   renderTradeModal();
   document.getElementById('trade-popup-overlay').classList.add('open');
+  activeTutorial?.refreshHighlights();
 }
 
 function hideTradeModal() {
   document.getElementById('trade-popup-overlay').classList.remove('open');
+  activeTutorial?.refreshHighlights();
 }
 
 function switchTradeTab(tab) {
@@ -1766,12 +1792,14 @@ function renderTradeModal() {
 
   document.getElementById('trade-confirm').disabled =
     !(tradeGiveSelected.length === 3 && tradeReceiveSelected);
+  activeTutorial?.refreshHighlights();
 }
 
 function toggleTradeGive(i) {
+  const idx = tradeGiveSelected.indexOf(i);
+  if (activeTutorial && !activeTutorial.allows('tradeGive', { card: activeGame.hand[i], selected: idx !== -1 })) return;
   // Card faces are skipped by the global click sound, so play it here.
   playSound('click');
-  const idx = tradeGiveSelected.indexOf(i);
   if (idx !== -1) tradeGiveSelected.splice(idx, 1);
   else if (tradeGiveSelected.length < 3) tradeGiveSelected.push(i);
   // After the 3rd card, switch to the receive tab.
@@ -1780,6 +1808,7 @@ function toggleTradeGive(i) {
 }
 
 function toggleTradeReceive(id) {
+  if (activeTutorial && tradeReceiveSelected !== id && !activeTutorial.allows('tradeReceive', id)) return;
   playSound('click'); // see toggleTradeGive()'s own comment above
   tradeReceiveSelected = tradeReceiveSelected === id ? null : id;
   renderTradeModal();
@@ -1787,10 +1816,12 @@ function toggleTradeReceive(id) {
 
 function confirmTrade() {
   if (tradeGiveSelected.length !== 3 || !tradeReceiveSelected) return;
+  if (activeTutorial && !activeTutorial.allows('tradeConfirm')) return;
   const res = activeGame.tradeCards(tradeGiveSelected, tradeReceiveSelected);
   hideTradeModal();
   if (res.ok) {
     appendNarrationLine(res.result.text, 'line-player', { insertAfterHeader: true });
+    activeTutorial?.actionDone();
   }
   renderGame();
 }
@@ -1879,9 +1910,10 @@ function setPlayHint(text, kind = 'hint') {
 
 function selectHandCard(i) {
   resetTurnReminder();
-  document.querySelectorAll('#hand-cards .card-face').forEach(el => el.classList.remove('selected'));
   const card = activeGame.hand[i];
-  if (selectedHandIndex === i) { selectedHandIndex = null; _syncTissueTargetingClass(); return; }
+  if (activeTutorial && selectedHandIndex !== i && !activeTutorial.allows('selectCard', card)) return;
+  document.querySelectorAll('#hand-cards .card-face').forEach(el => el.classList.remove('selected'));
+  if (selectedHandIndex === i) { selectedHandIndex = null; _syncTissueTargetingClass(); activeTutorial?.refreshHighlights(); return; }
   selectedHandIndex = i;
   document.getElementById('hand-card-' + i).classList.add('selected');
 
@@ -1894,10 +1926,15 @@ function selectHandCard(i) {
     setPlayHint(HINT_TEXT.targetCell);
   }
   _syncTissueTargetingClass();
+  activeTutorial?.refreshHighlights();
 }
 
 function onCellClick(tissue, col, row) {
+  // Tutorial: the target cell is highlighted before its card is selected,
+  // so clicking it plays that card straight away.
+  if (selectedHandIndex === null && activeTutorial) selectedHandIndex = activeTutorial.handIndexForTarget(tissue, col, row);
   if (selectedHandIndex === null) return;
+  if (activeTutorial && !activeTutorial.allows('target', { tissue, col, row })) return;
   // Greyed-out tissue: explain instead of doing nothing (card stays selected).
   if (!activeGame.activeTissues.includes(tissue)) {
     setPlayHint(HINT_TEXT.inactiveTissue(tissue), 'error');
@@ -1943,6 +1980,9 @@ function playSelectedCard(target) {
   if (res.ok) {
     appendNarrationLine(formatCardPlayText(card, target, res.result, speedDelta), 'line-player', { insertAfterHeader: true });
     lastPlayError = null;
+    // Before renderGame(): an empty hand ends the turn from there, and
+    // Spike must already be waiting for that.
+    activeTutorial?.actionDone();
   } else {
     // Invalid target: the card stays in hand; show why in the hint banner.
     lastPlayError = res.result.text;
@@ -1978,6 +2018,8 @@ let endTurnTimer = null;
 let endingTurn = false;
 
 function endStealthTurn() {
+  if (activeTutorial && !activeTutorial.allows('endTurn')) return;
+  activeTutorial?.actionDone();
   clearTimeout(endTurnTimer);
   endingTurn = true;
   renderHand();
@@ -2008,19 +2050,26 @@ function renderEndScreen() {
   setCompactGameHeader(false);
 
   const won = activeGame.state === 'won';
+  const tutorial = !!activeGame.isTutorial;
   const titleText = document.getElementById('end-title-text');
-  titleText.textContent = won ? 'You Win' : 'Game Over';
+  titleText.textContent = won ? (tutorial ? 'Tutorial Complete' : 'You Win') : 'Game Over';
   titleText.classList.toggle('win', won);
   titleText.classList.toggle('lose', !won);
 
-  // Explanatory line on a loss only (hidden on a win so it adds no gap).
+  // Line under the title: an explanation on a loss; on a win only in the
+  // tutorial (otherwise hidden, so it adds no gap).
   const endCopy = document.getElementById('end-copy');
-  endCopy.textContent = won ? '' : 'The infection has been stopped by the immune system. Quite good that we have such a powerful system to protect us from pesky pathogens!';
-  endCopy.style.display = won ? 'none' : '';
+  endCopy.textContent = won
+    ? (tutorial ? 'Ready for a real mission?' : '')
+    : 'The infection has been stopped by the immune system. Quite good that we have such a powerful system to protect us from pesky pathogens!';
+  endCopy.style.display = endCopy.textContent ? '' : 'none';
+  // The tutorial goes on to a real mission, not another practice run.
+  document.getElementById('end-play-again-label').textContent = tutorial ? 'Real Mission' : 'Play Again';
 
-  // Score block on a win only. isNewHighScore was recorded when the
-  // score was saved (the stored best has been overwritten since).
-  document.getElementById('end-score-block').classList.toggle('visible', won);
+  // Score block on a win only (not in the tutorial). isNewHighScore was
+  // recorded when the score was saved (the stored best has been
+  // overwritten since).
+  document.getElementById('end-score-block').classList.toggle('visible', won && !tutorial);
   if (won) {
     document.getElementById('end-score-value').textContent = activeGame.score;
     document.getElementById('end-score-badge').classList.toggle('visible', activeGame.isNewHighScore);
@@ -2033,6 +2082,7 @@ function renderEndScreen() {
   alignEndScreenBoard();
   fitGameStage();
   alignEndScreenBoard();
+  activeTutorial?.onGameOver(activeGame.state);
 }
 
 // Places the end-screen panel below the header, scales it like the board,
@@ -2069,12 +2119,14 @@ function alignEndScreenBoard() {
 // mission is still in progress (a one-tap header button is easy to hit).
 function restartMission() {
   if (!activeGame) return;
-  if (activeGame.state === 'playing' && !confirm('Restart? This mission will be lost.')) return;
+  const question = activeGame.isTutorial ? 'Leave the tutorial?' : 'Restart? This mission will be lost.';
+  if (activeGame.state === 'playing' && !confirm(question)) return;
   exitMission();
 }
 
 // Leaves the mission and returns to the virus select screen.
 function exitMission() {
+  stopTutorial();
   setCompactGameHeader(false);
   clearTimeout(autoPhaseTimer);
   narratedPhaseRef = null;
