@@ -494,13 +494,16 @@ class StealthBoard {
     return -1;
   }
 
-  // Latency: places a dormant token on a healthy cell at most two rows
-  // below the infection front.
-  placeDormant(col, row, turns = 2) {
+  // Latency: a dormant token can go on a healthy cell at most two rows
+  // below the infection front (rows 0–1 if nothing is infected yet).
+  canPlaceDormant(col, row) {
     const cell = this.getCell(col, row);
-    if (!cell || cell.state !== 'healthy') return false;
-    const maxRow = this._deepestActuallyInfectedRow() + 2; // -1+2=1 if nothing infected yet
-    if (row > maxRow) return false;
+    return !!cell && cell.state === 'healthy' && row <= this._deepestActuallyInfectedRow() + 2;
+  }
+
+  placeDormant(col, row, turns = 2) {
+    if (!this.canPlaceDormant(col, row)) return false;
+    const cell = this.getCell(col, row);
     cell.state        = 'dormant';
     cell.dormantTurns = turns;
     return true;

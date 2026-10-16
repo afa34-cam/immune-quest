@@ -8,7 +8,7 @@
 <link rel="apple-touch-icon" href="../../assets/icons/app-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Nunito:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../shared/ui.css?cachebust=225">
+<link rel="stylesheet" href="../shared/ui.css?cachebust=226">
 <style>
   /* ═══════════════════════════════════════════════════════════════
      STEALTH MISSION — page styles
@@ -928,6 +928,17 @@
   /* While a spread card (targets a whole tissue) is selected, hovering
      highlights the whole board instead of popping a single cell. */
   #boards-wrap.targeting-tissue .tissue-cell:hover{ transform:none; z-index:auto; }
+  /* While Latency / Cytokine Neutralisation is selected
+     (.targeting-cells, _syncTargeting(), game-ui.js): every cell loses
+     its tissue glow except the ones the card can go on (.cell-eligible),
+     which keep their tissue's colour, a little stronger. */
+  #boards-wrap.targeting-cells .tissue-cell:not(.cell-eligible){
+    box-shadow:none; border-color:rgba(255,255,255,.3);
+  }
+  #boards-wrap.targeting-cells .tissue-cell.cell-eligible{
+    box-shadow:0 0 0.625rem var(--tissue-color), 0 0 0.25rem var(--tissue-color),
+      inset 0 0 0.5rem color-mix(in srgb, var(--tissue-color) 60%, transparent);
+  }
   #boards-wrap.targeting-tissue .tissue-board:has(.tissue-cell:hover) .tissue-grid{
     box-shadow:0 0 1rem 2px var(--tissue-color, var(--accent));
     border-radius:0.375rem;
@@ -1880,16 +1891,16 @@ const STEALTH_GAME_CONFIG = {
 };
 </script>
 
-<script src="../shared/ui.js?cachebust=225"></script>
+<script src="../shared/ui.js?cachebust=226"></script>
 
 <!-- Mission engine -->
-<script src="config.js?cachebust=225"></script>
-<script src="board.js?cachebust=225"></script>
-<script src="cards.js?cachebust=225"></script>
-<script src="game.js?cachebust=225"></script>
-<script src="game-ui.js?cachebust=225"></script>
-<script src="tutorial-game.js?cachebust=225"></script>
-<script src="tutorial.js?cachebust=225"></script>
+<script src="config.js?cachebust=226"></script>
+<script src="board.js?cachebust=226"></script>
+<script src="cards.js?cachebust=226"></script>
+<script src="game.js?cachebust=226"></script>
+<script src="game-ui.js?cachebust=226"></script>
+<script src="tutorial-game.js?cachebust=226"></script>
+<script src="tutorial.js?cachebust=226"></script>
 
 <script>
 // Build the shared header and menu.

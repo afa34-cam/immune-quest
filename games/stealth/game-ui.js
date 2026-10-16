@@ -44,6 +44,7 @@ const HINT_TEXT = {
   targetTissue: 'Click anywhere in the tissue you want to target.',           // after picking Horizontal/Vertical Spread
   targetCell:   'Click a cell on the board to target it.',                    // after picking any other targeted card
   inactiveTissue: tissue => `The virus is not active in the ${tissue}. Select another card or select ‘End Turn’.`, // tapped a greyed-out tissue
+  noCytokines:  color => `No ${color} cytokines to neutralise. Select another card to play or select ‘End Turn’.`, // Cytokine Neutralisation with no shield of its colour
 };
 
 // Sound effects (CC0, assets/sfx/). Muted via the shared Settings toggle
@@ -1842,7 +1843,7 @@ function renderHand() {
   const list = document.getElementById('hand-cards');
   list.innerHTML = '';
   selectedHandIndex = null;
-  _syncTissueTargetingClass();
+  _syncTargeting();
 
   g.hand.forEach((card, i) => {
     const el = renderCardFace(card, interactive ? { onClick: () => selectHandCard(i) } : {});
@@ -1878,12 +1879,27 @@ function renderHand() {
   if (interactive && !g.hand.length) endStealthTurn();
 }
 
-// Spread cards target a whole tissue, so while one is selected the board
-// highlights whole tissues on hover instead of single cells
-// (.targeting-tissue). Called whenever the selected card changes.
-function _syncTissueTargetingClass() {
+// Shows on the board where the selected card can go. Called whenever the
+// selected card changes.
+//   Spread cards target a whole tissue: whole tissues highlight on hover
+//     instead of single cells (.targeting-tissue).
+//   Cards played on one specific cell (Latency, Cytokine Neutralisation):
+//     only the valid cells in active tissues keep their tissue glow
+//     (.targeting-cells + .cell-eligible; the rule is the card's
+//     canTarget(), cards.js).
+function _syncTargeting() {
   const card = selectedHandIndex !== null ? activeGame.hand[selectedHandIndex] : null;
-  document.getElementById('boards-wrap')?.classList.toggle('targeting-tissue', !!card && card.targetType === 'tissue');
+  const wrap = document.getElementById('boards-wrap');
+  wrap?.classList.toggle('targeting-tissue', !!card && card.targetType === 'tissue');
+  wrap?.classList.toggle('targeting-cells', !!card && !!card.canTarget);
+  document.querySelectorAll('.tissue-cell.cell-eligible').forEach(el => el.classList.remove('cell-eligible'));
+  if (!card || !card.canTarget) return;
+  document.querySelectorAll('.tissue-cell').forEach(el => {
+    const { tissue } = el.dataset;
+    if (activeGame.activeTissues.includes(tissue) && card.canTarget(activeGame.boards, tissue, +el.dataset.col, +el.dataset.row)) {
+      el.classList.add('cell-eligible');
+    }
+  });
 }
 
 // Shows the hint banner beside Cards In Hand with `text` (hidden when
@@ -1913,7 +1929,7 @@ function selectHandCard(i) {
   const card = activeGame.hand[i];
   if (activeTutorial && selectedHandIndex !== i && !activeTutorial.allows('selectCard', card)) return;
   document.querySelectorAll('#hand-cards .card-face').forEach(el => el.classList.remove('selected'));
-  if (selectedHandIndex === i) { selectedHandIndex = null; _syncTissueTargetingClass(); activeTutorial?.refreshHighlights(); return; }
+  if (selectedHandIndex === i) { selectedHandIndex = null; _syncTargeting(); activeTutorial?.refreshHighlights(); return; }
   selectedHandIndex = i;
   document.getElementById('hand-card-' + i).classList.add('selected');
 
@@ -1925,7 +1941,16 @@ function selectHandCard(i) {
   } else {
     setPlayHint(HINT_TEXT.targetCell);
   }
-  _syncTissueTargetingClass();
+  _syncTargeting();
+  // Cytokine Neutralisation with no shield of its colour on the board:
+  // say so (pink) and deselect it — the card stays in hand.
+  const color = card.id.match(/^cytokine-neutralise-(blue|orange|red)$/)?.[1];
+  if (color && !document.querySelector('.tissue-cell.cell-eligible')) {
+    selectedHandIndex = null;
+    document.getElementById('hand-card-' + i).classList.remove('selected');
+    _syncTargeting();
+    setPlayHint(HINT_TEXT.noCytokines(color), 'error');
+  }
   activeTutorial?.refreshHighlights();
 }
 
@@ -1988,7 +2013,7 @@ function playSelectedCard(target) {
     lastPlayError = res.result.text;
   }
   selectedHandIndex = null;
-  _syncTissueTargetingClass();
+  _syncTargeting();
   renderGame();
   // Effects after renderGame(), which rebuilds the board and badge.
   const touchedCells = res.ok && res.result.cells && res.result.cells.length;

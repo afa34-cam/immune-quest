@@ -9,7 +9,10 @@
 //  which tissues start infected and never enter the deck.
 //
 //  Virus card:   { id, name, icon, count, tooltip, targetType,
+//                  canTarget?(boards, tissue, col, row) → bool,
 //                  apply(boards, target, state) → { text, count, ok, cells? } }
+//                  canTarget: cards played on one specific cell say which
+//                  cells are valid (the board marks them when selected).
 //                  ok:false = invalid target; the card stays in hand and
 //                  `text` is shown as the error hint.
 //  Immune card:  { id, name, icon, tooltip,
@@ -40,10 +43,14 @@ function _cytokineNeutraliseDef(color) {
     count: 3,
     tooltip: `Remove a block of ${color.charAt(0).toUpperCase() + color.slice(1)} cytokines from cells.`,
     targetType: 'immune-cell',
+    canTarget(boards, tissue, col, row) {
+      const cell = boards[tissue].getCell(col, row);
+      return !!cell && cell.state === 'immune' && cell.cytokineColor === color;
+    },
     apply(boards, target, state) {
       const board = boards[target.tissue];
       const cell = board.getCell(target.col, target.row);
-      if (!cell || cell.state !== 'immune' || cell.cytokineColor !== color) {
+      if (!this.canTarget(boards, target.tissue, target.col, target.row)) {
         return { text: `Target must be ${article} ${color} cytokine-shielded cell.`, count: 0, ok: false };
       }
       const cells = board.neutralizeCytokine(color, cell.cytokinePlacementId);
@@ -204,6 +211,7 @@ const STEALTH_CARD_DEFS = {
     id: 'latency', name: 'Latency', icon: '😴', count: 4,
     tooltip: 'Place a dormant cell. This is invisible to the immune system and wakes and infects nearby cells in the spread phase of a later turn. Must be placed within two rows of the current infection front.',
     targetType: 'cell',
+    canTarget(boards, tissue, col, row) { return boards[tissue].canPlaceDormant(col, row); },
     apply(boards, target, state) {
       const board = boards[target.tissue];
       const ok = board.placeDormant(target.col, target.row, 2);

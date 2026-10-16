@@ -166,3 +166,5 @@ works (laptop and iPad web app):
 - [ ] Tutorial banner: "New here? Play the tutorial" on one line; Play sits level with the description below it.
 - [ ] Select screen: after selecting a virus, the three virus cards shrink (small picture, no description, (i) beside the name opens the info); the details and Start Mission fit on screen (iPad too).
 - [ ] Select screen: tapping the selected virus again, or tapping anywhere outside the cards and details panel, deselects it and the cards return to full size.
+- [ ] Selecting Latency or Cytokine Neutralisation: only the cells where it can be played keep their tissue's glow (Latency: healthy cells up to 2 rows below the infection; Neutralisation: that colour's shield cells); all other cells go plain. Deselecting or playing the card brings the normal glow back.
+- [ ] Selecting a Cytokine Neutralisation card when there's no cytokine of its colour: the hint banner (pink) says "No {colour} cytokines to neutralise. Select another card to play or select ‘End Turn’." and the card stays in hand.
